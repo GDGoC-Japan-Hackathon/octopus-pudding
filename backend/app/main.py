@@ -4,8 +4,8 @@ from app.shared.config import settings
 from app.presentation.routes.api import api_router
 
 app = FastAPI(
-    title="ninareru",
-    description="ninareru sns auth app",
+    title="hutatabi",
+    description="hutatabi trip plan app",
     version="0.1.0",
     debug=settings.debug
 )
