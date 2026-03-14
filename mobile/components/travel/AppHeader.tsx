@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 export type AppHeaderProps = {
   title: string;
   weatherLabel?: string;
-  weatherIcon?: string;
+  weatherIcon?: keyof typeof MaterialIcons.glyphMap;
 };
 
 export function AppHeader({
@@ -20,7 +20,7 @@ export function AppHeader({
       </Text>
       <View style={styles.weatherWrap}>
         <Text style={styles.weatherText}>{weatherLabel}</Text>
-        <MaterialIcons name={weatherIcon as keyof typeof MaterialIcons.glyphMap} size={20} color="#3B82F6" />
+        <MaterialIcons name={weatherIcon} size={20} color="#3B82F6" />
       </View>
     </View>
   );
