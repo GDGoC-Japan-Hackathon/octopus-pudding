@@ -36,7 +36,6 @@ export default function RecommendationListScreen() {
             </Link>
           )}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-          scrollEnabled={false}
         />
       </View>
     </View>
