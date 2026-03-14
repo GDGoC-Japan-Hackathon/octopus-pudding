@@ -1,5 +1,5 @@
 import { Link } from 'expo-router';
-import { Image, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
 import { AppHeader } from '@/components/travel/AppHeader';
 import { PhotoCard } from '@/components/travel/PhotoCard';
