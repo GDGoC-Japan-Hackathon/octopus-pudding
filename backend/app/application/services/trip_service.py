@@ -1,8 +1,14 @@
+from datetime import date
 from typing import Optional
 
-from app.domain.entities.trip import Trip, TripAggregate, TripMember, TripPreference
+from app.domain.entities.trip import ItineraryItem, Trip, TripAggregate, TripDay, TripMember, TripPreference
 from app.domain.repositories.trip_repository import TripRepository
-from app.shared.exceptions import PermissionDeniedError, TripNotFoundError
+from app.shared.exceptions import (
+    ItineraryItemNotFoundError,
+    PermissionDeniedError,
+    TripDayNotFoundError,
+    TripNotFoundError,
+)
 
 
 class TripService:
@@ -112,5 +118,119 @@ class TripService:
         if not deleted:
             raise TripNotFoundError(
                 f"Trip member user_id={member_user_id} not found in trip {trip_id}"
+            )
+        return True
+
+    async def add_my_day(
+        self,
+        owner_user_id: int,
+        trip_id: int,
+        day_number: int,
+        day_date: date | None,
+    ) -> TripDay:
+        await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+        day = TripDay(
+            id=None,
+            trip_id=trip_id,
+            day_number=day_number,
+            date=day_date,
+        )
+        return await self.trip_repository.create_day(day)
+
+    async def update_my_day(
+        self,
+        owner_user_id: int,
+        trip_id: int,
+        day_id: int,
+        day_number: int | None = None,
+        day_date: date | None = None,
+    ) -> TripDay:
+        await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+        day = await self.trip_repository.get_day(day_id)
+        if day is None or day.trip_id != trip_id:
+            raise TripDayNotFoundError(f"Trip day with ID {day_id} not found in trip {trip_id}")
+
+        if day_number is not None:
+            day.day_number = day_number
+        if day_date is not None:
+            day.date = day_date
+
+        updated_day = await self.trip_repository.update_day(day)
+        if updated_day is None:
+            raise TripDayNotFoundError(f"Trip day with ID {day_id} not found in trip {trip_id}")
+        return updated_day
+
+    async def delete_my_day(self, owner_user_id: int, trip_id: int, day_id: int) -> bool:
+        await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+        day = await self.trip_repository.get_day(day_id)
+        if day is None or day.trip_id != trip_id:
+            raise TripDayNotFoundError(f"Trip day with ID {day_id} not found in trip {trip_id}")
+
+        deleted = await self.trip_repository.delete_day(day_id)
+        if not deleted:
+            raise TripDayNotFoundError(f"Trip day with ID {day_id} not found in trip {trip_id}")
+        return True
+
+    async def add_my_item(
+        self,
+        owner_user_id: int,
+        trip_id: int,
+        day_id: int,
+        item: ItineraryItem,
+    ) -> ItineraryItem:
+        await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+        day = await self.trip_repository.get_day(day_id)
+        if day is None or day.trip_id != trip_id:
+            raise TripDayNotFoundError(f"Trip day with ID {day_id} not found in trip {trip_id}")
+
+        item.trip_day_id = day_id
+        return await self.trip_repository.create_item(item)
+
+    async def update_my_item(
+        self,
+        owner_user_id: int,
+        trip_id: int,
+        day_id: int,
+        item_id: int,
+        **kwargs,
+    ) -> ItineraryItem:
+        await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+        day = await self.trip_repository.get_day(day_id)
+        if day is None or day.trip_id != trip_id:
+            raise TripDayNotFoundError(f"Trip day with ID {day_id} not found in trip {trip_id}")
+
+        item = await self.trip_repository.get_item(item_id)
+        if item is None or item.trip_day_id != day_id:
+            raise ItineraryItemNotFoundError(
+                f"Itinerary item with ID {item_id} not found in day {day_id}"
+            )
+
+        for key, value in kwargs.items():
+            if value is not None and hasattr(item, key):
+                setattr(item, key, value)
+
+        updated_item = await self.trip_repository.update_item(item)
+        if updated_item is None:
+            raise ItineraryItemNotFoundError(
+                f"Itinerary item with ID {item_id} not found in day {day_id}"
+            )
+        return updated_item
+
+    async def delete_my_item(self, owner_user_id: int, trip_id: int, day_id: int, item_id: int) -> bool:
+        await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+        day = await self.trip_repository.get_day(day_id)
+        if day is None or day.trip_id != trip_id:
+            raise TripDayNotFoundError(f"Trip day with ID {day_id} not found in trip {trip_id}")
+
+        item = await self.trip_repository.get_item(item_id)
+        if item is None or item.trip_day_id != day_id:
+            raise ItineraryItemNotFoundError(
+                f"Itinerary item with ID {item_id} not found in day {day_id}"
+            )
+
+        deleted = await self.trip_repository.delete_item(item_id)
+        if not deleted:
+            raise ItineraryItemNotFoundError(
+                f"Itinerary item with ID {item_id} not found in day {day_id}"
             )
         return True

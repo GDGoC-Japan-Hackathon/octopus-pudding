@@ -23,6 +23,16 @@ class PermissionDeniedError(BaseError):
     pass
 
 
+class TripDayNotFoundError(BaseError):
+    """Trip day not found error"""
+    pass
+
+
+class ItineraryItemNotFoundError(BaseError):
+    """Itinerary item not found error"""
+    pass
+
+
 class ValidationError(BaseError):
     """Validation error"""
     pass

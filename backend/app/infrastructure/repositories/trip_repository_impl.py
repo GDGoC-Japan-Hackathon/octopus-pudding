@@ -219,6 +219,91 @@ class TripRepositoryImpl(TripRepository):
         await self.db.refresh(db_preference)
         return self._to_preference_entity(db_preference)
 
+    async def create_day(self, day: TripDay) -> TripDay:
+        db_day = TripDayModel(
+            trip_id=day.trip_id,
+            day_number=day.day_number,
+            date=day.date,
+        )
+        self.db.add(db_day)
+        await self.db.commit()
+        await self.db.refresh(db_day)
+        return self._to_day_entity(db_day)
+
+    async def get_day(self, day_id: int) -> Optional[TripDay]:
+        result = await self.db.execute(select(TripDayModel).where(TripDayModel.id == day_id))
+        db_day = result.scalar_one_or_none()
+        if db_day is None:
+            return None
+        return self._to_day_entity(db_day)
+
+    async def update_day(self, day: TripDay) -> Optional[TripDay]:
+        result = await self.db.execute(select(TripDayModel).where(TripDayModel.id == day.id))
+        db_day = result.scalar_one_or_none()
+        if db_day is None:
+            return None
+
+        db_day.day_number = day.day_number
+        db_day.date = day.date
+
+        await self.db.commit()
+        await self.db.refresh(db_day)
+        return self._to_day_entity(db_day)
+
+    async def delete_day(self, day_id: int) -> bool:
+        await self.db.execute(delete(ItineraryItemModel).where(ItineraryItemModel.trip_day_id == day_id))
+        result = await self.db.execute(delete(TripDayModel).where(TripDayModel.id == day_id))
+        await self.db.commit()
+        return result.rowcount > 0
+
+    async def create_item(self, item: ItineraryItem) -> ItineraryItem:
+        db_item = ItineraryItemModel(
+            trip_day_id=item.trip_day_id,
+            name=item.name,
+            category=item.category,
+            latitude=item.latitude,
+            longitude=item.longitude,
+            start_time=item.start_time,
+            end_time=item.end_time,
+            estimated_cost=item.estimated_cost,
+            notes=item.notes,
+        )
+        self.db.add(db_item)
+        await self.db.commit()
+        await self.db.refresh(db_item)
+        return self._to_item_entity(db_item)
+
+    async def get_item(self, item_id: int) -> Optional[ItineraryItem]:
+        result = await self.db.execute(select(ItineraryItemModel).where(ItineraryItemModel.id == item_id))
+        db_item = result.scalar_one_or_none()
+        if db_item is None:
+            return None
+        return self._to_item_entity(db_item)
+
+    async def update_item(self, item: ItineraryItem) -> Optional[ItineraryItem]:
+        result = await self.db.execute(select(ItineraryItemModel).where(ItineraryItemModel.id == item.id))
+        db_item = result.scalar_one_or_none()
+        if db_item is None:
+            return None
+
+        db_item.name = item.name
+        db_item.category = item.category
+        db_item.latitude = item.latitude
+        db_item.longitude = item.longitude
+        db_item.start_time = item.start_time
+        db_item.end_time = item.end_time
+        db_item.estimated_cost = item.estimated_cost
+        db_item.notes = item.notes
+
+        await self.db.commit()
+        await self.db.refresh(db_item)
+        return self._to_item_entity(db_item)
+
+    async def delete_item(self, item_id: int) -> bool:
+        result = await self.db.execute(delete(ItineraryItemModel).where(ItineraryItemModel.id == item_id))
+        await self.db.commit()
+        return result.rowcount > 0
+
     # 以下はEntityの宣言
     def _to_trip_entity(self, db_trip: TripModel) -> Trip:
         return Trip(

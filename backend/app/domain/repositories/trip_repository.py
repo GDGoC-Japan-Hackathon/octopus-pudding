@@ -1,7 +1,14 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from app.domain.entities.trip import Trip, TripAggregate, TripPreference, TripMember
+from app.domain.entities.trip import (
+    ItineraryItem,
+    Trip,
+    TripAggregate,
+    TripDay,
+    TripMember,
+    TripPreference,
+)
 
 
 class TripRepository(ABC):
@@ -55,4 +62,44 @@ class TripRepository(ABC):
     @abstractmethod
     async def upsert_preference(self, preference: TripPreference) -> TripPreference:
         """Create or update trip preference."""
+        pass
+
+    @abstractmethod
+    async def create_day(self, day: TripDay) -> TripDay:
+        """Create a trip day."""
+        pass
+
+    @abstractmethod
+    async def get_day(self, day_id: int) -> Optional[TripDay]:
+        """Get a trip day by id."""
+        pass
+
+    @abstractmethod
+    async def update_day(self, day: TripDay) -> Optional[TripDay]:
+        """Update a trip day."""
+        pass
+
+    @abstractmethod
+    async def delete_day(self, day_id: int) -> bool:
+        """Delete a trip day."""
+        pass
+
+    @abstractmethod
+    async def create_item(self, item: ItineraryItem) -> ItineraryItem:
+        """Create an itinerary item."""
+        pass
+
+    @abstractmethod
+    async def get_item(self, item_id: int) -> Optional[ItineraryItem]:
+        """Get itinerary item by id."""
+        pass
+
+    @abstractmethod
+    async def update_item(self, item: ItineraryItem) -> Optional[ItineraryItem]:
+        """Update an itinerary item."""
+        pass
+
+    @abstractmethod
+    async def delete_item(self, item_id: int) -> bool:
+        """Delete itinerary item by id."""
         pass

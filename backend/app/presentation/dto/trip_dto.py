@@ -48,6 +48,38 @@ class TripMemberUpdate(BaseModel):
     status: Optional[str] = None
 
 
+class TripDayCreate(BaseModel):
+    day_number: int
+    date: Optional[date] = None
+
+
+class TripDayUpdate(BaseModel):
+    day_number: Optional[int] = None
+    date: Optional[date] = None
+
+
+class ItineraryItemCreate(BaseModel):
+    name: str
+    category: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    estimated_cost: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class ItineraryItemUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    estimated_cost: Optional[int] = None
+    notes: Optional[str] = None
+
+
 class TripResponse(BaseModel):
     id: int
     user_id: int
