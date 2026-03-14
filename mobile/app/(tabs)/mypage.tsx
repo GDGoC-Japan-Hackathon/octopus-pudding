@@ -1,14 +1,12 @@
-import { useState } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, View, Alert } from 'react-native';
 
 import { AppHeader } from '@/components/travel/AppHeader';
 import { travelStyles } from '@/components/travel/styles';
 import { friendsMock, profileMock, weatherMock } from '@/data/travel';
 
 export default function MyPageScreen() {
-  const [friendCount, setFriendCount] = useState(friendsMock.length);
-
   return (
+```
     <View style={travelStyles.screen}>
       <AppHeader title="マイページ" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
 
@@ -23,9 +21,11 @@ export default function MyPageScreen() {
         <View style={travelStyles.detailSection}>
           <Text style={travelStyles.sectionTitleText}>友達</Text>
           <View style={travelStyles.rowWrap}>
-            <Text style={travelStyles.sectionBody}>合計: {friendCount}人</Text>
+            <Text style={travelStyles.sectionBody}>合計: {friendsMock.length}人</Text>
             <Pressable
-              onPress={() => setFriendCount((value) => value + 1)}
+              onPress={() => {
+                Alert.alert('未実装', '友達追加機能は準備中です');
+              }}
               style={travelStyles.pillButton}
             >
               <Text style={travelStyles.pillText}>友達を追加</Text>
