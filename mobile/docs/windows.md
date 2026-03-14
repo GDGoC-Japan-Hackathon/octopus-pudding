@@ -99,9 +99,11 @@ a
 ```
 
 ## 実機での環境構築（拳太がやりやすそう）
+1. 実機携帯側にExpo Goをインストール
 
+2. ターミナル上でサーバーを開設
 ```jsx
-npx expo start
-a
-# 出てきたQRコードを読み込む
+npm install
+npx expo start --tunnel
 ```
+3. 出てきたQRコードを読み込む
