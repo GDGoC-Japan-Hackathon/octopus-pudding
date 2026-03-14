@@ -1,5 +1,5 @@
 import { Link } from 'expo-router';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { AppHeader } from '@/components/travel/AppHeader';
 import { PhotoCard } from '@/components/travel/PhotoCard';
@@ -55,10 +55,10 @@ export default function HomeNotTravelingScreen() {
           </ScrollView>
         </View>
 
-        <Link href="/home/traveling">
-          <View style={travelStyles.primaryButton}>
+        <Link href="/home/traveling" asChild>
+          <Pressable style={travelStyles.primaryButton}>
             <Text style={travelStyles.primaryButtonText}>旅行中画面を開く</Text>
-          </View>
+          </Pressable>
         </Link>
       </View>
     </ScrollView>

@@ -1,4 +1,4 @@
-import { FlatList, Pressable, Text, View, Alert } from 'react-native';
+import { Alert, FlatList, Pressable, Text, View } from 'react-native';
 
 import { AppHeader } from '@/components/travel/AppHeader';
 import { travelStyles } from '@/components/travel/styles';
@@ -6,7 +6,6 @@ import { friendsMock, profileMock, weatherMock } from '@/data/travel';
 
 export default function MyPageScreen() {
   return (
-```
     <View style={travelStyles.screen}>
       <AppHeader title="マイページ" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
 
