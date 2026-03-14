@@ -1,0 +1,55 @@
+{
+  "project_id": 12280702751011114618,
+  "screens": [
+    {
+      "id": "8213a95e5f4c476bb64d6c45f151f1dd",
+      "name": "マイページ",
+      "html_path": "docs/stitch/html/8213a95e5f4c476bb64d6c45f151f1dd.html"
+    },
+    {
+      "id": "fca9a91378474f2d8eb61ab32aaa8704",
+      "name": "作成タブ（方法選択）",
+      "html_path": "docs/stitch/html/fca9a91378474f2d8eb61ab32aaa8704.html"
+    },
+    {
+      "id": "2c48fb4b96264ed3908f6c2f1b94682e",
+      "name": "Home (旅行していない)",
+      "html_path": "docs/stitch/html/2c48fb4b96264ed3908f6c2f1b94682e.html"
+    },
+    {
+      "id": "6bb920fd97ca455ab24397f65fbaebf8",
+      "name": "作成済みの計画（一覧）",
+      "html_path": "docs/stitch/html/6bb920fd97ca455ab24397f65fbaebf8.html"
+    },
+    {
+      "id": "6e2b8628c6e34a2ea517b27b012c7cda",
+      "name": "新規プラン作成",
+      "html_path": "docs/stitch/html/6e2b8628c6e34a2ea517b27b012c7cda.html"
+    },
+    {
+      "id": "e59e011ffeb94a108a9b451e2367be65",
+      "name": "Home (旅行中)",
+      "html_path": "docs/stitch/html/e59e011ffeb94a108a9b451e2367be65.html"
+    },
+    {
+      "id": "584224f9c711479daa48a7aedf75c360",
+      "name": "トラブルによる再計画",
+      "html_path": "docs/stitch/html/584224f9c711479daa48a7aedf75c360.html"
+    },
+    {
+      "id": "1b1e1d05704e4d26ac75dabf73afaea4",
+      "name": "おすすめ（詳細）",
+      "html_path": "docs/stitch/html/1b1e1d05704e4d26ac75dabf73afaea4.html"
+    },
+    {
+      "id": "12d0fe00c066434cb92089f2642a1aa1",
+      "name": "作成済みの計画（詳細）",
+      "html_path": "docs/stitch/html/12d0fe00c066434cb92089f2642a1aa1.html"
+    },
+    {
+      "id": "f9d92c326e684dba936cd38c9c63eaf4",
+      "name": "おすすめ（一覧）",
+      "html_path": "docs/stitch/html/f9d92c326e684dba936cd38c9c63eaf4.html"
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+import { Link } from 'expo-router';
+import { Image, ScrollView, Text, View } from 'react-native';
+
+import { AppHeader } from '@/components/travel/AppHeader';
+import { PhotoCard } from '@/components/travel/PhotoCard';
+import { travelStyles } from '@/components/travel/styles';
+import {
+  recommendedPlans,
+  timelineMock,
+  weatherMock,
+} from '@/data/travel';
+
+export default function HomeNotTravelingScreen() {
+  return (
+    <ScrollView style={travelStyles.screen}>
+      <AppHeader title="ホーム" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
+
+      <View style={travelStyles.container}>
+        <View style={travelStyles.sectionTitle}>
+          <Text style={travelStyles.sectionTitleText}>旅行していない</Text>
+          <Text style={travelStyles.subheading}>ホーム画面トップ</Text>
+        </View>
+
+        <View style={travelStyles.sectionTitle}>
+          <Text style={travelStyles.sectionTitleText}>開始前の提案</Text>
+          <Text style={travelStyles.subheading}>現在地（{weatherMock.location}）で使えるおすすめです</Text>
+        </View>
+
+        <View style={travelStyles.horizontalSection}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingVertical: 4 }}
+          >
+            {recommendedPlans.slice(0, 3).map((item) => (
+              <Link
+                key={item.id}
+                href={{ pathname: '/recommend/detail', params: { id: item.id } }}
+                asChild
+              >
+                <PhotoCard
+                  item={{
+                    id: item.id,
+                    title: item.title,
+                    location: item.location,
+                    image: item.image,
+                    author: item.author,
+                    likes: item.likes,
+                  }}
+                />
+              </Link>
+            ))}
+          </ScrollView>
+        </View>
+
+        <Link href="/home/traveling">
+          <View style={travelStyles.primaryButton}>
+            <Text style={travelStyles.primaryButtonText}>旅行中画面を開く</Text>
+          </View>
+        </Link>
+      </View>
+    </ScrollView>
+  );
+}

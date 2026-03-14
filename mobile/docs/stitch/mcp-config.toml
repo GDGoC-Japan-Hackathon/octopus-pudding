@@ -1,0 +1,5 @@
+[mcp_servers.stitch]
+url = "${STITCH_MCP_URL}"
+
+[mcp_servers.stitch.http_headers]
+"X-Goog-Api-Key" = "${STITCH_API_KEY}"

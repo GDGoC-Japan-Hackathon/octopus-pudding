@@ -1,33 +1,62 @@
 import { Tabs } from 'expo-router';
+import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
+        tabBarActiveTintColor: '#F97316',
+        tabBarInactiveTintColor: '#64748B',
         tabBarButton: HapticTab,
+        tabBarStyle: {
+          height: 64,
+          paddingTop: 6,
+          backgroundColor: '#FFFFFF',
+          borderTopColor: '#E2E8F0',
+        },
       }}>
       <Tabs.Screen
-        name="index"
+        name="home"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: 'ホーム',
+          tabBarIcon: ({ color }) => <MaterialIcons name="home" size={22} color={color} />,
+          tabBarLabelStyle: { fontSize: 11 },
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="plans"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: '作成済みの計画',
+          tabBarIcon: ({ color }) => <MaterialIcons name="bookmark" size={22} color={color} />,
+          tabBarLabelStyle: { fontSize: 11 },
+        }}
+      />
+      <Tabs.Screen
+        name="create"
+        options={{
+          title: '作成',
+          tabBarIcon: ({ color }) => <MaterialIcons name="add-box" size={24} color={color} />,
+          tabBarLabelStyle: { fontSize: 11 },
+        }}
+      />
+      <Tabs.Screen
+        name="recommend"
+        options={{
+          title: 'おすすめ',
+          tabBarIcon: ({ color }) => <MaterialIcons name="explore" size={22} color={color} />,
+          tabBarLabelStyle: { fontSize: 11 },
+        }}
+      />
+      <Tabs.Screen
+        name="mypage"
+        options={{
+          title: 'マイページ',
+          tabBarIcon: ({ color }) => <MaterialIcons name="person" size={22} color={color} />,
+          tabBarLabelStyle: { fontSize: 11 },
         }}
       />
     </Tabs>
