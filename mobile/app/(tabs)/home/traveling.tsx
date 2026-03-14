@@ -1,5 +1,5 @@
 import { Link } from 'expo-router';
-import { ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { AppHeader } from '@/components/travel/AppHeader';
 import { PhotoCard } from '@/components/travel/PhotoCard';
@@ -52,16 +52,18 @@ export default function HomeTravelingScreen() {
                 href={{ pathname: '/recommend/detail', params: { id: item.id } }}
                 asChild
               >
-                <PhotoCard
-                  item={{
-                    id: item.id,
-                    title: item.title,
-                    location: item.location,
-                    image: item.image,
-                    author: item.author,
-                    likes: item.likes,
-                  }}
-                />
+                <Pressable>
+                  <PhotoCard
+                    item={{
+                      id: item.id,
+                      title: item.title,
+                      location: item.location,
+                      image: item.image,
+                      author: item.author,
+                      likes: item.likes,
+                    }}
+                  />
+                </Pressable>
               </Link>
             ))}
           </ScrollView>
