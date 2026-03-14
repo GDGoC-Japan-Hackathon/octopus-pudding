@@ -2,10 +2,13 @@ from datetime import date
 from typing import Optional
 
 from app.domain.entities.trip import ItineraryItem, Trip, TripAggregate, TripDay, TripMember, TripPreference
+from app.domain.entities.trip import Incident, ReplanAggregate, ReplanItem, ReplanSession
 from app.domain.repositories.trip_repository import TripRepository
 from app.shared.exceptions import (
+    IncidentNotFoundError,
     ItineraryItemNotFoundError,
     PermissionDeniedError,
+    ReplanSessionNotFoundError,
     TripDayNotFoundError,
     TripNotFoundError,
 )
@@ -234,3 +237,50 @@ class TripService:
                 f"Itinerary item with ID {item_id} not found in day {day_id}"
             )
         return True
+
+    async def create_my_incident(
+        self,
+        owner_user_id: int,
+        trip_id: int,
+        incident: Incident,
+    ) -> Incident:
+        await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+        incident.trip_id = trip_id
+        return await self.trip_repository.create_incident(incident)
+
+    async def list_my_incidents(self, owner_user_id: int, trip_id: int) -> list[Incident]:
+        await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+        return await self.trip_repository.list_incidents(trip_id)
+
+    async def create_my_replan_session(
+        self,
+        owner_user_id: int,
+        trip_id: int,
+        session: ReplanSession,
+        items: Optional[list[ReplanItem]] = None,
+    ) -> ReplanAggregate:
+        await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+        session.trip_id = trip_id
+
+        if session.incident_id is not None:
+            incident = await self.trip_repository.get_incident(session.incident_id)
+            if incident is None or incident.trip_id != trip_id:
+                raise IncidentNotFoundError(
+                    f"Incident with ID {session.incident_id} not found in trip {trip_id}"
+                )
+
+        return await self.trip_repository.create_replan_session(session, items)
+
+    async def get_my_replan_detail(
+        self,
+        owner_user_id: int,
+        trip_id: int,
+        session_id: int,
+    ) -> ReplanAggregate:
+        await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+        aggregate = await self.trip_repository.get_replan_aggregate(session_id)
+        if aggregate is None or aggregate.session.trip_id != trip_id:
+            raise ReplanSessionNotFoundError(
+                f"Replan session with ID {session_id} not found in trip {trip_id}"
+            )
+        return aggregate

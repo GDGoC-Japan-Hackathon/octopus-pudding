@@ -71,6 +71,45 @@ class ItineraryItem:
 
 
 @dataclass
+class Incident:
+    id: Optional[int]
+    trip_id: int
+    incident_type: Optional[str] = None
+    description: Optional[str] = None
+    occurred_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+
+@dataclass
+class ReplanSession:
+    id: Optional[int]
+    trip_id: int
+    incident_id: Optional[int] = None
+    reason: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+@dataclass
+class ReplanItem:
+    id: Optional[int]
+    replan_session_id: int
+    name: str
+    category: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    start_time: Optional[datetime] = None
+    estimated_cost: Optional[int] = None
+    replacement_for_item_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+
+@dataclass
+class ReplanAggregate:
+    session: ReplanSession
+    items: list[ReplanItem] = field(default_factory=list)
+
+
+@dataclass
 class TripAggregate:
     trip: Trip
     preference: Optional[TripPreference] = None

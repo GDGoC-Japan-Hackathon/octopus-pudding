@@ -2,7 +2,11 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from app.domain.entities.trip import (
+    Incident,
     ItineraryItem,
+    ReplanAggregate,
+    ReplanItem,
+    ReplanSession,
     Trip,
     TripAggregate,
     TripDay,
@@ -102,4 +106,33 @@ class TripRepository(ABC):
     @abstractmethod
     async def delete_item(self, item_id: int) -> bool:
         """Delete itinerary item by id."""
+        pass
+
+    @abstractmethod
+    async def create_incident(self, incident: Incident) -> Incident:
+        """Create incident."""
+        pass
+
+    @abstractmethod
+    async def list_incidents(self, trip_id: int) -> list[Incident]:
+        """List incidents by trip."""
+        pass
+
+    @abstractmethod
+    async def get_incident(self, incident_id: int) -> Optional[Incident]:
+        """Get incident by id."""
+        pass
+
+    @abstractmethod
+    async def create_replan_session(
+        self,
+        session: ReplanSession,
+        items: Optional[list[ReplanItem]] = None,
+    ) -> ReplanAggregate:
+        """Create replan session with optional items."""
+        pass
+
+    @abstractmethod
+    async def get_replan_aggregate(self, session_id: int) -> Optional[ReplanAggregate]:
+        """Get replan session aggregate by id."""
         pass

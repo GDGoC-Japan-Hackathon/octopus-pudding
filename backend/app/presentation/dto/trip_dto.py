@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.domain.entities.trip import TripAtmosphere
 
@@ -78,6 +78,69 @@ class ItineraryItemUpdate(BaseModel):
     end_time: Optional[datetime] = None
     estimated_cost: Optional[int] = None
     notes: Optional[str] = None
+
+
+class IncidentCreate(BaseModel):
+    incident_type: Optional[str] = None
+    description: Optional[str] = None
+    occurred_at: Optional[datetime] = None
+
+
+class IncidentResponse(BaseModel):
+    id: int
+    trip_id: int
+    incident_type: Optional[str] = None
+    description: Optional[str] = None
+    occurred_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ReplanItemCreate(BaseModel):
+    name: str
+    category: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    start_time: Optional[datetime] = None
+    estimated_cost: Optional[int] = None
+    replacement_for_item_id: Optional[int] = None
+
+
+class ReplanCreate(BaseModel):
+    incident_id: Optional[int] = None
+    reason: Optional[str] = None
+    items: list[ReplanItemCreate] = Field(default_factory=list)
+
+
+class ReplanSessionResponse(BaseModel):
+    id: int
+    trip_id: int
+    incident_id: Optional[int] = None
+    reason: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ReplanItemResponse(BaseModel):
+    id: int
+    replan_session_id: int
+    name: str
+    category: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    start_time: Optional[datetime] = None
+    estimated_cost: Optional[int] = None
+    replacement_for_item_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ReplanAggregateResponse(BaseModel):
+    session: ReplanSessionResponse
+    items: list[ReplanItemResponse]
 
 
 class TripResponse(BaseModel):

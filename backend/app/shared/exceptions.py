@@ -33,6 +33,16 @@ class ItineraryItemNotFoundError(BaseError):
     pass
 
 
+class IncidentNotFoundError(BaseError):
+    """Incident not found error"""
+    pass
+
+
+class ReplanSessionNotFoundError(BaseError):
+    """Replan session not found error"""
+    pass
+
+
 class ValidationError(BaseError):
     """Validation error"""
     pass

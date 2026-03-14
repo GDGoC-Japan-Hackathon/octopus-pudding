@@ -5,7 +5,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.trip import (
+    Incident,
     ItineraryItem,
+    ReplanAggregate,
+    ReplanItem,
+    ReplanSession,
     Trip,
     TripAggregate,
     TripAtmosphere,
@@ -15,7 +19,10 @@ from app.domain.entities.trip import (
 )
 from app.domain.repositories.trip_repository import TripRepository
 from app.infrastructure.database.models import (
+    IncidentModel,
     ItineraryItemModel,
+    ReplanItemModel,
+    ReplanSessionModel,
     TripDayModel,
     TripMemberModel,
     TripModel,
@@ -304,6 +311,90 @@ class TripRepositoryImpl(TripRepository):
         await self.db.commit()
         return result.rowcount > 0
 
+    async def create_incident(self, incident: Incident) -> Incident:
+        db_incident = IncidentModel(
+            trip_id=incident.trip_id,
+            incident_type=incident.incident_type,
+            description=incident.description,
+            occurred_at=incident.occurred_at,
+        )
+        self.db.add(db_incident)
+        await self.db.commit()
+        await self.db.refresh(db_incident)
+        return self._to_incident_entity(db_incident)
+
+    async def list_incidents(self, trip_id: int) -> list[Incident]:
+        result = await self.db.execute(
+            select(IncidentModel)
+            .where(IncidentModel.trip_id == trip_id)
+            .order_by(IncidentModel.created_at.desc())
+        )
+        db_incidents = result.scalars().all()
+        return [self._to_incident_entity(db_incident) for db_incident in db_incidents]
+
+    async def get_incident(self, incident_id: int) -> Optional[Incident]:
+        result = await self.db.execute(select(IncidentModel).where(IncidentModel.id == incident_id))
+        db_incident = result.scalar_one_or_none()
+        if db_incident is None:
+            return None
+        return self._to_incident_entity(db_incident)
+
+    async def create_replan_session(
+        self,
+        session: ReplanSession,
+        items: Optional[list[ReplanItem]] = None,
+    ) -> ReplanAggregate:
+        db_session = ReplanSessionModel(
+            trip_id=session.trip_id,
+            incident_id=session.incident_id,
+            reason=session.reason,
+        )
+        self.db.add(db_session)
+        await self.db.flush()
+
+        created_items: list[ReplanItemModel] = []
+        for item in items or []:
+            db_item = ReplanItemModel(
+                replan_session_id=db_session.id,
+                name=item.name,
+                category=item.category,
+                latitude=item.latitude,
+                longitude=item.longitude,
+                start_time=item.start_time,
+                estimated_cost=item.estimated_cost,
+                replacement_for_item_id=item.replacement_for_item_id,
+            )
+            self.db.add(db_item)
+            created_items.append(db_item)
+
+        await self.db.commit()
+        await self.db.refresh(db_session)
+        for db_item in created_items:
+            await self.db.refresh(db_item)
+
+        return ReplanAggregate(
+            session=self._to_replan_session_entity(db_session),
+            items=[self._to_replan_item_entity(db_item) for db_item in created_items],
+        )
+
+    async def get_replan_aggregate(self, session_id: int) -> Optional[ReplanAggregate]:
+        session_result = await self.db.execute(
+            select(ReplanSessionModel).where(ReplanSessionModel.id == session_id)
+        )
+        db_session = session_result.scalar_one_or_none()
+        if db_session is None:
+            return None
+
+        items_result = await self.db.execute(
+            select(ReplanItemModel).where(ReplanItemModel.replan_session_id == session_id)
+        )
+        db_items = items_result.scalars().all()
+
+        return ReplanAggregate(
+            session=self._to_replan_session_entity(db_session),
+            items=[self._to_replan_item_entity(db_item) for db_item in db_items],
+        )
+
     # 以下はEntityの宣言
     def _to_trip_entity(self, db_trip: TripModel) -> Trip:
         return Trip(
@@ -361,5 +452,38 @@ class TripRepositoryImpl(TripRepository):
             end_time=db_item.end_time,
             estimated_cost=db_item.estimated_cost,
             notes=db_item.notes,
+            created_at=db_item.created_at,
+        )
+
+    def _to_incident_entity(self, db_incident: IncidentModel) -> Incident:
+        return Incident(
+            id=db_incident.id,
+            trip_id=db_incident.trip_id,
+            incident_type=db_incident.incident_type,
+            description=db_incident.description,
+            occurred_at=db_incident.occurred_at,
+            created_at=db_incident.created_at,
+        )
+
+    def _to_replan_session_entity(self, db_session: ReplanSessionModel) -> ReplanSession:
+        return ReplanSession(
+            id=db_session.id,
+            trip_id=db_session.trip_id,
+            incident_id=db_session.incident_id,
+            reason=db_session.reason,
+            created_at=db_session.created_at,
+        )
+
+    def _to_replan_item_entity(self, db_item: ReplanItemModel) -> ReplanItem:
+        return ReplanItem(
+            id=db_item.id,
+            replan_session_id=db_item.replan_session_id,
+            name=db_item.name,
+            category=db_item.category,
+            latitude=db_item.latitude,
+            longitude=db_item.longitude,
+            start_time=db_item.start_time,
+            estimated_cost=db_item.estimated_cost,
+            replacement_for_item_id=db_item.replacement_for_item_id,
             created_at=db_item.created_at,
         )
