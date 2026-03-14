@@ -95,9 +95,6 @@ async def get_user(
         )
 
 
-# POST / エンドポイントを削除（認証用の /auth/register を使用）
-
-
 @router.put("/{user_id}", response_model=UserResponse)
 async def update_user(
     user_id: int, 

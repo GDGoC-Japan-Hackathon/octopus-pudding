@@ -13,6 +13,16 @@ class UserAlreadyExistsError(BaseError):
     pass
 
 
+class TripNotFoundError(BaseError):
+    """Trip not found error"""
+    pass
+
+
+class PermissionDeniedError(BaseError):
+    """Permission denied error"""
+    pass
+
+
 class ValidationError(BaseError):
     """Validation error"""
     pass

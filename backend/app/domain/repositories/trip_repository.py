@@ -23,6 +23,16 @@ class TripRepository(ABC):
         pass
 
     @abstractmethod
+    async def update_trip(self, trip: Trip) -> Optional[Trip]:
+        """Update a trip."""
+        pass
+
+    @abstractmethod
+    async def delete_trip(self, trip_id: int) -> bool:
+        """Delete a trip."""
+        pass
+
+    @abstractmethod
     async def add_member(self, member: TripMember) -> TripMember:
         """Add a member to a trip."""
         pass

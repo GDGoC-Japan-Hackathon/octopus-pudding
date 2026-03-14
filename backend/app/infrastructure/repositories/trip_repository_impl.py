@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.trip import (
@@ -109,6 +109,39 @@ class TripRepositoryImpl(TripRepository):
         )
         db_trips = result.scalars().all()
         return [self._to_trip_entity(db_trip) for db_trip in db_trips]
+
+    async def update_trip(self, trip: Trip) -> Optional[Trip]:
+        result = await self.db.execute(select(TripModel).where(TripModel.id == trip.id))
+        db_trip = result.scalar_one_or_none()
+        if db_trip is None:
+            return None
+
+        db_trip.origin = trip.origin
+        db_trip.destination = trip.destination
+        db_trip.start_date = trip.start_date
+        db_trip.end_date = trip.end_date
+        db_trip.status = trip.status
+
+        await self.db.commit()
+        await self.db.refresh(db_trip)
+        return self._to_trip_entity(db_trip)
+
+    async def delete_trip(self, trip_id: int) -> bool:
+        days_result = await self.db.execute(
+            select(TripDayModel.id).where(TripDayModel.trip_id == trip_id)
+        )
+        day_ids = days_result.scalars().all()
+        if day_ids:
+            await self.db.execute(
+                delete(ItineraryItemModel).where(ItineraryItemModel.trip_day_id.in_(day_ids))
+            )
+
+        await self.db.execute(delete(TripDayModel).where(TripDayModel.trip_id == trip_id))
+        await self.db.execute(delete(TripMemberModel).where(TripMemberModel.trip_id == trip_id))
+        await self.db.execute(delete(TripPreferenceModel).where(TripPreferenceModel.trip_id == trip_id))
+        result = await self.db.execute(delete(TripModel).where(TripModel.id == trip_id))
+        await self.db.commit()
+        return result.rowcount > 0
 
     async def add_member(self, member: TripMember) -> TripMember:
         db_member = TripMemberModel(
