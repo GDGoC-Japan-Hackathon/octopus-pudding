@@ -98,5 +98,6 @@ make emu AVD="<your_avd_name>"
 - 接続中のデバイスを確認
 
 ### `make` での注意
-- `make start-tunnel` は `check-android-home` を確認するため、`ANDROID_HOME` が未設定だとエラーになります。
+- `make start-tunnel` 自体は `ANDROID_HOME` を参照しないため、`ANDROID_HOME` が未設定でもこのコマンドはエラーになりません。
+- ただし、`make emu` など Android SDK を利用するターゲットを使う場合には、事前に `ANDROID_HOME` を正しく設定しておく必要があります。
 - `make` の動作は、シェルの環境変数を引き継ぐため、毎回のターミナルで `source ~/.bashrc` と `export ANDROID_HOME=...` が必要な場合があります。
