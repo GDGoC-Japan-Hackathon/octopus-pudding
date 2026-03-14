@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   api:
@@ -6,20 +6,31 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:password@db:5432/ninareru
+      - DATABASE_URL=postgresql://postgres:password@db:5432/gdgoc
       - DEBUG=true
     depends_on:
       - db
     volumes:
       - .:/app
-    command: ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command:
+      [
+        "poetry",
+        "run",
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+      ]
     networks:
-      - ninareru-network
+      - gdgoc-network
 
   db:
     image: postgres:15
     environment:
-      - POSTGRES_DB=ninareru
+      - POSTGRES_DB=gdgoc
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
     ports:
@@ -27,11 +38,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - ninareru-network
+      - gdgoc-network
 
 volumes:
   postgres_data:
 
 networks:
-  ninareru-network:
-    driver: bridge 
+  gdgoc-network:
+    driver: bridge
