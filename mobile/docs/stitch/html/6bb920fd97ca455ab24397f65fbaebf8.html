@@ -1,220 +1,287 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+
+<html lang="ja">
 
 <head>
   <meta charset="utf-8" />
-  <title>6bb920fd97ca455ab24397f65fbaebf8</title>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&amp;display=swap"
+    rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap"
+    rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+    rel="stylesheet" />
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#ec5b13",
+            "background-light": "#f8f6f6",
+            "background-dark": "#221610",
+          },
+          fontFamily: {
+            "display": ["Public Sans", "sans-serif"]
+          },
+          borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+        },
+      },
+    }
+  </script>
+  <title>ふた旅 - 検索結果</title>
+  <style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
 </head>
 
-<body>
-  <h1>Screen id: 6bb920fd97ca455ab24397f65fbaebf8</h1>
-  <p>
-    <!DOCTYPE html>
-
-    <html class="light" lang="ja">
-
-    <head>
-      <meta charset="utf-8" />
-      <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-      <title>ふた旅 - 作成済みの計画</title>
-      <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-      <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&amp;display=swap"
-        rel="stylesheet" />
-      <link
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
-        rel="stylesheet" />
-      <link
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
-        rel="stylesheet" />
-      <script id="tailwind-config">
-        tailwind.config = {
-          darkMode: "class",
-          theme: {
-            extend: {
-              colors: {
-                "primary": "#ec5b13",
-                "background-light": "#f8f6f6",
-                "background-dark": "#221610",
-              },
-              fontFamily: {
-                "display": ["Public Sans", "sans-serif"]
-              },
-              borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
-            },
-          },
-        }
-      </script>
-      <style>
-        body {
-          font-family: 'Public Sans', 'Noto Sans JP', sans-serif;
-        }
-      </style>
-      <style>
-        body {
-          min-height: max(884px, 100dvh);
-        }
-      </style>
-    </head>
-
-    <body
-      class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
-      <!-- Header -->
-      <header
-        class="sticky top-0 z-10 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
-        <div class="flex items-center p-4 max-w-lg mx-auto w-full">
-          <button
-            class="flex items-center justify-center size-10 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
-            <span class="material-symbols-outlined">arrow_back</span>
-          </button>
-          <h1 class="text-xl font-bold ml-2 flex-1">作成済みの計画</h1>
-          <button
-            class="flex items-center justify-center size-10 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
-            <span class="material-symbols-outlined">search</span>
-          </button>
+<body
+  class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+  <!-- Header -->
+  <header
+    class="sticky top-0 z-50 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+    <div class="flex items-center p-4 gap-4">
+      <button
+        class="flex items-center justify-center size-10 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+        <span class="material-symbols-outlined">arrow_back</span>
+      </button>
+      <h1 class="text-xl font-bold tracking-tight">検索結果</h1>
+      <div class="ml-auto flex items-center gap-2 text-primary font-bold">
+        <span class="material-symbols-outlined">travel_explore</span>
+        <span class="hidden sm:inline">ふた旅</span>
+      </div>
+    </div>
+    <!-- Search Bar -->
+    <div class="px-4 pb-4">
+      <div class="relative group">
+        <div
+          class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary transition-colors">
+          <span class="material-symbols-outlined text-[20px]">search</span>
         </div>
-      </header>
-      <!-- Main Content -->
-      <main class="flex-1 max-w-lg mx-auto w-full pb-24">
+        <input
+          class="block w-full pl-10 pr-12 py-3 bg-slate-100 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-primary text-base placeholder-slate-400"
+          placeholder="キーワードを入力" type="text" value="京都" />
+        <button
+          class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <span class="material-symbols-outlined text-[20px]">cancel</span>
+        </button>
+      </div>
+    </div>
+    <!-- Filter Chips -->
+    <div class="flex gap-2 px-4 pb-4 overflow-x-auto no-scrollbar">
+      <button
+        class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-primary/10 dark:bg-primary/20 border border-primary/30 px-4 text-primary hover:bg-primary/20 transition-colors">
+        <span class="text-sm font-semibold leading-none">人数</span>
+        <span class="material-symbols-outlined text-[18px]">expand_more</span>
+      </button>
+      <button
+        class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 text-slate-600 dark:text-slate-300 hover:border-primary transition-colors">
+        <span class="text-sm font-semibold leading-none">開始日</span>
+        <span class="material-symbols-outlined text-[18px]">calendar_today</span>
+      </button>
+      <button
+        class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 text-slate-600 dark:text-slate-300 hover:border-primary transition-colors">
+        <span class="text-sm font-semibold leading-none">終了日</span>
+        <span class="material-symbols-outlined text-[18px]">calendar_month</span>
+      </button>
+      <button
+        class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 text-slate-600 dark:text-slate-300 hover:border-primary transition-colors">
+        <span class="text-sm font-semibold leading-none">キーワード</span>
+        <span class="material-symbols-outlined text-[18px]">tag</span>
+      </button>
+    </div>
+  </header>
+  <!-- Main Content -->
+  <main class="flex-1 p-4 space-y-6 max-w-2xl mx-auto w-full">
+    <!-- Result Count -->
+    <div class="flex items-center justify-between">
+      <p class="text-slate-500 dark:text-slate-400 text-sm">3件のプランが見つかりました</p>
+      <button class="text-primary text-sm font-bold flex items-center gap-1">
+        <span class="material-symbols-outlined text-[18px]">sort</span>
+        <span>並び替え</span>
+      </button>
+    </div>
+    <!-- Plan List -->
+    <div class="grid gap-6">
+      <!-- Card 1 -->
+      <div
+        class="group bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-slate-100 dark:border-slate-700">
+        <div class="aspect-[16/9] w-full bg-center bg-cover relative"
+          data-alt="Traditional pagoda in Kyoto during autumn"
+          style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuA2ZW0yDn0KcF3_eCIH8GJ-22reAzZ0f9QCG8U9fQT2MJfpTaKt3x76Hui78-KtjIHPytilttpdagZ8dOL608wLoXM9lhTCA_8pCiq0cyJCCluLuMlaH_VB4-GrjxChSlMBbAmznb8Hk_gYdDBi-KOTG1e5jxQ5krEnB3s9U2-ZMM1UYz7eLJHenU4SkesQEiaQiW6OnwdIjsn4IMMSFfOUEkm0jKhI8J0cHGvIqlgDs2gnTNiTeOd82evvIRZDWuBGz6eGL4rOCuT-');">
+          <div class="absolute top-3 right-3 bg-white/90 dark:bg-slate-900/90 p-1.5 rounded-full shadow-sm">
+            <span class="material-symbols-outlined text-primary text-[20px]">favorite</span>
+          </div>
+        </div>
         <div class="p-4">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">最近の旅行</h2>
-            <span class="text-xs font-medium text-primary">すべて見る</span>
+          <div class="flex justify-between items-start mb-2">
+            <h3 class="text-lg font-bold leading-tight group-hover:text-primary transition-colors">京都の歴史を巡る秋の旅</h3>
+            <span class="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded uppercase">保存済み</span>
           </div>
-          <!-- Grid Layout for Travel Plans -->
-          <div class="grid grid-cols-2 gap-4">
-            <!-- Card 1: Kyoto -->
-            <div class="group flex flex-col gap-2">
-              <div class="relative aspect-square w-full overflow-hidden rounded-xl bg-slate-200 dark:bg-slate-800">
-                <div class="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-110"
-                  data-alt="Traditional Japanese temple architecture in Kyoto during autumn"
-                  style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBxuxb-x2tMIU85tIi-yTsPaO1za1pEozUkKRxC2fuiw1kBtL7B7aXH0CPI6HIgE0NY-PE5fdxJaqmz8-bMhWgou2nzNY034YNSVXElswLeJ78aWEyEsHomywN6F5sMcW4abFkkmHodI03GsxFb7U5bAje1eF5-ecj3aZUqy_sRykww4SWUs52qFqWNB-SeiYpUnEGUw3Z4wWknQgk8xIl7AoMWjs2xfTXF0pq7vD0v6oiSLriZRvJwig2IT6XGMuSJe3Wn5ZprAYPl')">
-                </div>
-                <div
-                  class="absolute top-2 right-2 bg-black/40 backdrop-blur-md text-white text-[10px] px-2 py-0.5 rounded-full">
-                  済
-                </div>
-              </div>
-              <div>
-                <p class="font-bold text-base leading-tight">京都旅行</p>
-                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1">
-                  <span class="material-symbols-outlined text-sm">calendar_today</span>
-                  2023/10/01 - 10/03
-                </p>
-                <p class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                  <span class="material-symbols-outlined text-sm">group</span>
-                  2名
-                </p>
-              </div>
+          <div class="space-y-1.5 mb-4">
+            <div class="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm">
+              <span class="material-symbols-outlined text-[18px]">calendar_today</span>
+              <span>2024/11/01 - 11/03</span>
             </div>
-            <!-- Card 2: Osaka -->
-            <div class="group flex flex-col gap-2">
-              <div class="relative aspect-square w-full overflow-hidden rounded-xl bg-slate-200 dark:bg-slate-800">
-                <div class="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-110"
-                  data-alt="Bright neon signs and street food stalls in Dotonbori Osaka"
-                  style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuA8yGaBq5P-VVAkMUfLzUD35ARFQ6oPi7Ks2ebvdT_ZxSX42-Ncn5tMIq0cfHdhOKJC4zXZrww6flzyDKxQwK61Syz5x5yxf1DDeCtu6HrZXU0BS10f_wr3q7cy3Ojg2rusXz6_cB59g-zQQz1DdIN65R0o8PXxrhcSLdh6oVFEcRz1qd3dIEt4QzYKbxg701X1iJ0fZDWPkavw52qIErDMgsxys2uxUFjal0Ime0J05YWjk4zHBHOZlj9oZy-6YSgevW1YaDO-hlsS')">
-                </div>
-              </div>
-              <div>
-                <p class="font-bold text-base leading-tight">大阪グルメ旅</p>
-                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1">
-                  <span class="material-symbols-outlined text-sm">calendar_today</span>
-                  2023/11/15 - 11/16
-                </p>
-                <p class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                  <span class="material-symbols-outlined text-sm">group</span>
-                  4名
-                </p>
-              </div>
-            </div>
-            <!-- Card 3: Kamakura -->
-            <div class="group flex flex-col gap-2">
-              <div class="relative aspect-square w-full overflow-hidden rounded-xl bg-slate-200 dark:bg-slate-800">
-                <div class="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-110"
-                  data-alt="Coastal view and train tracks in Kamakura Japan"
-                  style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBdttOMbWg7C3YacmSv2oIlJfnht36Z96NLmY5yYYyg9k47HkqHZnHN0VsEGWEtvlpIQY5cMF_Z6MMfi4Q4qps6DJtUy2t7VLM6suVVemDen93rzrp3Ci-Wkx8msq5CaYSwLzpL4gEWlrGiYjz_ZEPpxP3NxnKkTUyyIWGEmBlC95O7ez3npV4yE1so1rC6ha-1tS1lYy9PHr2hD8peVI8rLNeq-E94PAlAklr2DQrh5a-U2ZCEUlC12w7DgClSARa5kL_DpzDzBHf1')">
-                </div>
-              </div>
-              <div>
-                <p class="font-bold text-base leading-tight">鎌倉散歩</p>
-                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1">
-                  <span class="material-symbols-outlined text-sm">calendar_today</span>
-                  2024/01/20
-                </p>
-                <p class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                  <span class="material-symbols-outlined text-sm">group</span>
-                  3名
-                </p>
-              </div>
-            </div>
-            <!-- Card 4: Okinawa -->
-            <div class="group flex flex-col gap-2">
-              <div class="relative aspect-square w-full overflow-hidden rounded-xl bg-slate-200 dark:bg-slate-800">
-                <div class="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-110"
-                  data-alt="Beautiful turquoise ocean beach in Okinawa Japan"
-                  style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDN-acQBwtIm9l5wPknXHoxu8IX9L_VnIDNagKK_tlij8BqKN8SCVMBf7WVnxazMzQ2KjvUT2vGFbuqTE8k2d4fukVcz6_aD8k6naVvBi3nYyDmUq33zDQBXIbjh8D4gRCye2Uuw5KdnlbUQF1egGVJ4Or_p-PnNIvkKxzTVs7WOVZ7_GY0T-u_7HU-6fZ63zO0wGh9jVUwe2ePQwA_M7gpQ4LH4QAgMRdYuJxW1GtXqOiv-0C8ul4bmxWEMd87XSjxfghw52lMQbph')">
-                </div>
-                <div
-                  class="absolute top-2 right-2 bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                  予定
-                </div>
-              </div>
-              <div>
-                <p class="font-bold text-base leading-tight">沖縄ドライブ</p>
-                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1">
-                  <span class="material-symbols-outlined text-sm">calendar_today</span>
-                  2024/03/10 - 3/14
-                </p>
-                <p class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                  <span class="material-symbols-outlined text-sm">group</span>
-                  2名
-                </p>
-              </div>
+            <div class="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm">
+              <span class="material-symbols-outlined text-[18px]">group</span>
+              <span>大人 2名</span>
             </div>
           </div>
-          <!-- Empty space for plus button floating effect if needed -->
-          <div
-            class="mt-8 p-6 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400">
-            <span class="material-symbols-outlined text-4xl mb-2">add_circle</span>
-            <p class="text-sm font-medium">新しい計画を作成</p>
+          <div class="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-700">
+            <div class="flex -space-x-2">
+              <div
+                class="size-7 rounded-full bg-primary/20 border-2 border-white dark:border-slate-800 flex items-center justify-center text-[10px] font-bold">
+                JD</div>
+              <div
+                class="size-7 rounded-full bg-slate-300 border-2 border-white dark:border-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-600">
+                YA</div>
+            </div>
+            <button
+              class="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-primary/90 transition-colors">
+              詳細を表示
+            </button>
           </div>
         </div>
-      </main>
-      <!-- Bottom Navigation Bar -->
-      <nav
-        class="fixed bottom-0 left-0 right-0 z-20 bg-white/90 dark:bg-background-dark/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800">
-        <div class="flex max-w-lg mx-auto h-16 items-center justify-around px-2">
-          <a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors"
-            href="#">
-            <span class="material-symbols-outlined">home</span>
-            <span class="text-[10px] font-medium leading-none">ホーム</span>
-          </a>
-          <a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
-            <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">map</span>
-            <span class="text-[10px] font-medium leading-none">計画</span>
-          </a>
-          <a class="flex flex-1 flex-col items-center justify-center -mt-6" href="#">
-            <div
-              class="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-white shadow-lg shadow-primary/30">
-              <span class="material-symbols-outlined text-2xl">add</span>
-            </div>
-            <span class="text-[10px] font-medium leading-none mt-2 text-primary">作成</span>
-          </a>
-          <a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors"
-            href="#">
-            <span class="material-symbols-outlined">notifications</span>
-            <span class="text-[10px] font-medium leading-none">通知</span>
-          </a>
-          <a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors"
-            href="#">
-            <span class="material-symbols-outlined">person</span>
-            <span class="text-[10px] font-medium leading-none">設定</span>
-          </a>
+      </div>
+      <!-- Card 2 -->
+      <div
+        class="group bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-slate-100 dark:border-slate-700">
+        <div class="aspect-[16/9] w-full bg-center bg-cover relative"
+          data-alt="Fushimi Inari Shrine torii gates in Kyoto"
+          style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC-kj_UUMxQHjbXlErnHAv-AQpqw2pxlzJDXiC6gni6ukn1YocT45xOi-Wor4h9VrG0tN1Mwxm72NihaBCcijgq-CjuEcSHgkNVPPWOCvGp0dyC6NEWzXbuEaX6vGx8tTjRqHDrl9udHhd6WEZ1Nz-ZrXpR5jBjkTokBFrOTafxfJjz3dmcckZtCanTXJkQNX-Psm_VRPgY6N_pY0YNgK-VFd9_rfp_9Zu4A2hS0wuhUx7YonjL6WNPeGAiLDzy_8SF_xSQddvWM4j4');">
+          <div class="absolute top-3 right-3 bg-white/90 dark:bg-slate-900/90 p-1.5 rounded-full shadow-sm">
+            <span class="material-symbols-outlined text-slate-400 text-[20px]">favorite</span>
+          </div>
         </div>
-      </nav>
-    </body>
+        <div class="p-4">
+          <div class="flex justify-between items-start mb-2">
+            <h3 class="text-lg font-bold leading-tight group-hover:text-primary transition-colors">嵐山散策と京懐石プラン</h3>
+            <span
+              class="bg-slate-100 dark:bg-slate-700 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded uppercase">下書き</span>
+          </div>
+          <div class="space-y-1.5 mb-4">
+            <div class="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm">
+              <span class="material-symbols-outlined text-[18px]">calendar_today</span>
+              <span>2024/12/15 - 12/16</span>
+            </div>
+            <div class="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm">
+              <span class="material-symbols-outlined text-[18px]">group</span>
+              <span>大人 2名</span>
+            </div>
+          </div>
+          <div class="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-700">
+            <div class="flex -space-x-2">
+              <div
+                class="size-7 rounded-full bg-primary/20 border-2 border-white dark:border-slate-800 flex items-center justify-center text-[10px] font-bold">
+                JD</div>
+            </div>
+            <button
+              class="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-primary/90 transition-colors">
+              詳細を表示
+            </button>
+          </div>
+        </div>
+      </div>
+      <!-- Card 3 -->
+      <div
+        class="group bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-slate-100 dark:border-slate-700">
+        <div class="aspect-[16/9] w-full bg-center bg-cover relative" data-alt="Arashiyama Bamboo Grove pathway"
+          style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD7lLzhij0Es2j819dKb223rRSbHg6gSJqx5ofqdkBVkS-Tx-OiAsVD_WGE6FQCBpD1OOuSwriEQWH0sZ9MF5EoN51E0UqkKliWxugJv5NDcNhDYh34rCE3T9_XIHlerA6VLvXpsp-gPu_oZAHoBZ3BebRrPNGt0NSidSTJstsurd-A4k-xoLnnChhzv_RkCp90M-Cyvwo1412yyPW3PqujW8-xrXOwdrRs_a1w0fqz5oogpHRC7Yzetg0ge_F4BU07na-E0JXfUffZ');">
+          <div class="absolute top-3 right-3 bg-white/90 dark:bg-slate-900/90 p-1.5 rounded-full shadow-sm">
+            <span class="material-symbols-outlined text-primary text-[20px]">favorite</span>
+          </div>
+        </div>
+        <div class="p-4">
+          <div class="flex justify-between items-start mb-2">
+            <h3 class="text-lg font-bold leading-tight group-hover:text-primary transition-colors">【2024冬】京都パワースポット巡り
+            </h3>
+            <span class="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded uppercase">保存済み</span>
+          </div>
+          <div class="space-y-1.5 mb-4">
+            <div class="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm">
+              <span class="material-symbols-outlined text-[18px]">calendar_today</span>
+              <span>2025/01/10 - 01/12</span>
+            </div>
+            <div class="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm">
+              <span class="material-symbols-outlined text-[18px]">group</span>
+              <span>大人 2名</span>
+            </div>
+          </div>
+          <div class="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-700">
+            <div class="flex -space-x-2">
+              <div
+                class="size-7 rounded-full bg-primary/20 border-2 border-white dark:border-slate-800 flex items-center justify-center text-[10px] font-bold">
+                JD</div>
+              <div
+                class="size-7 rounded-full bg-slate-300 border-2 border-white dark:border-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-600">
+                YA</div>
+            </div>
+            <button
+              class="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-primary/90 transition-colors">
+              詳細を表示
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="h-24"></div> <!-- Spacer for fixed bottom nav -->
+  </main>
+  <!-- Bottom Navigation Bar -->
+  <nav
+    class="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-2 pb-safe">
+    <div class="flex justify-around items-center h-16 max-w-lg mx-auto">
+      <a class="flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:text-primary transition-colors w-16"
+        href="#">
+        <span class="material-symbols-outlined text-[24px]">home</span>
+        <p class="text-[10px] font-medium leading-none">ホーム</p>
+      </a>
+      <a class="flex flex-col items-center justify-center gap-0.5 text-primary transition-colors w-16" href="#">
+        <span class="material-symbols-outlined text-[24px] font-variation-fill">description</span>
+        <p class="text-[10px] font-medium leading-none">作成済み</p>
+      </a>
+      <a class="flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:text-primary transition-colors w-16 relative"
+        href="#">
+        <div
+          class="absolute -top-6 size-12 bg-primary rounded-full flex items-center justify-center shadow-lg border-4 border-white dark:border-slate-900">
+          <span class="material-symbols-outlined text-white text-[28px]">add</span>
+        </div>
+        <p class="text-[10px] font-medium leading-none mt-6">作成</p>
+      </a>
+      <a class="flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:text-primary transition-colors w-16"
+        href="#">
+        <span class="material-symbols-outlined text-[24px]">auto_awesome</span>
+        <p class="text-[10px] font-medium leading-none">おすすめ</p>
+      </a>
+      <a class="flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:text-primary transition-colors w-16"
+        href="#">
+        <span class="material-symbols-outlined text-[24px]">account_circle</span>
+        <p class="text-[10px] font-medium leading-none">マイページ</p>
+      </a>
+    </div>
+  </nav>
+  <style>
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
 
-    </html>
-  </p>
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .pb-safe {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .font-variation-fill {
+      font-variation-settings: 'FILL' 1;
+    }
+  </style>
 </body>
 
 </html>
