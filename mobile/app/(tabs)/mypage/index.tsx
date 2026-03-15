@@ -5,10 +5,30 @@ import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'rea
 import { AppHeader } from '@/components/travel/AppHeader';
 import { travelStyles } from '@/components/travel/styles';
 import { profileMock, weatherMock } from '@/data/travel';
+import { useAuth } from '@/features/auth/hooks/use-auth';
 
 export default function MyPageScreen() {
+  const { signOut } = useAuth();
+
   const handleAddFriend = (method: string) => {
     Alert.alert('準備中', `${method} は未実装です`);
+  };
+
+  const handleLogoutPress = () => {
+    Alert.alert('ログアウト確認', 'ログアウトしますか？', [
+      { text: 'キャンセル', style: 'cancel' },
+      {
+        text: 'ログアウト',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await signOut();
+          } catch {
+            Alert.alert('エラー', 'ログアウトに失敗しました。再度お試しください。');
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -76,6 +96,11 @@ export default function MyPageScreen() {
               <MaterialIcons name="chevron-right" size={20} color="#94A3B8" />
             </Pressable>
           </Link>
+          <View style={styles.menuDivider} />
+          <Pressable style={styles.menuRow} onPress={handleLogoutPress}>
+            <Text style={[styles.menuTitle, styles.logoutText]}>ログアウト</Text>
+            <MaterialIcons name="logout" size={18} color="#DC2626" />
+          </Pressable>
         </View>
       </ScrollView>
     </View>
@@ -191,6 +216,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#0F172A',
     fontWeight: '500',
+  },
+  logoutText: {
+    color: '#DC2626',
   },
   actionCard: {
     flex: 1,
