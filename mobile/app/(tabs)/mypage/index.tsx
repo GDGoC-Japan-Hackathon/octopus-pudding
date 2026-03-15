@@ -1,8 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { Link } from 'expo-router';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '@/components/travel/AppHeader';
-import { ListButton } from '@/components/travel/ListButton';
 import { travelStyles } from '@/components/travel/styles';
 import { profileMock, weatherMock } from '@/data/travel';
 
@@ -56,10 +56,26 @@ export default function MyPageScreen() {
         </View>
 
         <View style={travelStyles.detailSection}>
-          <Text style={styles.sectionHeader}>マイページ項目</Text>
-          <ListButton href="/mypage/friends" title="フレンド一覧" description="IDで検索した人の一覧を表示" />
-          <ListButton href="/mypage/history" title="旅行履歴" description="過去に作成した旅程と記録" />
-          <ListButton href="/mypage/settings" title="設定" description="アカウントや通知の設定を開く" />
+          <Link href="/mypage/friends" asChild>
+            <Pressable style={styles.menuRow}>
+              <Text style={styles.menuTitle}>フレンド一覧</Text>
+              <MaterialIcons name="chevron-right" size={20} color="#94A3B8" />
+            </Pressable>
+          </Link>
+          <View style={styles.menuDivider} />
+          <Link href="/mypage/history" asChild>
+            <Pressable style={styles.menuRow}>
+              <Text style={styles.menuTitle}>旅行履歴</Text>
+              <MaterialIcons name="chevron-right" size={20} color="#94A3B8" />
+            </Pressable>
+          </Link>
+          <View style={styles.menuDivider} />
+          <Link href="/mypage/settings" asChild>
+            <Pressable style={styles.menuRow}>
+              <Text style={styles.menuTitle}>設定</Text>
+              <MaterialIcons name="chevron-right" size={20} color="#94A3B8" />
+            </Pressable>
+          </Link>
         </View>
       </ScrollView>
     </View>
@@ -142,6 +158,39 @@ const styles = StyleSheet.create({
   friendActions: {
     flexDirection: 'row',
     gap: 10,
+  },
+  menuList: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  menuRow: {
+    height: 40,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  menuRowFirst: {
+    paddingTop: 0,
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  menuIconWrap: {
+    width: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuTitle: {
+    flex: 1,
+    fontSize: 16,
+    color: '#0F172A',
+    fontWeight: '500',
   },
   actionCard: {
     flex: 1,
