@@ -2,8 +2,8 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
-import { AppHeader } from '@/components/travel/AppHeader';
-import { travelStyles } from '@/components/travel/styles';
+import { AppHeader } from '@/features/travel/components/AppHeader';
+import { travelStyles } from '@/features/travel/styles';
 import { weatherMock } from '@/data/travel';
 import { createTrip } from '@/features/trips/api/create-trip';
 

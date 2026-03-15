@@ -2,7 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { AppHeader } from '@/components/travel/AppHeader';
+import { AppHeader } from '@/features/travel/components/AppHeader';
 import { recommendedPlans, timelineMock, weatherMock } from '@/data/travel';
 
 const profileImage =

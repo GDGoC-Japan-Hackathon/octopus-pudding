@@ -1,8 +1,8 @@
 import { FlatList, View } from 'react-native';
 
-import { AppHeader } from '@/components/travel/AppHeader';
-import { ListButton } from '@/components/travel/ListButton';
-import { travelStyles } from '@/components/travel/styles';
+import { AppHeader } from '@/features/travel/components/AppHeader';
+import { ListButton } from '@/features/travel/components/ListButton';
+import { travelStyles } from '@/features/travel/styles';
 import { tripHistoryMock, weatherMock } from '@/data/travel';
 
 export default function HistoryListScreen() {

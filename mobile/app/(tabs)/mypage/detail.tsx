@@ -1,8 +1,8 @@
 import { useLocalSearchParams } from 'expo-router';
 import { ScrollView, Text, View } from 'react-native';
 
-import { AppHeader } from '@/components/travel/AppHeader';
-import { travelStyles } from '@/components/travel/styles';
+import { AppHeader } from '@/features/travel/components/AppHeader';
+import { travelStyles } from '@/features/travel/styles';
 import { friendsMock, settingsMock, tripHistoryMock, weatherMock } from '@/data/travel';
 
 type MyPageSection = 'friends' | 'history' | 'settings';

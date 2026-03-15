@@ -3,8 +3,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 
-import { AppHeader } from '@/components/travel/AppHeader';
-import { travelStyles } from '@/components/travel/styles';
+import { AppHeader } from '@/features/travel/components/AppHeader';
+import { travelStyles } from '@/features/travel/styles';
 import { weatherMock } from '@/data/travel';
 import {
   createIncident,

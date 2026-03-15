@@ -1,8 +1,8 @@
 import { Link, useLocalSearchParams } from 'expo-router';
 import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
 
-import { AppHeader } from '@/components/travel/AppHeader';
-import { travelStyles } from '@/components/travel/styles';
+import { AppHeader } from '@/features/travel/components/AppHeader';
+import { travelStyles } from '@/features/travel/styles';
 import { savedPlans, weatherMock } from '@/data/travel';
 
 export default function PlanDetailScreen() {

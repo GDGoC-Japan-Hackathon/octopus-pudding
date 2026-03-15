@@ -2,8 +2,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { AppHeader } from '@/components/travel/AppHeader';
-import { travelStyles } from '@/components/travel/styles';
+import { AppHeader } from '@/features/travel/components/AppHeader';
+import { travelStyles } from '@/features/travel/styles';
 import { profileMock, weatherMock } from '@/data/travel';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 
