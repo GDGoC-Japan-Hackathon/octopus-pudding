@@ -26,7 +26,7 @@ app.include_router(api_router, prefix="/api/v1")
 @app.get("/")
 async def root():
     """Root endpoint"""
-    return {"message": "Welcome to ninareru sns auth app"}
+    return {"message": "Welcome to hutatabi trip plan app"}
 
 
 @app.get("/health")

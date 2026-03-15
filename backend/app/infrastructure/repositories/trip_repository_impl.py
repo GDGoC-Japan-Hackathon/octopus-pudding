@@ -135,13 +135,38 @@ class TripRepositoryImpl(TripRepository):
         return self._to_trip_entity(db_trip)
 
     async def delete_trip(self, trip_id: int) -> bool:
+        # 1. replan_items を削除（replan_sessions, itinerary_items より先に削除が必要）
+        session_ids_result = await self.db.execute(
+            select(ReplanSessionModel.id).where(ReplanSessionModel.trip_id == trip_id)
+        )
+        session_ids = list(session_ids_result.scalars().all())
+        if session_ids:
+            await self.db.execute(
+                delete(ReplanItemModel).where(
+                    ReplanItemModel.replan_session_id.in_(session_ids)
+                )
+            )
+
+        # 2. replan_sessions を削除
+        await self.db.execute(
+            delete(ReplanSessionModel).where(ReplanSessionModel.trip_id == trip_id)
+        )
+
+        # 3. incidents を削除
+        await self.db.execute(
+            delete(IncidentModel).where(IncidentModel.trip_id == trip_id)
+        )
+
+        # 4. itinerary_items, trip_days, trip_members, trip_preferences, trips を削除
         days_result = await self.db.execute(
             select(TripDayModel.id).where(TripDayModel.trip_id == trip_id)
         )
-        day_ids = days_result.scalars().all()
+        day_ids = list(days_result.scalars().all())
         if day_ids:
             await self.db.execute(
-                delete(ItineraryItemModel).where(ItineraryItemModel.trip_day_id.in_(day_ids))
+                delete(ItineraryItemModel).where(
+                    ItineraryItemModel.trip_day_id.in_(day_ids)
+                )
             )
 
         await self.db.execute(delete(TripDayModel).where(TripDayModel.trip_id == trip_id))

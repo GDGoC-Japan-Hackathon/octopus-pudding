@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "postgresql+asyncpg://postgres:password@localhost:5432/ninareru"
+    database_url: str = "postgresql+asyncpg://postgres:password@localhost:5432/gdgoc"
     
     # API
     api_host: str = "0.0.0.0"
