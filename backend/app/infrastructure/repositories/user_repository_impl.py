@@ -18,6 +18,8 @@ class UserRepositoryImpl(UserRepository):
             email=user.email,
             username=user.username,
             firebase_uid=user.firebase_uid,
+            profile_image_url=user.profile_image_url,
+            nearest_station=user.nearest_station,
             is_active=user.is_active
         )
         self.db.add(db_user)
@@ -67,6 +69,8 @@ class UserRepositoryImpl(UserRepository):
         db_user.email = user.email
         db_user.username = user.username
         db_user.firebase_uid = user.firebase_uid
+        db_user.profile_image_url = user.profile_image_url
+        db_user.nearest_station = user.nearest_station
         db_user.is_active = user.is_active
         db_user.updated_at = user.updated_at
         
@@ -109,6 +113,8 @@ class UserRepositoryImpl(UserRepository):
             email=db_user.email,
             username=db_user.username,
             firebase_uid=db_user.firebase_uid,
+            profile_image_url=db_user.profile_image_url,
+            nearest_station=db_user.nearest_station,
             is_active=db_user.is_active,
             created_at=db_user.created_at,
             updated_at=db_user.updated_at

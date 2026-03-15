@@ -25,6 +25,8 @@ class UserModel(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     username = Column(String, unique=True, index=True, nullable=False)
     firebase_uid = Column(String, unique=True, index=True, nullable=True)
+    profile_image_url = Column(String, nullable=True)
+    nearest_station = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now()) 

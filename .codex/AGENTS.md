@@ -47,6 +47,11 @@ backend/app/
 - `GET /api/v1/users/{user_id}`
 - `PUT /api/v1/users/{user_id}`
 - `DELETE /api/v1/users/{user_id}`
+- `users/me` の主なプロフィール項目:
+  - `username`（編集可）
+  - `profile_image_url`（編集可）
+  - `nearest_station`（編集可）
+  - `email`（読み取り専用 / Firebaseを正）
 
 ### Trips
 - `POST /api/v1/trips`

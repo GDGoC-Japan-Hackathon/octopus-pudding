@@ -10,6 +10,8 @@ class User:
     email: str
     username: str
     firebase_uid: Optional[str] = None
+    profile_image_url: Optional[str] = None
+    nearest_station: Optional[str] = None
     is_active: bool = True
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
