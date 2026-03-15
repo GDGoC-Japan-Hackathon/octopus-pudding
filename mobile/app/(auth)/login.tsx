@@ -1,14 +1,15 @@
-import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@/features/auth/hooks/use-auth';
 
+type AuthMode = 'login' | 'signup';
+
 export default function LoginScreen() {
-  const router = useRouter();
-  const { signIn } = useAuth();
+  const { signIn, signUp } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [mode, setMode] = useState<AuthMode>('login');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,10 +17,17 @@ export default function LoginScreen() {
     setError(null);
     setIsSubmitting(true);
     try {
-      await signIn(email.trim(), password);
-      router.replace('/(tabs)/home');
+      if (mode === 'login') {
+        await signIn(email.trim(), password);
+      } else {
+        await signUp(email.trim(), password);
+      }
     } catch {
-      setError('ログインに失敗しました。メールアドレスまたはパスワードを確認してください。');
+      if (mode === 'login') {
+        setError('ログインに失敗しました。メールアドレスまたはパスワードを確認してください。');
+      } else {
+        setError('新規登録に失敗しました。メール形式やパスワード(6文字以上)を確認してください。');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -28,8 +36,12 @@ export default function LoginScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.card}>
-        <Text style={styles.title}>ログイン</Text>
-        <Text style={styles.subtitle}>Firebase認証でログインします。</Text>
+        <Text style={styles.title}>{mode === 'login' ? 'ログイン' : '新規登録'}</Text>
+        <Text style={styles.subtitle}>
+          {mode === 'login'
+            ? 'Firebase認証でログインします。'
+            : 'Firebase認証でアカウントを作成します。'}
+        </Text>
 
         <Text style={styles.label}>メールアドレス</Text>
         <TextInput
@@ -65,8 +77,20 @@ export default function LoginScreen() {
           {isSubmitting ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.buttonText}>ログイン</Text>
+            <Text style={styles.buttonText}>{mode === 'login' ? 'ログイン' : '新規登録'}</Text>
           )}
+        </Pressable>
+
+        <Pressable
+          onPress={() => setMode((prev) => (prev === 'login' ? 'signup' : 'login'))}
+          disabled={isSubmitting}
+          style={styles.linkButton}
+        >
+          <Text style={styles.linkButtonText}>
+            {mode === 'login'
+              ? 'アカウントを作成する'
+              : '既存アカウントでログインする'}
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -133,5 +157,14 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontSize: 12,
     marginTop: 2,
+  },
+  linkButton: {
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  linkButtonText: {
+    color: '#2563EB',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

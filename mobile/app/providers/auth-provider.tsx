@@ -3,7 +3,12 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 
 import { fetchAuthenticatedUser, type AuthenticatedUser } from '@/features/auth/api/get-me';
 import { configureApiClient } from '@/lib/api/client';
-import { getFirebaseAuth, signInWithFirebaseEmail, signOutFromFirebase } from '@/lib/firebase/auth';
+import {
+  getFirebaseAuth,
+  signInWithFirebaseEmail,
+  signOutFromFirebase,
+  signUpWithFirebaseEmail,
+} from '@/lib/firebase/auth';
 
 type AuthContextValue = {
   firebaseUser: User | null;
@@ -11,6 +16,7 @@ type AuthContextValue = {
   isLoading: boolean;
   isAuthenticated: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   getIdToken: (forceRefresh?: boolean) => Promise<string | null>;
 };
@@ -75,6 +81,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const signUp = async (email: string, password: string) => {
+    setIsLoading(true);
+    const user = await signUpWithFirebaseEmail(email, password);
+    setFirebaseUser(user);
+    try {
+      const me = await fetchAuthenticatedUser();
+      setBackendUser(me);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const signOut = async () => {
     await signOutFromFirebase();
     setFirebaseUser(null);
@@ -88,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLoading,
       isAuthenticated: !!firebaseUser,
       signIn,
+      signUp,
       signOut,
       getIdToken,
     }),

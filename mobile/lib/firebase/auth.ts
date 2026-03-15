@@ -1,6 +1,7 @@
 import {
   Auth,
   User,
+  createUserWithEmailAndPassword,
   getAuth,
   signInWithEmailAndPassword,
   signOut,
@@ -23,6 +24,12 @@ export function getFirebaseAuth(): Auth {
 export async function signInWithFirebaseEmail(email: string, password: string): Promise<User> {
   const auth = getFirebaseAuth();
   const credential = await signInWithEmailAndPassword(auth, email, password);
+  return credential.user;
+}
+
+export async function signUpWithFirebaseEmail(email: string, password: string): Promise<User> {
+  const auth = getFirebaseAuth();
+  const credential = await createUserWithEmailAndPassword(auth, email, password);
   return credential.user;
 }
 
