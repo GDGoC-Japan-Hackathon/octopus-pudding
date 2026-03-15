@@ -13,6 +13,36 @@ class UserAlreadyExistsError(BaseError):
     pass
 
 
+class TripNotFoundError(BaseError):
+    """Trip not found error"""
+    pass
+
+
+class PermissionDeniedError(BaseError):
+    """Permission denied error"""
+    pass
+
+
+class TripDayNotFoundError(BaseError):
+    """Trip day not found error"""
+    pass
+
+
+class ItineraryItemNotFoundError(BaseError):
+    """Itinerary item not found error"""
+    pass
+
+
+class IncidentNotFoundError(BaseError):
+    """Incident not found error"""
+    pass
+
+
+class ReplanSessionNotFoundError(BaseError):
+    """Replan session not found error"""
+    pass
+
+
 class ValidationError(BaseError):
     """Validation error"""
     pass

@@ -49,4 +49,4 @@ class UserRepository(ABC):
     @abstractmethod
     async def exists_by_username(self, username: str) -> bool:
         """Check if user exists by username"""
-        pass 
+        pass

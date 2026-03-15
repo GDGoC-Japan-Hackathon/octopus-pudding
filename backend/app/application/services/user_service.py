@@ -21,19 +21,6 @@ class UserService:
         
         return await self.user_repository.create(user)
     
-    # Legacy method for backward compatibility
-    async def create_user_legacy(self, email: str, username: str, password: str) -> User:
-        """Create a new user (legacy method)"""
-        # Create user entity
-        user = User(
-            id=None,
-            email=email,
-            username=username,
-            hashed_password=password  # In production, this should be hashed
-        )
-        
-        return await self.create_user(user)
-    
     async def get_user_by_id(self, user_id: int) -> Optional[User]:
         """Get user by ID"""
         return await self.user_repository.get_by_id(user_id)
@@ -63,19 +50,3 @@ class UserService:
         if not user:
             raise UserNotFoundError(f"User with ID {user_id} not found")
         return await self.user_repository.delete(user_id)
-    
-    async def deactivate_user(self, user_id: int) -> User:
-        """Deactivate user"""
-        user = await self.get_user_by_id(user_id)
-        if not user:
-            raise UserNotFoundError(f"User with ID {user_id} not found")
-        user.deactivate()
-        return await self.user_repository.update(user)
-    
-    async def activate_user(self, user_id: int) -> User:
-        """Activate user"""
-        user = await self.get_user_by_id(user_id)
-        if not user:
-            raise UserNotFoundError(f"User with ID {user_id} not found")
-        user.activate()
-        return await self.user_repository.update(user) 

@@ -1,5 +1,6 @@
 from typing import List, Optional
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.entities.user import User
 from app.domain.repositories.user_repository import UserRepository
 from app.infrastructure.database.models import UserModel
@@ -8,7 +9,7 @@ from app.infrastructure.database.models import UserModel
 class UserRepositoryImpl(UserRepository):
     """User repository implementation"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
     
     async def create(self, user: User) -> User:
@@ -20,33 +21,38 @@ class UserRepositoryImpl(UserRepository):
             is_active=user.is_active
         )
         self.db.add(db_user)
-        self.db.commit()
-        self.db.refresh(db_user)
+        await self.db.commit()
+        await self.db.refresh(db_user)
         return self._to_entity(db_user)
     
     async def get_by_id(self, user_id: int) -> Optional[User]:
         """Get user by ID"""
-        db_user = self.db.query(UserModel).filter(UserModel.id == user_id).first()
+        result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
+        db_user = result.scalar_one_or_none()
         return self._to_entity(db_user) if db_user else None
     
     async def get_by_email(self, email: str) -> Optional[User]:
         """Get user by email"""
-        db_user = self.db.query(UserModel).filter(UserModel.email == email).first()
+        result = await self.db.execute(select(UserModel).where(UserModel.email == email))
+        db_user = result.scalar_one_or_none()
         return self._to_entity(db_user) if db_user else None
     
     async def get_by_username(self, username: str) -> Optional[User]:
         """Get user by username"""
-        db_user = self.db.query(UserModel).filter(UserModel.username == username).first()
+        result = await self.db.execute(select(UserModel).where(UserModel.username == username))
+        db_user = result.scalar_one_or_none()
         return self._to_entity(db_user) if db_user else None
     
     async def get_all(self, skip: int = 0, limit: int = 100) -> List[User]:
         """Get all users with pagination"""
-        db_users = self.db.query(UserModel).offset(skip).limit(limit).all()
+        result = await self.db.execute(select(UserModel).offset(skip).limit(limit))
+        db_users = result.scalars().all()
         return [self._to_entity(db_user) for db_user in db_users]
     
     async def update(self, user: User) -> User:
         """Update user"""
-        db_user = self.db.query(UserModel).filter(UserModel.id == user.id).first()
+        result = await self.db.execute(select(UserModel).where(UserModel.id == user.id))
+        db_user = result.scalar_one_or_none()
         if not db_user:
             raise ValueError(f"User with ID {user.id} not found")
         
@@ -56,27 +62,30 @@ class UserRepositoryImpl(UserRepository):
         db_user.is_active = user.is_active
         db_user.updated_at = user.updated_at
         
-        self.db.commit()
-        self.db.refresh(db_user)
+        await self.db.commit()
+        await self.db.refresh(db_user)
         return self._to_entity(db_user)
     
     async def delete(self, user_id: int) -> bool:
         """Delete user"""
-        db_user = self.db.query(UserModel).filter(UserModel.id == user_id).first()
+        result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
+        db_user = result.scalar_one_or_none()
         if not db_user:
             return False
         
-        self.db.delete(db_user)
-        self.db.commit()
+        await self.db.delete(db_user)
+        await self.db.commit()
         return True
     
     async def exists_by_email(self, email: str) -> bool:
         """Check if user exists by email"""
-        return self.db.query(UserModel).filter(UserModel.email == email).first() is not None
+        result = await self.db.execute(select(UserModel.id).where(UserModel.email == email))
+        return result.first() is not None
     
     async def exists_by_username(self, username: str) -> bool:
         """Check if user exists by username"""
-        return self.db.query(UserModel).filter(UserModel.username == username).first() is not None
+        result = await self.db.execute(select(UserModel.id).where(UserModel.username == username))
+        return result.first() is not None
     
     def _to_entity(self, db_user: UserModel) -> User:
         """Convert SQLAlchemy model to domain entity"""
