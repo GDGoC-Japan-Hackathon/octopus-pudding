@@ -1,7 +1,10 @@
 import { onAuthStateChanged, User } from 'firebase/auth';
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { fetchAuthenticatedUser, type AuthenticatedUser } from '@/features/auth/api/get-me';
+import {
+  fetchAuthenticatedUserWithToken,
+  type AuthenticatedUser,
+} from '@/features/auth/api/get-me';
 import { configureApiClient } from '@/lib/api/client';
 import {
   getFirebaseAuth,
@@ -28,13 +31,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [backendUser, setBackendUser] = useState<AuthenticatedUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const getIdToken = async (forceRefresh = false): Promise<string | null> => {
+  const syncBackendUser = useCallback(async (user: User): Promise<AuthenticatedUser> => {
+    const idToken = await user.getIdToken(true);
+    return fetchAuthenticatedUserWithToken(idToken);
+  }, []);
+
+  const getIdToken = useCallback(async (forceRefresh = false): Promise<string | null> => {
     const currentUser = getFirebaseAuth().currentUser;
     if (!currentUser) {
       return null;
     }
     return currentUser.getIdToken(forceRefresh);
-  };
+  }, []);
 
   useEffect(() => {
     configureApiClient(async (forceRefresh = false) => {
@@ -57,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const me = await fetchAuthenticatedUser();
+        const me = await syncBackendUser(nextUser);
         setBackendUser(me);
       } catch {
         setBackendUser(null);
@@ -67,50 +75,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return unsubscribe;
-  }, []);
+  }, [syncBackendUser]);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     setIsLoading(true);
-    const user = await signInWithFirebaseEmail(email, password);
-    setFirebaseUser(user);
     try {
-      const me = await fetchAuthenticatedUser();
+      const user = await signInWithFirebaseEmail(email, password);
+      const me = await syncBackendUser(user);
+      setFirebaseUser(user);
       setBackendUser(me);
+    } catch (error) {
+      setFirebaseUser(null);
+      setBackendUser(null);
+      throw error;
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [syncBackendUser]);
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = useCallback(async (email: string, password: string) => {
     setIsLoading(true);
-    const user = await signUpWithFirebaseEmail(email, password);
-    setFirebaseUser(user);
     try {
-      const me = await fetchAuthenticatedUser();
+      const user = await signUpWithFirebaseEmail(email, password);
+      const me = await syncBackendUser(user);
+      setFirebaseUser(user);
       setBackendUser(me);
+    } catch (error) {
+      setFirebaseUser(null);
+      setBackendUser(null);
+      throw error;
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [syncBackendUser]);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await signOutFromFirebase();
     setFirebaseUser(null);
     setBackendUser(null);
-  };
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       firebaseUser,
       backendUser,
       isLoading,
-      isAuthenticated: !!firebaseUser,
+      isAuthenticated: !!firebaseUser && !!backendUser,
       signIn,
       signUp,
       signOut,
       getIdToken,
     }),
-    [firebaseUser, backendUser, isLoading]
+    [firebaseUser, backendUser, isLoading, signIn, signUp, signOut, getIdToken]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

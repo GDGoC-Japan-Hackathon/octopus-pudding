@@ -12,3 +12,11 @@ export type AuthenticatedUser = {
 export async function fetchAuthenticatedUser(): Promise<AuthenticatedUser> {
   return apiFetch<AuthenticatedUser>(endpoints.auth.me);
 }
+
+export async function fetchAuthenticatedUserWithToken(token: string): Promise<AuthenticatedUser> {
+  return apiFetch<AuthenticatedUser>(endpoints.auth.me, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}

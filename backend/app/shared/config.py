@@ -11,10 +11,7 @@ class Settings(BaseSettings):
     debug: bool = True
     
     # Firebase
-    firebase_project_id: str | None = None
-    firebase_credentials_path: str | None = None
-    firebase_credentials_json: str | None = None
-    firebase_check_revoked: bool = False
+    firebase_project_id: str
     
     class Config:
         env_file = ".env"

@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
@@ -9,8 +10,10 @@ from app.domain.entities.user import User
 from app.infrastructure.database.base import get_db
 from app.infrastructure.repositories.user_repository_impl import UserRepositoryImpl
 from app.shared.firebase_auth import verify_firebase_id_token
+from app.shared.config import settings
 
 bearer_scheme = HTTPBearer(auto_error=False)
+logger = logging.getLogger(__name__)
 
 
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
@@ -44,10 +47,14 @@ async def get_current_user(
 
     try:
         claims = verify_firebase_id_token(token)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Firebase token verification failed: %s", exc)
+        detail = "Could not validate Firebase credentials"
+        if settings.debug:
+            detail = f"{detail}: {exc}"
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate Firebase credentials",
+            detail=detail,
         )
 
     uid: Optional[str] = claims.get("uid")

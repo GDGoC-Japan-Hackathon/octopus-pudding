@@ -9,6 +9,7 @@ export const endpoints = {
     me: '/users/me',
   },
   trips: {
+    create: '/trips',
     list: '/trips',
     detail: (tripId: number | string) => `/trips/${tripId}`,
   },
