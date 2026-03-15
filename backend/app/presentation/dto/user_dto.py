@@ -20,6 +20,7 @@ class UserUpdate(BaseModel):
 
 class UserResponse(UserBase):
     id: int
+    firebase_uid: Optional[str] = None
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None

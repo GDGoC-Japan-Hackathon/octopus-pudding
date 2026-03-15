@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     secret_key: str = "your-secret-key-here"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+
+    # Firebase
+    firebase_project_id: str | None = None
+    firebase_credentials_path: str | None = None
+    firebase_credentials_json: str | None = None
+    firebase_check_revoked: bool = False
     
     class Config:
         env_file = ".env"

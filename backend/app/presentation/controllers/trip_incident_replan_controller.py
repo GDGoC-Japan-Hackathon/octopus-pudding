@@ -1,14 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.trip_service import TripService
-from app.application.services.user_service import UserService
 from app.domain.entities.trip import Incident, ReplanItem, ReplanSession
 from app.domain.entities.user import User
 from app.infrastructure.database.base import get_db
 from app.infrastructure.repositories.trip_repository_impl import TripRepositoryImpl
-from app.infrastructure.repositories.user_repository_impl import UserRepositoryImpl
+from app.presentation.dependencies.auth import get_current_user
 from app.presentation.dto.trip_dto import (
     IncidentCreate,
     IncidentResponse,
@@ -17,7 +15,6 @@ from app.presentation.dto.trip_dto import (
     ReplanItemResponse,
     ReplanSessionResponse,
 )
-from app.shared.auth_utils import verify_token
 from app.shared.exceptions import (
     IncidentNotFoundError,
     PermissionDeniedError,
@@ -26,37 +23,11 @@ from app.shared.exceptions import (
 )
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
-
-def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
-    user_repository = UserRepositoryImpl(db)
-    return UserService(user_repository)
 
 
 def get_trip_service(db: AsyncSession = Depends(get_db)) -> TripService:
     trip_repository = TripRepositoryImpl(db)
     return TripService(trip_repository)
-
-
-async def get_current_user_entity(
-    token: str = Depends(oauth2_scheme),
-    user_service: UserService = Depends(get_user_service),
-) -> User:
-    email = verify_token(token)
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-        )
-
-    user = await user_service.get_user_by_email(email)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-    return user
 
 
 def _to_replan_response(aggregate) -> ReplanAggregateResponse:
@@ -70,7 +41,7 @@ def _to_replan_response(aggregate) -> ReplanAggregateResponse:
 async def create_incident(
     trip_id: int,
     payload: IncidentCreate,
-    current_user: User = Depends(get_current_user_entity),
+    current_user: User = Depends(get_current_user),
     trip_service: TripService = Depends(get_trip_service),
 ):
     incident = Incident(
@@ -96,7 +67,7 @@ async def create_incident(
 @router.get("/{trip_id}/incidents", response_model=list[IncidentResponse])
 async def list_incidents(
     trip_id: int,
-    current_user: User = Depends(get_current_user_entity),
+    current_user: User = Depends(get_current_user),
     trip_service: TripService = Depends(get_trip_service),
 ):
     try:
@@ -115,7 +86,7 @@ async def list_incidents(
 async def create_replan(
     trip_id: int,
     payload: ReplanCreate,
-    current_user: User = Depends(get_current_user_entity),
+    current_user: User = Depends(get_current_user),
     trip_service: TripService = Depends(get_trip_service),
 ):
     session = ReplanSession(
@@ -159,7 +130,7 @@ async def create_replan(
 async def get_replan_detail(
     trip_id: int,
     session_id: int,
-    current_user: User = Depends(get_current_user_entity),
+    current_user: User = Depends(get_current_user),
     trip_service: TripService = Depends(get_trip_service),
 ):
     try:

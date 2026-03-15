@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
@@ -7,39 +6,17 @@ from app.application.services.user_service import UserService
 from app.domain.entities.user import User
 from app.infrastructure.database.base import get_db
 from app.infrastructure.repositories.user_repository_impl import UserRepositoryImpl
+from app.presentation.dependencies.auth import get_current_user
 from app.presentation.dto.user_dto import UserUpdate, UserResponse
-from app.shared.auth_utils import verify_token
 from app.shared.exceptions import UserNotFoundError
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     """Dependency to get user service"""
     user_repository = UserRepositoryImpl(db)
     return UserService(user_repository)
-
-
-async def get_current_user_entity(
-    token: str = Depends(oauth2_scheme),
-    user_service: UserService = Depends(get_user_service),
-) -> User:
-    """Resolve current user from bearer token."""
-    email = verify_token(token)
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-        )
-
-    user = await user_service.get_user_by_email(email)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-    return user
 
 
 @router.get("/", response_model=List[UserResponse])
@@ -54,7 +31,7 @@ async def get_users(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_user_entity)):
+async def get_me(current_user: User = Depends(get_current_user)):
     """Get current authenticated user."""
     return UserResponse.model_validate(current_user)
 
@@ -62,7 +39,7 @@ async def get_me(current_user: User = Depends(get_current_user_entity)):
 @router.patch("/me", response_model=UserResponse)
 async def update_me(
     user: UserUpdate,
-    current_user: User = Depends(get_current_user_entity),
+    current_user: User = Depends(get_current_user),
     user_service: UserService = Depends(get_user_service),
 ):
     """Update current authenticated user."""

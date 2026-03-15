@@ -1,16 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import timedelta
 
 from app.infrastructure.database.base import get_db
 from app.infrastructure.repositories.user_repository_impl import UserRepositoryImpl
 from app.application.services.user_service import UserService
+from app.presentation.dependencies.auth import get_current_user as get_authenticated_user
 from app.shared.auth_utils import (
     verify_password, 
     get_password_hash, 
-    create_access_token,
-    verify_token
+    create_access_token
 )
 from app.shared.config import settings
 from app.presentation.dto.auth_dto import (
@@ -22,7 +21,6 @@ from app.presentation.dto.auth_dto import (
 from app.domain.entities.user import User
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     """Get user service instance"""
@@ -115,27 +113,13 @@ async def register(
 
 @router.get("/me")
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    user_service: UserService = Depends(get_user_service)
+    current_user: User = Depends(get_authenticated_user),
 ):
-    """Get current authenticated user"""
-    email = verify_token(token)
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials"
-        )
-    
-    user = await user_service.get_user_by_email(email)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-    
+    """Get current authenticated user via Firebase bearer token."""
     return {
-        "id": user.id,
-        "email": user.email,
-        "username": user.username,
-        "is_active": user.is_active
+        "id": current_user.id,
+        "email": current_user.email,
+        "username": current_user.username,
+        "is_active": current_user.is_active,
+        "firebase_uid": current_user.firebase_uid,
     } 
