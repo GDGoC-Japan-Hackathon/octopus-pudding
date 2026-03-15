@@ -6,7 +6,6 @@ import { PhotoCard } from '@/components/travel/PhotoCard';
 import { travelStyles } from '@/components/travel/styles';
 import {
   recommendedPlans,
-  timelineMock,
   weatherMock,
 } from '@/data/travel';
 

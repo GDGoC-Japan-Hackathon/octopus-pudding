@@ -1,6 +1,6 @@
-import { Tabs } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
-import React from 'react';
+import { Tabs } from 'expo-router';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 
@@ -15,8 +15,10 @@ export default function TabLayout() {
         tabBarStyle: {
           height: 64,
           paddingTop: 6,
+          paddingBottom: 8,
           backgroundColor: '#FFFFFF',
           borderTopColor: '#E2E8F0',
+          overflow: 'visible',
         },
       }}>
       <Tabs.Screen
@@ -30,7 +32,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="plans"
         options={{
-          title: '作成済みの計画',
+          title: '作成済み',
           tabBarIcon: ({ color }) => <MaterialIcons name="bookmark" size={22} color={color} />,
           tabBarLabelStyle: { fontSize: 11 },
         }}
@@ -39,8 +41,17 @@ export default function TabLayout() {
         name="create"
         options={{
           title: '作成',
-          tabBarIcon: ({ color }) => <MaterialIcons name="add-box" size={24} color={color} />,
-          tabBarLabelStyle: { fontSize: 11 },
+          tabBarLabel: () => null,
+          tabBarIcon: () => (
+            <View style={styles.createButtonWrap}>
+              <View style={styles.createButton}>
+                <View style={styles.createButtonContent}>
+                  <MaterialIcons name="add" size={35} color="#FFFFFF" />
+                  <Text style={styles.createButtonText}>作成</Text>
+                </View>
+              </View>
+            </View>
+          ),
         }}
       />
       <Tabs.Screen
@@ -62,3 +73,41 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  createLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 0,
+  },
+  createItem: {
+    alignItems: 'center',
+  },
+  createButtonWrap: {
+    width: 63,
+    height: 63,
+    marginTop: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createButton: {
+    width: 63,
+    height: 63,
+    borderRadius: 35,
+    backgroundColor: '#F97316',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#F97316',
+    elevation: 10,
+  },
+  createButtonContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  createButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+});
