@@ -26,13 +26,3 @@ class User:
             if hasattr(self, key):
                 setattr(self, key, value)
         self.updated_at = datetime.utcnow()
-
-    def deactivate(self):
-        """Deactivate user"""
-        self.is_active = False
-        self.updated_at = datetime.utcnow()
-
-    def activate(self):
-        """Activate user"""
-        self.is_active = True
-        self.updated_at = datetime.utcnow() 

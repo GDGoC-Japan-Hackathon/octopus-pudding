@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import timedelta
 
 from app.infrastructure.database.base import get_db
@@ -24,7 +24,7 @@ from app.domain.entities.user import User
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-def get_user_service(db: Session = Depends(get_db)) -> UserService:
+def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     """Get user service instance"""
     user_repository = UserRepositoryImpl(db)
     return UserService(user_repository)
