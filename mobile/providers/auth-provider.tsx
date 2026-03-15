@@ -1,10 +1,8 @@
 import { onAuthStateChanged, User } from 'firebase/auth';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import {
-  fetchAuthenticatedUserWithToken,
-  type AuthenticatedUser,
-} from '@/features/auth/api/get-me';
+import { fetchAuthenticatedUserWithToken } from '@/features/auth/api/get-me';
+import { type AuthenticatedUser } from '@/features/auth/types/authenticated-user';
 import { configureApiClient } from '@/lib/api/client';
 import {
   getFirebaseAuth,

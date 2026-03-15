@@ -10,8 +10,8 @@ import {
   createIncident,
   createReplan,
   listIncidents,
-  type IncidentResponse,
 } from '@/features/trips/api/replanning';
+import { type IncidentResponse } from '@/features/trips/types/replanning';
 import { ApiError } from '@/lib/api/client';
 
 const troubleOptions = [
