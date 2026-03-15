@@ -8,6 +8,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/gdgoc
       - DEBUG=true
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
     depends_on:
       - db
     volumes:
