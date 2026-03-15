@@ -12,5 +12,14 @@ export const endpoints = {
     create: '/trips',
     list: '/trips',
     detail: (tripId: number | string) => `/trips/${tripId}`,
+    incidents: {
+      create: (tripId: number | string) => `/trips/${tripId}/incidents`,
+      list: (tripId: number | string) => `/trips/${tripId}/incidents`,
+    },
+    replans: {
+      create: (tripId: number | string) => `/trips/${tripId}/replans`,
+      detail: (tripId: number | string, sessionId: number | string) =>
+        `/trips/${tripId}/replans/${sessionId}`,
+    },
   },
 } as const;

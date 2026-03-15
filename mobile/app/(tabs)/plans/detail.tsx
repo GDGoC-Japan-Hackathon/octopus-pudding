@@ -1,5 +1,5 @@
-import { useLocalSearchParams } from 'expo-router';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Link, useLocalSearchParams } from 'expo-router';
+import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { AppHeader } from '@/components/travel/AppHeader';
 import { travelStyles } from '@/components/travel/styles';
@@ -8,6 +8,8 @@ import { savedPlans, weatherMock } from '@/data/travel';
 export default function PlanDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const plan = savedPlans.find((item) => item.id === id);
+  const parsedTripId = id ? Number(id) : NaN;
+  const hasValidTripId = Number.isInteger(parsedTripId) && parsedTripId > 0;
 
   if (!plan) {
     return (
@@ -48,6 +50,29 @@ export default function PlanDetailScreen() {
         <Pressable style={travelStyles.primaryButton}>
           <Text style={travelStyles.primaryButtonText}>この計画を編集する</Text>
         </Pressable>
+
+        {hasValidTripId ? (
+          <Link
+            href={{ pathname: '/create/replanning', params: { tripId: String(parsedTripId) } }}
+            asChild
+          >
+            <Pressable style={travelStyles.primaryButton}>
+              <Text style={travelStyles.primaryButtonText}>このプランで再計画する</Text>
+            </Pressable>
+          </Link>
+        ) : (
+          <Pressable
+            style={[travelStyles.primaryButton, { opacity: 0.6 }]}
+            onPress={() =>
+              Alert.alert(
+                '再計画不可',
+                'この詳細画面はモックデータのため、再計画API連携には実Trip IDが必要です。'
+              )
+            }
+          >
+            <Text style={travelStyles.primaryButtonText}>このプランで再計画する</Text>
+          </Pressable>
+        )}
       </View>
     </ScrollView>
   );
