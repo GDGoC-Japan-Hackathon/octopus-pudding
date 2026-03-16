@@ -15,27 +15,6 @@ export type RecommendPlan = {
   category: string;
 };
 
-export type SavedPlan = {
-  id: string;
-  title: string;
-  period: string;
-  startDate: string;
-  days: number;
-  budget: number;
-  image: string;
-  route: string;
-  people: string;
-  status: 'completed' | 'upcoming';
-  highlights: string[];
-};
-
-export type Friend = {
-  id: string;
-  name: string;
-  role: string;
-  addedAt: string;
-};
-
 export type TripHistory = {
   id: string;
   title: string;
