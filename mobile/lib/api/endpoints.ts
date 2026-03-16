@@ -12,6 +12,7 @@ export const endpoints = {
       requestsCreate: '/users/me/friends/requests',
       requestsIncoming: '/users/me/friends/requests/incoming',
       requestsOutgoing: '/users/me/friends/requests/outgoing',
+      requestsUpdate: (requestId: number | string) => `/users/me/friends/requests/${requestId}`,
     },
   },
   trips: {

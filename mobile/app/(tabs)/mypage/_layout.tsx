@@ -7,6 +7,7 @@ export default function MypageTabLayout() {
         headerShown: false,
       }}>
       <Stack.Screen name="index" options={{ title: 'マイページ' }} />
+      <Stack.Screen name="friend-requests" options={{ title: '受信フレンド申請' }} />
       <Stack.Screen name="friends" options={{ title: 'フレンド一覧' }} />
       <Stack.Screen name="history" options={{ title: '旅行履歴' }} />
       <Stack.Screen name="settings" options={{ title: '設定' }} />
