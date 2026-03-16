@@ -1,6 +1,6 @@
 name: mobile-ci
 
-on:
+'on':
   push:
     branches:
       - main
