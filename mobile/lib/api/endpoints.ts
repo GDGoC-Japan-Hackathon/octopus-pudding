@@ -20,6 +20,16 @@ export const endpoints = {
     create: '/trips',
     list: '/trips',
     detail: (tripId: number | string) => `/trips/${tripId}`,
+    update: (tripId: number | string) => `/trips/${tripId}`,
+    preference: {
+      upsert: (tripId: number | string) => `/trips/${tripId}/preference`,
+    },
+    days: {
+      create: (tripId: number | string) => `/trips/${tripId}/days`,
+      items: {
+        create: (tripId: number | string, dayId: number | string) => `/trips/${tripId}/days/${dayId}/items`,
+      },
+    },
     incidents: {
       create: (tripId: number | string) => `/trips/${tripId}/incidents`,
       list: (tripId: number | string) => `/trips/${tripId}/incidents`,

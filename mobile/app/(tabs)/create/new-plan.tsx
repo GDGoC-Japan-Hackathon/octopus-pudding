@@ -88,7 +88,7 @@ export default function PlanCreateScreen() {
 
     try {
       setIsSubmitting(true);
-      await createTrip({
+      const created = await createTrip({
         origin,
         destination,
         start_date: startDate,
@@ -102,7 +102,10 @@ export default function PlanCreateScreen() {
           : undefined,
       });
       Alert.alert('保存完了', '新規プランを作成しました。');
-      router.replace('/(tabs)/plans');
+      router.replace({
+        pathname: '/create/edit',
+        params: { tripId: String(created.trip.id) },
+      });
     } catch {
       Alert.alert('作成失敗', 'プラン作成に失敗しました。ログイン状態やAPI接続を確認してください。');
     } finally {
