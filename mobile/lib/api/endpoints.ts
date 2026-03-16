@@ -39,5 +39,10 @@ export const endpoints = {
       detail: (tripId: number | string, sessionId: number | string) =>
         `/trips/${tripId}/replans/${sessionId}`,
     },
+    aiPlanGenerations: {
+      create: (tripId: number | string) => `/trips/${tripId}/ai-plan-generations`,
+      detail: (tripId: number | string, generationId: number | string) =>
+        `/trips/${tripId}/ai-plan-generations/${generationId}`,
+    },
   },
 } as const;

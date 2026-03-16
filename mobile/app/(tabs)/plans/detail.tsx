@@ -1,9 +1,14 @@
 import { Link, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View, Image, Pressable, Alert } from 'react-native';
 
 import { AppHeader } from '@/features/travel/components/AppHeader';
+import {
+  createAiPlanGeneration,
+  getAiPlanGeneration,
+} from '@/features/trips/api/ai-plan-generation';
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
+import { type AiPlanGenerationResponse } from '@/features/trips/types/ai-plan-generation';
 import { type TripAggregateResponse } from '@/features/trips/types/trip-edit';
 import { travelStyles } from '@/features/travel/styles';
 import { weatherMock } from '@/data/travel';
@@ -39,32 +44,100 @@ function getErrorMessage(error: unknown): string {
   return `計画詳細の取得に失敗しました (${error.status})`;
 }
 
+function getAiGenerationErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) {
+    return 'AIプラン構築の実行に失敗しました。';
+  }
+  if (error.status === 401) {
+    return '認証が切れています。再ログイン後にお試しください。';
+  }
+  if (error.status === 403) {
+    return 'この計画でAIプランを作成する権限がありません。';
+  }
+  if (error.status === 404) {
+    return '対象の計画が見つかりませんでした。';
+  }
+  return `AIプラン構築の実行に失敗しました (${error.status})`;
+}
+
 export default function PlanDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const tripId = useMemo(() => parseTripId(id), [id]);
   const [aggregate, setAggregate] = useState<TripAggregateResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [generation, setGeneration] = useState<AiPlanGenerationResponse | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const loadTripDetail = useCallback(async () => {
+    if (!tripId) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const detail = await getTripDetail(tripId);
+      setAggregate(detail);
+    } catch (error) {
+      Alert.alert('取得失敗', getErrorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [tripId]);
 
   useEffect(() => {
-    const run = async () => {
-      if (!tripId) {
-        setIsLoading(false);
-        return;
-      }
+    void loadTripDetail();
+  }, [loadTripDetail]);
 
-      try {
-        setIsLoading(true);
-        const detail = await getTripDetail(tripId);
-        setAggregate(detail);
-      } catch (error) {
-        Alert.alert('取得失敗', getErrorMessage(error));
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  useEffect(() => {
+    if (!tripId || !generation || (generation.status !== 'queued' && generation.status !== 'running')) {
+      return;
+    }
 
-    void run();
-  }, [tripId]);
+    const intervalId = setInterval(() => {
+      void (async () => {
+        try {
+          const latest = await getAiPlanGeneration(tripId, generation.id);
+          setGeneration(latest);
+
+          if (latest.status === 'succeeded') {
+            clearInterval(intervalId);
+            setIsGenerating(false);
+            Alert.alert('AIプラン構築完了', '行程を更新しました。');
+            void loadTripDetail();
+          } else if (latest.status === 'failed') {
+            clearInterval(intervalId);
+            setIsGenerating(false);
+            Alert.alert('AIプラン構築失敗', latest.error_message ?? 'プラン構築に失敗しました。');
+          }
+        } catch (error) {
+          clearInterval(intervalId);
+          setIsGenerating(false);
+          Alert.alert('取得失敗', getAiGenerationErrorMessage(error));
+        }
+      })();
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [generation, loadTripDetail, tripId]);
+
+  const handleGenerateAiPlan = useCallback(async () => {
+    if (!tripId) {
+      return;
+    }
+    try {
+      setIsGenerating(true);
+      const created = await createAiPlanGeneration(tripId, { run_async: true });
+      setGeneration(created);
+      if (created.status === 'succeeded') {
+        setIsGenerating(false);
+        void loadTripDetail();
+      }
+    } catch (error) {
+      setIsGenerating(false);
+      Alert.alert('実行失敗', getAiGenerationErrorMessage(error));
+    }
+  }, [loadTripDetail, tripId]);
 
   if (!tripId) {
     return (
@@ -148,6 +221,16 @@ export default function PlanDetailScreen() {
           )}
         </View>
 
+        <Pressable
+          style={[travelStyles.primaryButton, isGenerating && { opacity: 0.6 }]}
+          onPress={handleGenerateAiPlan}
+          disabled={isGenerating}
+        >
+          <Text style={travelStyles.primaryButtonText}>
+            {isGenerating ? 'AIプランを構築中...' : 'AIにプランを作成してもらう'}
+          </Text>
+        </Pressable>
+
         <Link href={{ pathname: '/create/edit', params: { tripId: String(tripId) } }} asChild>
           <Pressable style={travelStyles.primaryButton}>
             <Text style={travelStyles.primaryButtonText}>この計画を編集する</Text>
@@ -156,9 +239,19 @@ export default function PlanDetailScreen() {
 
         <Link href={{ pathname: '/create/replanning', params: { tripId: String(tripId) } }} asChild>
           <Pressable style={travelStyles.primaryButton}>
-            <Text style={travelStyles.primaryButtonText}>AIによるプランの再計画</Text>
+            <Text style={travelStyles.primaryButtonText}>AIによるプランの再構築</Text>
           </Pressable>
         </Link>
+
+        {generation ? (
+          <View style={travelStyles.card}>
+            <Text style={travelStyles.sectionTitleText}>AI構築ステータス</Text>
+            <Text style={travelStyles.sectionBody}>status: {generation.status}</Text>
+            {generation.error_message ? (
+              <Text style={travelStyles.sectionBody}>error: {generation.error_message}</Text>
+            ) : null}
+          </View>
+        ) : null}
       </View>
     </ScrollView>
   );
