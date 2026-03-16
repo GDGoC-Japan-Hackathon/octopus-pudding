@@ -30,3 +30,12 @@ export type FriendRequestUpdatePayload = {
 
 export type IncomingFriendRequestsResponse = FriendRequestResponse[];
 export type OutgoingFriendRequestsResponse = FriendRequestResponse[];
+
+export type FriendResponse = {
+  request_id: number;
+  user: FriendUser;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type FriendsResponse = FriendResponse[];

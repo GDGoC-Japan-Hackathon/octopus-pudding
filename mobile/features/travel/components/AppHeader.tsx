@@ -5,12 +5,14 @@ export type AppHeaderProps = {
   title: string;
   weatherLabel?: string;
   weatherIcon?: keyof typeof MaterialIcons.glyphMap;
+  showWeather?: boolean;
 };
 
 export function AppHeader({
   title,
   weatherLabel = '26°C',
   weatherIcon = 'wb-sunny',
+  showWeather = true,
 }: AppHeaderProps) {
   return (
     <View style={styles.root}>
@@ -18,10 +20,14 @@ export function AppHeader({
       <Text style={styles.title} numberOfLines={1}>
         {title}
       </Text>
-      <View style={styles.weatherWrap}>
-        <Text style={styles.weatherText}>{weatherLabel}</Text>
-        <MaterialIcons name={weatherIcon} size={20} color="#3B82F6" />
-      </View>
+      {showWeather ? (
+        <View style={styles.weatherWrap}>
+          <Text style={styles.weatherText}>{weatherLabel}</Text>
+          <MaterialIcons name={weatherIcon} size={20} color="#3B82F6" />
+        </View>
+      ) : (
+        <View style={styles.sideSpacer} />
+      )}
     </View>
   );
 }
