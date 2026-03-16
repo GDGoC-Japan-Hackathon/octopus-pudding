@@ -1,17 +1,78 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { Link } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { uploadProfileImage } from '@/features/auth/api/upload-profile-image';
 import { AppHeader } from '@/features/travel/components/AppHeader';
+import { ApiError } from '@/lib/api/client';
 import { travelStyles } from '@/features/travel/styles';
-import { profileMock, weatherMock } from '@/data/travel';
+import { weatherMock } from '@/data/travel';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 
 export default function MyPageScreen() {
-  const { signOut } = useAuth();
+  const { signOut, backendUser, refreshBackendUser } = useAuth();
+  const [isAvatarLoadError, setIsAvatarLoadError] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  const profileImageUrl = backendUser?.profile_image_url ?? null;
+  const hasProfileImage = !!profileImageUrl && !isAvatarLoadError;
+
+  useEffect(() => {
+    setIsAvatarLoadError(false);
+  }, [profileImageUrl]);
 
   const handleAddFriend = (method: string) => {
     Alert.alert('準備中', `${method} は未実装です`);
+  };
+
+  const handleUploadProfileImage = async () => {
+    if (isUploadingImage) {
+      return;
+    }
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('権限が必要です', 'プロフィール画像を選択するには写真へのアクセス許可が必要です。');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (result.canceled || result.assets.length === 0) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    if (!asset.uri) {
+      Alert.alert('エラー', '画像を取得できませんでした。');
+      return;
+    }
+
+    setIsUploadingImage(true);
+    try {
+      await uploadProfileImage({
+        uri: asset.uri,
+        fileName: asset.fileName,
+        mimeType: asset.mimeType,
+      });
+      await refreshBackendUser();
+      Alert.alert('完了', 'プロフィール画像を更新しました。');
+    } catch (error) {
+      if (error instanceof ApiError) {
+        Alert.alert('エラー', `アップロードに失敗しました (${error.status})`);
+      } else {
+        Alert.alert('エラー', 'アップロードに失敗しました。時間をおいて再度お試しください。');
+      }
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   const handleLogoutPress = () => {
@@ -42,22 +103,32 @@ export default function MyPageScreen() {
       >
         <View style={styles.profileSection}>
           <View style={styles.avatarWrap}>
-            <Image
-              source={{ uri: 'https://i.pravatar.cc/200?img=12' }}
-              style={styles.avatar}
-            />
+            {hasProfileImage ? (
+              <Image
+                source={{ uri: profileImageUrl }}
+                style={styles.avatar}
+                onError={() => setIsAvatarLoadError(true)}
+              />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <MaterialIcons name="person" size={44} color="#94A3B8" />
+              </View>
+            )}
             <Pressable
               style={styles.editIcon}
-              onPress={() => handleAddFriend('プロフィール編集')}
+              onPress={handleUploadProfileImage}
+              disabled={isUploadingImage}
             >
-              <MaterialIcons name="edit" size={16} color="#FFFFFF" />
+              <MaterialIcons name={isUploadingImage ? 'hourglass-empty' : 'edit'} size={16} color="#FFFFFF" />
             </Pressable>
           </View>
-          <Text style={styles.profileName}>{profileMock.name}</Text>
-          <Text style={styles.idText}>ID: {profileMock.id}</Text>
+          <Text style={styles.profileName}>{backendUser?.username ?? 'ユーザー'}</Text>
+          <Text style={styles.idText}>ID: {backendUser?.id ?? '-'}</Text>
           <View style={styles.locationRow}>
             <MaterialIcons name="location-on" size={16} color="#64748B" />
-            <Text style={styles.locationText}>最寄り駅: {profileMock.nearestStation}</Text>
+            <Text style={styles.locationText}>
+              最寄り駅: {backendUser?.nearest_station || '未設定'}
+            </Text>
           </View>
         </View>
 
@@ -143,6 +214,14 @@ const styles = StyleSheet.create({
     width: 86,
     height: 86,
     borderRadius: 43,
+  },
+  avatarPlaceholder: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   editIcon: {
     position: 'absolute',

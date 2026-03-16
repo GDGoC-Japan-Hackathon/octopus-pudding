@@ -20,6 +20,7 @@ type AuthContextValue = {
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   getIdToken: (forceRefresh?: boolean) => Promise<string | null>;
+  refreshBackendUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -113,6 +114,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setBackendUser(null);
   }, []);
 
+  const refreshBackendUser = useCallback(async () => {
+    const currentUser = getFirebaseAuth().currentUser;
+    if (!currentUser) {
+      setBackendUser(null);
+      return;
+    }
+
+    const me = await syncBackendUser(currentUser);
+    setBackendUser(me);
+  }, [syncBackendUser]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       firebaseUser,
@@ -123,8 +135,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signUp,
       signOut,
       getIdToken,
+      refreshBackendUser,
     }),
-    [firebaseUser, backendUser, isLoading, signIn, signUp, signOut, getIdToken]
+    [firebaseUser, backendUser, isLoading, signIn, signUp, signOut, getIdToken, refreshBackendUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
