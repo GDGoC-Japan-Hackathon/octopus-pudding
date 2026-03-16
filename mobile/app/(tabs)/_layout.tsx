@@ -32,9 +32,9 @@ export default function TabLayout() {
           tabBarInactiveTintColor: '#64748B',
           tabBarButton: HapticTab,
           tabBarStyle: {
-            height: 64,
-            paddingTop: 6,
-            paddingBottom: 8,
+            height: 84,
+            paddingTop: 2,
+            paddingBottom: 24,
             backgroundColor: '#FFFFFF',
             borderTopColor: '#E2E8F0',
             overflow: 'visible',
@@ -45,7 +45,6 @@ export default function TabLayout() {
           options={{
             title: 'ホーム',
             tabBarIcon: ({ color }) => <MaterialIcons name="home" size={22} color={color} />,
-            tabBarLabelStyle: { fontSize: 11 },
           }}
         />
         <Tabs.Screen
@@ -53,7 +52,6 @@ export default function TabLayout() {
           options={{
             title: '作成済み',
             tabBarIcon: ({ color }) => <MaterialIcons name="bookmark" size={22} color={color} />,
-            tabBarLabelStyle: { fontSize: 11 },
           }}
         />
         <Tabs.Screen
@@ -78,7 +76,6 @@ export default function TabLayout() {
           options={{
             title: 'おすすめ',
             tabBarIcon: ({ color }) => <MaterialIcons name="explore" size={22} color={color} />,
-            tabBarLabelStyle: { fontSize: 11 },
           }}
         />
         <Tabs.Screen
@@ -86,7 +83,6 @@ export default function TabLayout() {
           options={{
             title: 'マイページ',
             tabBarIcon: ({ color }) => <MaterialIcons name="person" size={22} color={color} />,
-            tabBarLabelStyle: { fontSize: 11 },
           }}
         />
       </Tabs>
