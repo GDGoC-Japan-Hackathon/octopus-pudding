@@ -6,11 +6,14 @@ export type FriendUser = {
   nearest_station?: string | null;
 };
 
+export type FriendRequestStatus = 'pending' | 'accepted' | 'rejected' | 'blocked';
+export type FriendRequestDecisionStatus = 'accepted' | 'rejected';
+
 export type FriendRequestResponse = {
   id: number;
   requester_user_id: number;
   addressee_user_id: number;
-  status: string;
+  status: FriendRequestStatus;
   created_at?: string | null;
   updated_at?: string | null;
   requester?: FriendUser | null;
@@ -19,6 +22,10 @@ export type FriendRequestResponse = {
 
 export type FriendRequestCreatePayload = {
   target_user_id: number;
+};
+
+export type FriendRequestUpdatePayload = {
+  status: FriendRequestDecisionStatus;
 };
 
 export type IncomingFriendRequestsResponse = FriendRequestResponse[];

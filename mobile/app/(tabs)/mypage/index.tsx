@@ -1,7 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Link } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Alert,
@@ -18,7 +19,6 @@ import {
 import { uploadProfileImage } from '@/features/auth/api/upload-profile-image';
 import { createFriendRequest } from '@/features/friends/api/create-friend-request';
 import { getIncomingFriendRequests } from '@/features/friends/api/get-incoming-friend-requests';
-import { getOutgoingFriendRequests } from '@/features/friends/api/get-outgoing-friend-requests';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 import { ApiError } from '@/lib/api/client';
 import { travelStyles } from '@/features/travel/styles';
@@ -46,21 +46,21 @@ export default function MyPageScreen() {
     setIsAvatarLoadError(false);
   }, [profileImageUrl]);
 
-  useEffect(() => {
-    const loadFriendRequests = async () => {
-      try {
-        const [incoming] = await Promise.all([
-          getIncomingFriendRequests(),
-          getOutgoingFriendRequests(),
-        ]);
-        setIncomingRequestCount(incoming.length);
-      } catch {
-        setIncomingRequestCount(0);
-      }
-    };
-
-    void loadFriendRequests();
+  const loadIncomingRequestCount = useCallback(async () => {
+    try {
+      const incoming = await getIncomingFriendRequests();
+      const pendingCount = incoming.filter((request) => request.status === 'pending').length;
+      setIncomingRequestCount(pendingCount);
+    } catch {
+      setIncomingRequestCount(0);
+    }
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadIncomingRequestCount();
+    }, [loadIncomingRequestCount])
+  );
 
   const handleAddFriend = (method: string) => {
     if (method === 'ID検索') {
@@ -89,8 +89,7 @@ export default function MyPageScreen() {
       Alert.alert('完了', 'フレンド申請を送信しました。');
       setIsFriendModalVisible(false);
       setFriendUserIdInput('');
-      const incoming = await getIncomingFriendRequests();
-      setIncomingRequestCount(incoming.length);
+      await loadIncomingRequestCount();
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.status === 400) {
@@ -218,12 +217,20 @@ export default function MyPageScreen() {
         <View style={travelStyles.detailSection}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionHeader}>フレンド追加</Text>
-            {incomingRequestCount > 0 ? (
-              <View style={styles.requestBadge}>
-                <Text style={styles.requestBadgeText}>{incomingRequestCount}</Text>
-              </View>
-            ) : null}
           </View>
+          <Link href="/mypage/friend-requests" asChild>
+            <Pressable style={styles.requestListButton}>
+              <Text style={styles.requestListButtonText}>申請一覧を見る</Text>
+              <View style={styles.requestListButtonRight}>
+                {incomingRequestCount > 0 ? (
+                  <View style={styles.requestBadge}>
+                    <Text style={styles.requestBadgeText}>{incomingRequestCount}</Text>
+                  </View>
+                ) : null}
+                <MaterialIcons name="chevron-right" size={18} color="#94A3B8" />
+              </View>
+            </Pressable>
+          </Link>
           <View style={styles.friendActions}>
             <Pressable style={styles.actionCard} onPress={() => handleAddFriend('ID検索')}>
               <MaterialIcons name="person-search" size={20} color="#F97316" />
@@ -418,6 +425,28 @@ const styles = StyleSheet.create({
   friendActions: {
     flexDirection: 'row',
     gap: 10,
+  },
+  requestListButton: {
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  requestListButtonText: {
+    fontSize: 14,
+    color: '#0F172A',
+    fontWeight: '600',
+  },
+  requestListButtonRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   menuList: {
     borderRadius: 16,
