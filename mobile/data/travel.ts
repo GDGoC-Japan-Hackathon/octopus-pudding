@@ -148,23 +148,6 @@ export const savedPlans: SavedPlan[] = [
   },
 ];
 
-export const createMethods = [
-  {
-    id: 'create-new',
-    title: '最初から作成する',
-    description: '目的地、日数、予算を自分で決めてプランを作る',
-    icon: 'create',
-    target: 'create/new-plan',
-  },
-  {
-    id: 'create-replan',
-    title: 'トラブル時に再計画する',
-    description: '移動・天候・体調の変化が出た場合に修正',
-    icon: 'autorenew',
-    target: 'create/replanning',
-  },
-] as const;
-
 export const friendsMock: Friend[] = [
   { id: 'fr-1', name: '佐藤 亮', role: '同伴者', addedAt: '2026/02/10' },
   { id: 'fr-2', name: '中村 里奈', role: '旅のしおり共有', addedAt: '2026/02/18' },
