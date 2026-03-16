@@ -44,6 +44,7 @@ backend/app/
 - `GET /api/v1/users`
 - `GET /api/v1/users/me`
 - `PATCH /api/v1/users/me`
+- `POST /api/v1/users/me/profile-image`
 - `GET /api/v1/users/{user_id}`
 - `PUT /api/v1/users/{user_id}`
 - `DELETE /api/v1/users/{user_id}`

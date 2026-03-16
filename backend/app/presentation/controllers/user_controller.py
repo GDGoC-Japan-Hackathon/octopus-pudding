@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from app.application.services.user_service import UserService
 from app.domain.entities.user import User
 from app.infrastructure.database.base import get_db
+from app.infrastructure.external import CloudStorageClient
 from app.infrastructure.repositories.user_repository_impl import UserRepositoryImpl
 from app.presentation.dependencies.auth import get_current_user
 from app.presentation.dto.user_dto import UserUpdate, UserResponse
@@ -54,6 +55,51 @@ async def update_me(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+
+
+@router.post("/me/profile-image", response_model=UserResponse)
+async def upload_me_profile_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
+):
+    """Upload profile image to Cloud Storage and persist URL to users.profile_image_url."""
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only image files are allowed",
+        )
+
+    try:
+        storage_client = CloudStorageClient()
+        uploaded = storage_client.upload_profile_image(
+            file=file.file,
+            user_id=current_user.id,
+            original_filename=file.filename or "profile-image",
+            content_type=file.content_type,
+        )
+        updated_user = await user_service.update_user(
+            current_user.id,
+            profile_image_url=uploaded.object_url,
+        )
+        return UserResponse.model_validate(updated_user)
+    except UserNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Profile image upload failed",
+        )
+    finally:
+        await file.close()
 
 
 @router.get("/{user_id}", response_model=UserResponse)

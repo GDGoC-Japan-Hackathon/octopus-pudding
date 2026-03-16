@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     
     # Firebase
     firebase_project_id: str
+
+    # Google Cloud Storage
+    gcs_bucket_name: str = ""
+    gcs_signed_url_expiration_seconds: int = 900
     
     class Config:
         env_file = ".env"
