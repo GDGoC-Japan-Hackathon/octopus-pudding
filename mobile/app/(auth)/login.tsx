@@ -16,19 +16,28 @@ export default function LoginScreen() {
   const handleSubmit = async () => {
     setError(null);
     setIsSubmitting(true);
+    console.log('Auth submit pressed', {
+      mode,
+      email: email.trim(),
+      hasPassword: Boolean(password),
+    });
     try {
       if (mode === 'login') {
         await signIn(email.trim(), password);
       } else {
         await signUp(email.trim(), password);
       }
-    } catch {
+    } catch (error) {
+      console.error('Firebase auth failed', error);
+
+      const message = error instanceof Error ? error.message : 'Unknown error';
       if (mode === 'login') {
-        setError('ログインに失敗しました。メールアドレスまたはパスワードを確認してください。');
+        setError(`ログインに失敗しました: ${message}`);
       } else {
-        setError('新規登録に失敗しました。メール形式やパスワード(6文字以上)を確認してください。');
+        setError(`新規登録に失敗しました: ${message}`);
       }
     } finally {
+      console.log('Auth submit finished');
       setIsSubmitting(false);
     }
   };
