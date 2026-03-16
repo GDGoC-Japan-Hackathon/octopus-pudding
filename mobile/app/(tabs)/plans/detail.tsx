@@ -249,7 +249,7 @@ export default function PlanDetailScreen() {
           {groupedItineraryByDay.length ? (
             groupedItineraryByDay.map((group) => (
               <View key={group.tripDayId} style={{ gap: 6 }}>
-                <Text style={travelStyles.subheading}>
+                <Text style={travelStyles.itineraryDateHeading}>
                   {group.date ?? `Day ${group.dayNumber ?? group.tripDayId}`}
                 </Text>
                 {group.items.map((item) => (

@@ -32,6 +32,11 @@ export const travelStyles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
   },
+  itineraryDateHeading: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#334155',
+  },
   timelineCard: {
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
