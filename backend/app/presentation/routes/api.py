@@ -8,11 +8,15 @@ from app.presentation.controllers.trip_incident_replan_controller import (
 )
 from app.presentation.controllers.trip_member_controller import router as trip_member_router
 from app.presentation.controllers.trip_preference_controller import router as trip_preference_router
+from app.presentation.controllers.friend_controller import router as friend_router
 
 api_router = APIRouter()
 
 # Include user routes
 api_router.include_router(user_router, prefix="/users", tags=["users"])
+
+# Include friend routes
+api_router.include_router(friend_router, prefix="/users", tags=["friends"])
 
 # Include auth routes
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])

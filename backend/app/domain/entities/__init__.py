@@ -9,6 +9,12 @@ from app.domain.entities.trip import (
     TripMember,
     TripPreference,
 )
+from app.domain.entities.friend import (
+    AcceptedFriend,
+    Friend,
+    FriendRequestDetail,
+    FriendUserSummary,
+)
 from app.domain.entities.user import User
 
 __all__ = [
@@ -20,4 +26,8 @@ __all__ = [
     "ItineraryItem",
     "TripAggregate",
     "TripAtmosphere",
+    "Friend",
+    "FriendUserSummary",
+    "FriendRequestDetail",
+    "AcceptedFriend",
 ]

@@ -43,6 +43,16 @@ class ReplanSessionNotFoundError(BaseError):
     pass
 
 
+class FriendRequestNotFoundError(BaseError):
+    """Friend request not found error"""
+    pass
+
+
+class FriendNotFoundError(BaseError):
+    """Friend relation not found error"""
+    pass
+
+
 class ValidationError(BaseError):
     """Validation error"""
     pass

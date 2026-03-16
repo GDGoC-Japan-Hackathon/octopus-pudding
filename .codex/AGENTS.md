@@ -54,6 +54,14 @@ backend/app/
   - `nearest_station`（編集可）
   - `email`（読み取り専用 / Firebaseを正）
 
+### Friends
+- `POST /api/v1/users/me/friends/requests`
+- `GET /api/v1/users/me/friends/requests/incoming`
+- `GET /api/v1/users/me/friends/requests/outgoing`
+- `PATCH /api/v1/users/me/friends/requests/{request_id}`
+- `GET /api/v1/users/me/friends`
+- `DELETE /api/v1/users/me/friends/{friend_user_id}`
+
 ### Trips
 - `POST /api/v1/trips`
 - `GET /api/v1/trips`
