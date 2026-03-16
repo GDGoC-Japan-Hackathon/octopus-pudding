@@ -30,3 +30,8 @@ class UserResponse(UserBase):
     updated_at: Optional[datetime] = None
     
     model_config = {"from_attributes": True} 
+
+
+class ProfileImageUrlResponse(BaseModel):
+    signed_url: str
+    expires_in_seconds: int

@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
@@ -7,6 +8,8 @@ from uuid import uuid4
 from google.cloud import storage
 
 from app.shared.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -39,6 +42,7 @@ class CloudStorageClient:
         self.bucket_name = resolved_bucket
         self.client = client or storage.Client()
         self.bucket = self.client.bucket(self.bucket_name)
+        logger.info("cloud storage client initialized: bucket=%s", self.bucket_name)
 
     def upload_profile_image(
         self,
@@ -51,7 +55,22 @@ class CloudStorageClient:
         extension = Path(original_filename).suffix.lower()
         object_path = f"profiles/{user_id}/{uuid4().hex}{extension}"
         blob = self.bucket.blob(object_path)
-        blob.upload_from_file(file, content_type=content_type)
+        logger.info(
+            "uploading profile image to GCS: bucket=%s object_path=%s content_type=%s",
+            self.bucket_name,
+            object_path,
+            content_type,
+        )
+        try:
+            blob.upload_from_file(file, content_type=content_type)
+        except Exception:
+            logger.exception(
+                "GCS upload failed: bucket=%s object_path=%s user_id=%s",
+                self.bucket_name,
+                object_path,
+                user_id,
+            )
+            raise
 
         return UploadedObject(
             bucket=self.bucket_name,
