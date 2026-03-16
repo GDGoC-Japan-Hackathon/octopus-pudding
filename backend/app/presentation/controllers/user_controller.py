@@ -1,3 +1,5 @@
+import logging
+from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,10 +11,16 @@ from app.infrastructure.database.base import get_db
 from app.infrastructure.external import CloudStorageClient
 from app.infrastructure.repositories.user_repository_impl import UserRepositoryImpl
 from app.presentation.dependencies.auth import get_current_user
-from app.presentation.dto.user_dto import UserUpdate, UserResponse
+from app.presentation.dto.user_dto import (
+    ProfileImageUrlResponse,
+    UserUpdate,
+    UserResponse,
+)
+from app.shared.config import settings
 from app.shared.exceptions import UserNotFoundError
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
@@ -35,6 +43,41 @@ def _upload_profile_image_blocking(
         original_filename=original_filename,
         content_type=content_type,
     )
+
+
+def _generate_download_signed_url_blocking(object_path: str) -> str:
+    storage_client = CloudStorageClient()
+    return storage_client.generate_download_signed_url(object_path)
+
+
+def _resolve_object_path(raw_value: str, bucket_name: str) -> str:
+    value = raw_value.strip()
+    if not value:
+        raise ValueError("profile image path is empty")
+
+    if value.startswith("http://") or value.startswith("https://"):
+        parsed = urlparse(value)
+        # https://storage.googleapis.com/<bucket>/<object_path>
+        path = parsed.path.lstrip("/")
+        bucket_prefix = f"{bucket_name}/"
+        if path.startswith(bucket_prefix):
+            return path[len(bucket_prefix):]
+        # Compatibility fallback if bucket differs but URL still contains object path only.
+        parts = path.split("/", 1)
+        if len(parts) == 2:
+            return parts[1]
+        raise ValueError("could not resolve object path from public URL")
+
+    if value.startswith("gs://"):
+        # gs://bucket/object_path
+        path = value[5:]
+        parts = path.split("/", 1)
+        if len(parts) != 2:
+            raise ValueError("invalid gs:// path")
+        return parts[1]
+
+    # already object path
+    return value
 
 
 @router.get("/", response_model=List[UserResponse])
@@ -80,7 +123,14 @@ async def upload_me_profile_image(
     current_user: User = Depends(get_current_user),
     user_service: UserService = Depends(get_user_service),
 ):
-    """Upload profile image to Cloud Storage and persist URL to users.profile_image_url."""
+    """Upload profile image to Cloud Storage and persist object_path to users.profile_image_url."""
+    logger.info(
+        "profile-image upload requested: user_id=%s filename=%s content_type=%s",
+        current_user.id,
+        file.filename,
+        file.content_type,
+    )
+
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -97,26 +147,84 @@ async def upload_me_profile_image(
         )
         updated_user = await user_service.update_user(
             current_user.id,
-            profile_image_url=uploaded.object_url,
+            profile_image_url=uploaded.object_path,
+        )
+        logger.info(
+            "profile-image upload succeeded: user_id=%s object_path=%s",
+            current_user.id,
+            uploaded.object_path,
         )
         return UserResponse.model_validate(updated_user)
     except UserNotFoundError as e:
+        logger.warning("profile-image upload failed: user not found user_id=%s err=%s", current_user.id, e)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
     except ValueError as e:
+        logger.exception("profile-image upload value error: user_id=%s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
     except Exception:
+        logger.exception("profile-image upload unexpected error: user_id=%s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Profile image upload failed",
         )
     finally:
         await file.close()
+
+
+@router.get("/me/profile-image-url", response_model=ProfileImageUrlResponse)
+async def get_me_profile_image_url(
+    current_user: User = Depends(get_current_user),
+):
+    """Generate short-lived signed URL for current user's profile image."""
+    if not current_user.profile_image_url:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile image is not set",
+        )
+
+    if not settings.gcs_bucket_name:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GCS bucket is not configured",
+        )
+
+    try:
+        object_path = _resolve_object_path(
+            raw_value=current_user.profile_image_url,
+            bucket_name=settings.gcs_bucket_name,
+        )
+        signed_url = await run_in_threadpool(
+            _generate_download_signed_url_blocking,
+            object_path,
+        )
+        return ProfileImageUrlResponse(
+            signed_url=signed_url,
+            expires_in_seconds=settings.gcs_signed_url_expiration_seconds,
+        )
+    except ValueError as exc:
+        logger.exception(
+            "failed to resolve object path for profile image: user_id=%s",
+            current_user.id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        )
+    except Exception:
+        logger.exception(
+            "failed to generate signed profile image URL: user_id=%s",
+            current_user.id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate profile image URL",
+        )
 
 
 @router.get("/{user_id}", response_model=UserResponse)
