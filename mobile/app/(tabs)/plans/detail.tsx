@@ -67,6 +67,55 @@ export default function PlanDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [generation, setGeneration] = useState<AiPlanGenerationResponse | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const groupedItineraryByDay = useMemo(() => {
+    if (!aggregate) {
+      return [];
+    }
+
+    const dayMap = new Map<number, { dayNumber?: number; date?: string | null }>();
+    for (const day of aggregate.days) {
+      dayMap.set(day.id, { dayNumber: day.day_number, date: day.date });
+    }
+
+    const groups = new Map<
+      number,
+      {
+        tripDayId: number;
+        dayNumber?: number;
+        date?: string | null;
+        items: typeof aggregate.itinerary_items;
+      }
+    >();
+
+    for (const item of aggregate.itinerary_items) {
+      const dayInfo = dayMap.get(item.trip_day_id);
+      const existing = groups.get(item.trip_day_id);
+      if (existing) {
+        existing.items.push(item);
+        continue;
+      }
+
+      groups.set(item.trip_day_id, {
+        tripDayId: item.trip_day_id,
+        dayNumber: dayInfo?.dayNumber,
+        date: dayInfo?.date,
+        items: [item],
+      });
+    }
+
+    return Array.from(groups.values()).sort((a, b) => {
+      if (a.date && b.date) {
+        return a.date.localeCompare(b.date);
+      }
+      if (a.date && !b.date) {
+        return -1;
+      }
+      if (!a.date && b.date) {
+        return 1;
+      }
+      return (a.dayNumber ?? Number.MAX_SAFE_INTEGER) - (b.dayNumber ?? Number.MAX_SAFE_INTEGER);
+    });
+  }, [aggregate]);
 
   const loadTripDetail = useCallback(async () => {
     if (!tripId) {
@@ -196,25 +245,19 @@ export default function PlanDetailScreen() {
         </View>
 
         <View style={travelStyles.card}>
-          <Text style={travelStyles.sectionTitleText}>日程</Text>
-          {aggregate.days.length ? (
-            aggregate.days.map((day) => (
-              <Text key={day.id} style={travelStyles.sectionBody}>
-                Day {day.day_number}: {day.date ?? '日付未設定'}
-              </Text>
-            ))
-          ) : (
-            <Text style={travelStyles.sectionBody}>日程は未登録です。</Text>
-          )}
-        </View>
-
-        <View style={travelStyles.card}>
           <Text style={travelStyles.sectionTitleText}>行程</Text>
-          {aggregate.itinerary_items.length ? (
-            aggregate.itinerary_items.map((item) => (
-              <Text key={item.id} style={travelStyles.sectionBody}>
-                • {item.name} (DayID: {item.trip_day_id})
-              </Text>
+          {groupedItineraryByDay.length ? (
+            groupedItineraryByDay.map((group) => (
+              <View key={group.tripDayId} style={{ gap: 6 }}>
+                <Text style={travelStyles.subheading}>
+                  {group.date ?? `Day ${group.dayNumber ?? group.tripDayId}`}
+                </Text>
+                {group.items.map((item) => (
+                  <Text key={item.id} style={travelStyles.sectionBody}>
+                    • {item.name}
+                  </Text>
+                ))}
+              </View>
             ))
           ) : (
             <Text style={travelStyles.sectionBody}>行程は未登録です。</Text>
