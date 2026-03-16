@@ -162,3 +162,8 @@ class TripRepository(ABC):
     async def delete_items_by_trip(self, trip_id: int) -> int:
         """Delete itinerary items under all days in the trip."""
         pass
+
+    @abstractmethod
+    async def replace_items_by_trip(self, trip_id: int, items: list[ItineraryItem]) -> int:
+        """Replace all itinerary items under the trip in one transaction."""
+        pass

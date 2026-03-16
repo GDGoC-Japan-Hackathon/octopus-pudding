@@ -43,6 +43,11 @@ class ReplanSessionNotFoundError(BaseError):
     pass
 
 
+class AiPlanGenerationNotFoundError(BaseError):
+    """AI plan generation not found error"""
+    pass
+
+
 class FriendRequestNotFoundError(BaseError):
     """Friend request not found error"""
     pass

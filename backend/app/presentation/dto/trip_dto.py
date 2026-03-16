@@ -143,6 +143,27 @@ class ReplanAggregateResponse(BaseModel):
     items: list[ReplanItemResponse]
 
 
+class AiPlanGenerationCreate(BaseModel):
+    provider: Optional[str] = None
+    prompt_version: Optional[str] = None
+    run_async: bool = True
+
+
+class AiPlanGenerationResponse(BaseModel):
+    id: int
+    trip_id: int
+    status: str
+    provider: Optional[str] = None
+    prompt_version: Optional[str] = None
+    requested_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+    result_summary_json: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
 class TripResponse(BaseModel):
     id: int
     user_id: int

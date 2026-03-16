@@ -16,6 +16,17 @@ class Settings(BaseSettings):
     # Google Cloud Storage
     gcs_bucket_name: str = ""
     gcs_signed_url_expiration_seconds: int = 900
+
+    # Google Places API
+    google_places_api_key: str = ""
+    google_places_endpoint: str = "https://places.googleapis.com/v1/places:searchText"
+    google_places_language_code: str = "ja"
+    google_places_region_code: str = "JP"
+
+    # Gemini API
+    gemini_api_key: str = ""
+    gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    gemini_model: str = "gemini-1.5-flash"
     
     class Config:
         env_file = ".env"

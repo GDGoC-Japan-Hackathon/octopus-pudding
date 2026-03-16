@@ -1,10 +1,25 @@
-from datetime import date
+import asyncio
+import json
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Optional
 
-from app.domain.entities.trip import ItineraryItem, Trip, TripAggregate, TripDay, TripMember, TripPreference
-from app.domain.entities.trip import Incident, ReplanAggregate, ReplanItem, ReplanSession
+from app.domain.entities.trip import (
+    AiPlanGeneration,
+    Incident,
+    ItineraryItem,
+    ReplanAggregate,
+    ReplanItem,
+    ReplanSession,
+    Trip,
+    TripAggregate,
+    TripDay,
+    TripMember,
+    TripPreference,
+)
 from app.domain.repositories.trip_repository import TripRepository
+from app.infrastructure.external import GeminiClient, GooglePlacesClient, PlaceCandidate
 from app.shared.exceptions import (
+    AiPlanGenerationNotFoundError,
     IncidentNotFoundError,
     ItineraryItemNotFoundError,
     PermissionDeniedError,
@@ -284,3 +299,322 @@ class TripService:
                 f"Replan session with ID {session_id} not found in trip {trip_id}"
             )
         return aggregate
+
+    async def start_my_ai_plan_generation(
+        self,
+        owner_user_id: int,
+        trip_id: int,
+        provider: Optional[str] = None,
+        prompt_version: Optional[str] = None,
+        run_async: bool = True,
+    ) -> AiPlanGeneration:
+        await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+
+        generation = AiPlanGeneration(
+            id=None,
+            trip_id=trip_id,
+            status="queued",
+            provider=provider or "google_places+gemini",
+            prompt_version=prompt_version or "v1",
+        )
+        created = await self.trip_repository.create_ai_plan_generation(generation)
+
+        if run_async and created.id is not None:
+            asyncio.create_task(self.run_ai_plan_generation_in_background(created.id))
+
+        return created
+
+    async def get_my_ai_plan_generation(
+        self,
+        owner_user_id: int,
+        trip_id: int,
+        generation_id: int,
+    ) -> AiPlanGeneration:
+        await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+        generation = await self.trip_repository.get_ai_plan_generation(generation_id)
+        if generation is None or generation.trip_id != trip_id:
+            raise AiPlanGenerationNotFoundError(
+                f"AI plan generation with ID {generation_id} not found in trip {trip_id}"
+            )
+        return generation
+
+    @staticmethod
+    async def run_ai_plan_generation_in_background(generation_id: int) -> None:
+        """Run generation with a fresh DB session so request lifecycle does not interfere."""
+        from app.infrastructure.database.base import SessionLocal
+        from app.infrastructure.repositories.trip_repository_impl import TripRepositoryImpl
+
+        async with SessionLocal() as db:
+            repo = TripRepositoryImpl(db)
+            service = TripService(repo)
+            await service.execute_ai_plan_generation(generation_id)
+
+    async def execute_ai_plan_generation(self, generation_id: int) -> AiPlanGeneration:
+        generation = await self.trip_repository.get_ai_plan_generation(generation_id)
+        if generation is None:
+            raise AiPlanGenerationNotFoundError(
+                f"AI plan generation with ID {generation_id} not found"
+            )
+        if generation.status in {"running", "succeeded"}:
+            return generation
+
+        generation.status = "running"
+        generation.started_at = datetime.now(timezone.utc)
+        generation.finished_at = None
+        generation.error_message = None
+        generation = await self.trip_repository.update_ai_plan_generation(generation) or generation
+
+        try:
+            aggregate = await self.trip_repository.get_trip_aggregate(generation.trip_id)
+            if aggregate is None:
+                raise TripNotFoundError(f"Trip with ID {generation.trip_id} not found")
+
+            days = await self._ensure_trip_days(aggregate.trip.id, aggregate.trip.start_date, aggregate.trip.end_date)
+            place_candidates = await self._collect_place_candidates(
+                destination=aggregate.trip.destination,
+                preference=aggregate.preference,
+                max_candidates=24,
+            )
+            plan_payload = await self._generate_plan_payload(
+                trip=aggregate.trip,
+                preference=aggregate.preference,
+                days=days,
+                place_candidates=place_candidates,
+            )
+            normalized = self._normalize_plan_payload(
+                plan_payload=plan_payload,
+                days=days,
+                fallback_candidates=place_candidates,
+            )
+            inserted_count = await self._replace_itinerary_items(
+                days=days,
+                normalized_plan=normalized,
+            )
+            generation.status = "succeeded"
+            generation.finished_at = datetime.now(timezone.utc)
+            generation.error_message = None
+            generation.result_summary_json = json.dumps(
+                {
+                    "trip_id": aggregate.trip.id,
+                    "days": len(days),
+                    "candidates": len(place_candidates),
+                    "inserted_items": inserted_count,
+                },
+                ensure_ascii=False,
+            )
+        except Exception as exc:  # noqa: BLE001
+            generation.status = "failed"
+            generation.finished_at = datetime.now(timezone.utc)
+            generation.error_message = str(exc)[:2000]
+
+        updated = await self.trip_repository.update_ai_plan_generation(generation)
+        return updated or generation
+
+    async def _ensure_trip_days(
+        self,
+        trip_id: int,
+        start_date: date,
+        end_date: date,
+    ) -> list[TripDay]:
+        days = await self.trip_repository.list_days_by_trip(trip_id)
+        if days:
+            return days
+
+        total_days = (end_date - start_date).days + 1
+        if total_days <= 0:
+            total_days = 1
+
+        for index in range(total_days):
+            await self.trip_repository.create_day(
+                TripDay(
+                    id=None,
+                    trip_id=trip_id,
+                    day_number=index + 1,
+                    date=start_date + timedelta(days=index),
+                )
+            )
+        return await self.trip_repository.list_days_by_trip(trip_id)
+
+    async def _collect_place_candidates(
+        self,
+        destination: str,
+        preference: Optional[TripPreference],
+        max_candidates: int,
+    ) -> list[PlaceCandidate]:
+        place_client = GooglePlacesClient()
+        atmosphere_hint = preference.atmosphere.value if preference is not None else ""
+        queries = [
+            f"{destination} 観光地",
+            f"{destination} 人気スポット",
+            f"{destination} レストラン",
+            f"{destination} カフェ",
+        ]
+        if atmosphere_hint:
+            queries.append(f"{destination} {atmosphere_hint} おすすめ")
+
+        merged: list[PlaceCandidate] = []
+        seen: set[tuple[str, str]] = set()
+        per_query = max(4, max_candidates // max(1, len(queries)))
+        for query in queries:
+            results = await place_client.search_text(query=query, max_results=per_query)
+            for result in results:
+                key = (result.name, result.address or "")
+                if key in seen:
+                    continue
+                seen.add(key)
+                merged.append(result)
+                if len(merged) >= max_candidates:
+                    return merged
+        return merged
+
+    async def _generate_plan_payload(
+        self,
+        trip: Trip,
+        preference: Optional[TripPreference],
+        days: list[TripDay],
+        place_candidates: list[PlaceCandidate],
+    ) -> dict:
+        gemini_client = GeminiClient()
+        prompt = self._build_gemini_prompt(
+            trip=trip,
+            preference=preference,
+            days=days,
+            place_candidates=place_candidates,
+        )
+        return await gemini_client.generate_json(prompt=prompt, temperature=0.2)
+
+    def _build_gemini_prompt(
+        self,
+        trip: Trip,
+        preference: Optional[TripPreference],
+        days: list[TripDay],
+        place_candidates: list[PlaceCandidate],
+    ) -> str:
+        days_payload = [
+            {"day_number": d.day_number, "date": d.date.isoformat() if d.date is not None else None}
+            for d in days
+        ]
+        candidates_payload = [candidate.to_dict() for candidate in place_candidates]
+        preference_payload = (
+            {
+                "atmosphere": preference.atmosphere.value,
+                "companions": preference.companions,
+                "budget": preference.budget,
+                "transport_type": preference.transport_type,
+            }
+            if preference is not None
+            else None
+        )
+        return (
+            "旅行日程を最適化してください。必ずJSONオブジェクトのみを返してください。\n"
+            "フォーマット: {\"days\": [{\"day_number\": 1, \"items\": [{\"name\": \"\", "
+            "\"category\": \"\", \"latitude\": 0, \"longitude\": 0, \"start_time\": \"09:00\", "
+            "\"end_time\": \"10:30\", \"estimated_cost\": 0, \"notes\": \"\"}]}]}\n"
+            f"trip={json.dumps({'origin': trip.origin, 'destination': trip.destination}, ensure_ascii=False)}\n"
+            f"days={json.dumps(days_payload, ensure_ascii=False)}\n"
+            f"preference={json.dumps(preference_payload, ensure_ascii=False)}\n"
+            f"candidates={json.dumps(candidates_payload, ensure_ascii=False)}\n"
+            "ルール:\n"
+            "- day_number は必ず存在し、入力 days と一致させる\n"
+            "- items は各日2-5件\n"
+            "- start_time/end_time は HH:MM\n"
+            "- candidatesにある名称を優先利用\n"
+        )
+
+    def _normalize_plan_payload(
+        self,
+        plan_payload: dict,
+        days: list[TripDay],
+        fallback_candidates: list[PlaceCandidate],
+    ) -> dict[int, list[dict]]:
+        by_day: dict[int, list[dict]] = {day.day_number: [] for day in days}
+        days_payload = plan_payload.get("days", [])
+        if isinstance(days_payload, list):
+            for day_node in days_payload:
+                if not isinstance(day_node, dict):
+                    continue
+                day_number = day_node.get("day_number")
+                if not isinstance(day_number, int) or day_number not in by_day:
+                    continue
+                items = day_node.get("items", [])
+                if not isinstance(items, list):
+                    continue
+                for item in items:
+                    if isinstance(item, dict) and item.get("name"):
+                        by_day[day_number].append(item)
+
+        if any(by_day.values()):
+            return by_day
+
+        # Fallback: evenly assign fetched candidates.
+        if not fallback_candidates:
+            return by_day
+        day_numbers = [day.day_number for day in days]
+        for idx, candidate in enumerate(fallback_candidates):
+            day_number = day_numbers[idx % len(day_numbers)]
+            seq = len(by_day[day_number]) + 1
+            start_hour = 9 + (seq - 1) * 2
+            by_day[day_number].append(
+                {
+                    "name": candidate.name,
+                    "category": candidate.category,
+                    "latitude": candidate.latitude,
+                    "longitude": candidate.longitude,
+                    "start_time": f"{start_hour:02d}:00",
+                    "end_time": f"{min(start_hour + 1, 23):02d}:30",
+                    "estimated_cost": None,
+                    "notes": candidate.address,
+                }
+            )
+        return by_day
+
+    async def _replace_itinerary_items(
+        self,
+        days: list[TripDay],
+        normalized_plan: dict[int, list[dict]],
+    ) -> int:
+        if not days:
+            return 0
+
+        items_to_insert: list[ItineraryItem] = []
+        for day in sorted(days, key=lambda x: x.day_number):
+            if day.id is None:
+                continue
+            items = normalized_plan.get(day.day_number, [])
+            for sequence, raw in enumerate(items, start=1):
+                generated_item = ItineraryItem(
+                    id=None,
+                    trip_day_id=day.id,
+                    name=str(raw.get("name", "")),
+                    sequence=sequence,
+                    category=raw.get("category"),
+                    latitude=raw.get("latitude"),
+                    longitude=raw.get("longitude"),
+                    start_time=self._build_datetime(day.date, raw.get("start_time")),
+                    end_time=self._build_datetime(day.date, raw.get("end_time")),
+                    estimated_cost=self._to_optional_int(raw.get("estimated_cost")),
+                    notes=raw.get("notes"),
+                )
+                if not generated_item.name:
+                    continue
+                items_to_insert.append(generated_item)
+        return await self.trip_repository.replace_items_by_trip(days[0].trip_id, items_to_insert)
+
+    def _build_datetime(self, day_date: Optional[date], value: Optional[str]) -> Optional[datetime]:
+        if day_date is None or value is None:
+            return None
+        if not isinstance(value, str):
+            return None
+        try:
+            parsed = datetime.strptime(value, "%H:%M").time()
+        except ValueError:
+            return None
+        return datetime.combine(day_date, time(parsed.hour, parsed.minute))
+
+    def _to_optional_int(self, value: object) -> Optional[int]:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None

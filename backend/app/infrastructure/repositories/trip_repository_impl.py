@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.trip import (
+    AiPlanGeneration,
     Incident,
     ItineraryItem,
     ReplanAggregate,
@@ -20,6 +21,7 @@ from app.domain.entities.trip import (
 from app.domain.repositories.trip_repository import TripRepository
 from app.infrastructure.database.models import (
     IncidentModel,
+    AiPlanGenerationModel,
     ItineraryItemModel,
     ReplanItemModel,
     ReplanSessionModel,
@@ -95,7 +97,15 @@ class TripRepositoryImpl(TripRepository):
         db_items = []
         if day_ids:
             items_result = await self.db.execute(
-                select(ItineraryItemModel).where(ItineraryItemModel.trip_day_id.in_(day_ids))
+                select(ItineraryItemModel)
+                .join(TripDayModel, TripDayModel.id == ItineraryItemModel.trip_day_id)
+                .where(TripDayModel.trip_id == trip_id)
+                .order_by(
+                    TripDayModel.day_number.asc(),
+                    ItineraryItemModel.sequence.asc().nulls_last(),
+                    ItineraryItemModel.start_time.asc().nulls_last(),
+                    ItineraryItemModel.id.asc(),
+                )
             )
             db_items = items_result.scalars().all()
 
@@ -292,6 +302,7 @@ class TripRepositoryImpl(TripRepository):
         db_item = ItineraryItemModel(
             trip_day_id=item.trip_day_id,
             name=item.name,
+            sequence=item.sequence,
             category=item.category,
             latitude=item.latitude,
             longitude=item.longitude,
@@ -319,6 +330,7 @@ class TripRepositoryImpl(TripRepository):
             return None
 
         db_item.name = item.name
+        db_item.sequence = item.sequence
         db_item.category = item.category
         db_item.latitude = item.latitude
         db_item.longitude = item.longitude
@@ -343,6 +355,109 @@ class TripRepositoryImpl(TripRepository):
         )
         await self.db.commit()
         return result.rowcount > 0
+
+    async def create_ai_plan_generation(self, generation: AiPlanGeneration) -> AiPlanGeneration:
+        db_generation = AiPlanGenerationModel(
+            trip_id=generation.trip_id,
+            status=generation.status,
+            provider=generation.provider,
+            prompt_version=generation.prompt_version,
+            requested_at=generation.requested_at,
+            started_at=generation.started_at,
+            finished_at=generation.finished_at,
+            error_message=generation.error_message,
+            result_summary_json=generation.result_summary_json,
+        )
+        self.db.add(db_generation)
+        await self.db.commit()
+        await self.db.refresh(db_generation)
+        return self._to_ai_plan_generation_entity(db_generation)
+
+    async def get_ai_plan_generation(self, generation_id: int) -> Optional[AiPlanGeneration]:
+        result = await self.db.execute(
+            select(AiPlanGenerationModel).where(AiPlanGenerationModel.id == generation_id)
+        )
+        db_generation = result.scalar_one_or_none()
+        if db_generation is None:
+            return None
+        return self._to_ai_plan_generation_entity(db_generation)
+
+    async def update_ai_plan_generation(
+        self, generation: AiPlanGeneration
+    ) -> Optional[AiPlanGeneration]:
+        if generation.id is None:
+            return None
+        result = await self.db.execute(
+            select(AiPlanGenerationModel).where(AiPlanGenerationModel.id == generation.id)
+        )
+        db_generation = result.scalar_one_or_none()
+        if db_generation is None:
+            return None
+
+        db_generation.status = generation.status
+        db_generation.provider = generation.provider
+        db_generation.prompt_version = generation.prompt_version
+        db_generation.requested_at = generation.requested_at
+        db_generation.started_at = generation.started_at
+        db_generation.finished_at = generation.finished_at
+        db_generation.error_message = generation.error_message
+        db_generation.result_summary_json = generation.result_summary_json
+
+        await self.db.commit()
+        await self.db.refresh(db_generation)
+        return self._to_ai_plan_generation_entity(db_generation)
+
+    async def list_days_by_trip(self, trip_id: int) -> list[TripDay]:
+        result = await self.db.execute(
+            select(TripDayModel)
+            .where(TripDayModel.trip_id == trip_id)
+            .order_by(TripDayModel.day_number.asc())
+        )
+        db_days = result.scalars().all()
+        return [self._to_day_entity(db_day) for db_day in db_days]
+
+    async def delete_items_by_trip(self, trip_id: int) -> int:
+        day_ids_result = await self.db.execute(
+            select(TripDayModel.id).where(TripDayModel.trip_id == trip_id)
+        )
+        day_ids = list(day_ids_result.scalars().all())
+        if not day_ids:
+            return 0
+
+        result = await self.db.execute(
+            delete(ItineraryItemModel).where(ItineraryItemModel.trip_day_id.in_(day_ids))
+        )
+        await self.db.commit()
+        return result.rowcount or 0
+
+    async def replace_items_by_trip(self, trip_id: int, items: list[ItineraryItem]) -> int:
+        day_ids_result = await self.db.execute(
+            select(TripDayModel.id).where(TripDayModel.trip_id == trip_id)
+        )
+        day_ids = list(day_ids_result.scalars().all())
+        if not day_ids:
+            return 0
+
+        await self.db.execute(
+            delete(ItineraryItemModel).where(ItineraryItemModel.trip_day_id.in_(day_ids))
+        )
+        for item in items:
+            self.db.add(
+                ItineraryItemModel(
+                    trip_day_id=item.trip_day_id,
+                    name=item.name,
+                    sequence=item.sequence,
+                    category=item.category,
+                    latitude=item.latitude,
+                    longitude=item.longitude,
+                    start_time=item.start_time,
+                    end_time=item.end_time,
+                    estimated_cost=item.estimated_cost,
+                    notes=item.notes,
+                )
+            )
+        await self.db.commit()
+        return len(items)
 
     async def create_incident(self, incident: Incident) -> Incident:
         db_incident = IncidentModel(
@@ -478,6 +593,7 @@ class TripRepositoryImpl(TripRepository):
             id=db_item.id,
             trip_day_id=db_item.trip_day_id,
             name=db_item.name,
+            sequence=db_item.sequence,
             category=db_item.category,
             latitude=db_item.latitude,
             longitude=db_item.longitude,
@@ -519,4 +635,20 @@ class TripRepositoryImpl(TripRepository):
             estimated_cost=db_item.estimated_cost,
             replacement_for_item_id=db_item.replacement_for_item_id,
             created_at=db_item.created_at,
+        )
+
+    def _to_ai_plan_generation_entity(
+        self, db_generation: AiPlanGenerationModel
+    ) -> AiPlanGeneration:
+        return AiPlanGeneration(
+            id=db_generation.id,
+            trip_id=db_generation.trip_id,
+            status=db_generation.status,
+            provider=db_generation.provider,
+            prompt_version=db_generation.prompt_version,
+            requested_at=db_generation.requested_at,
+            started_at=db_generation.started_at,
+            finished_at=db_generation.finished_at,
+            error_message=db_generation.error_message,
+            result_summary_json=db_generation.result_summary_json,
         )
