@@ -9,3 +9,5 @@ class AuthMeResponse(BaseModel):
     username: str
     is_active: bool
     firebase_uid: Optional[str] = None
+    profile_image_url: Optional[str] = None
+    nearest_station: Optional[str] = None

@@ -22,6 +22,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   const token = await tokenProvider(false);
   const headers = new Headers(init.headers ?? {});
   const isFormDataBody = typeof FormData !== 'undefined' && init.body instanceof FormData;
+  const hasExplicitAuthorization = headers.has('Authorization');
 
   if (!headers.has('Content-Type') && init.body && !isFormDataBody) {
     headers.set('Content-Type', 'application/json');
@@ -29,7 +30,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (!headers.has('Accept')) {
     headers.set('Accept', 'application/json');
   }
-  if (token) {
+  if (token && !hasExplicitAuthorization) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
@@ -39,6 +40,11 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   });
 
   if (response.status === 401) {
+    if (hasExplicitAuthorization) {
+      const errorText = await response.text();
+      throw new ApiError(errorText || 'Request failed', response.status);
+    }
+
     const refreshedToken = await tokenProvider(true);
     if (refreshedToken) {
       headers.set('Authorization', `Bearer ${refreshedToken}`);

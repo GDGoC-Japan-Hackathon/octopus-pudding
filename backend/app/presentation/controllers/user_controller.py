@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
@@ -18,6 +19,22 @@ def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     """Dependency to get user service"""
     user_repository = UserRepositoryImpl(db)
     return UserService(user_repository)
+
+
+def _upload_profile_image_blocking(
+    file_obj,
+    user_id: int,
+    original_filename: str,
+    content_type: str,
+):
+    """Run blocking GCS upload in worker thread."""
+    storage_client = CloudStorageClient()
+    return storage_client.upload_profile_image(
+        file=file_obj,
+        user_id=user_id,
+        original_filename=original_filename,
+        content_type=content_type,
+    )
 
 
 @router.get("/", response_model=List[UserResponse])
@@ -71,9 +88,9 @@ async def upload_me_profile_image(
         )
 
     try:
-        storage_client = CloudStorageClient()
-        uploaded = storage_client.upload_profile_image(
-            file=file.file,
+        uploaded = await run_in_threadpool(
+            _upload_profile_image_blocking,
+            file.file,
             user_id=current_user.id,
             original_filename=file.filename or "profile-image",
             content_type=file.content_type,
