@@ -15,7 +15,6 @@ class Settings(BaseSettings):
 
     # Google Cloud Storage
     gcs_bucket_name: str = ""
-    gcs_signed_url_expiration_seconds: int = 900
 
     # Google Places API
     google_places_api_key: str = ""
