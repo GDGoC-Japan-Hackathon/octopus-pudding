@@ -1,6 +1,5 @@
 import logging
 from dataclasses import dataclass
-from datetime import timedelta
 from pathlib import Path
 from typing import BinaryIO, Optional
 from uuid import uuid4
@@ -101,29 +100,6 @@ class CloudStorageClient:
         return UploadedObject(
             bucket=self.bucket_name,
             object_path=object_path,
-            content_type=content_type,
-        )
-
-    def generate_download_signed_url(self, object_path: str) -> str:
-        """Generate a short-lived V4 signed URL for private objects."""
-        blob = self.bucket.blob(object_path)
-        return blob.generate_signed_url(
-            version="v4",
-            expiration=timedelta(seconds=settings.gcs_signed_url_expiration_seconds),
-            method="GET",
-        )
-
-    def generate_upload_signed_url(
-        self,
-        object_path: str,
-        content_type: str,
-    ) -> str:
-        """Generate a short-lived V4 signed URL for direct client uploads."""
-        blob = self.bucket.blob(object_path)
-        return blob.generate_signed_url(
-            version="v4",
-            expiration=timedelta(seconds=settings.gcs_signed_url_expiration_seconds),
-            method="PUT",
             content_type=content_type,
         )
 
