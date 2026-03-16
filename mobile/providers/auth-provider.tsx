@@ -21,6 +21,7 @@ type AuthContextValue = {
   signOut: () => Promise<void>;
   getIdToken: (forceRefresh?: boolean) => Promise<string | null>;
   refreshBackendUser: () => Promise<void>;
+  setBackendUser: (user: AuthenticatedUser) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -136,6 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signOut,
       getIdToken,
       refreshBackendUser,
+      setBackendUser,
     }),
     [firebaseUser, backendUser, isLoading, signIn, signUp, signOut, getIdToken, refreshBackendUser]
   );

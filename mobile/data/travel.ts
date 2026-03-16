@@ -165,14 +165,6 @@ export const createMethods = [
   },
 ] as const;
 
-export const profileMock = {
-  name: '小川 未来',
-  id: 'USER-128394',
-  points: 1240,
-  nearestStation: '渋谷駅',
-  tags: ['1日で回る', '体力に自信あり', '景色重視'],
-};
-
 export const friendsMock: Friend[] = [
   { id: 'fr-1', name: '佐藤 亮', role: '同伴者', addedAt: '2026/02/10' },
   { id: 'fr-2', name: '中村 里奈', role: '旅のしおり共有', addedAt: '2026/02/18' },
@@ -190,13 +182,5 @@ export const tripHistoryMock = [
     title: '京都寺社巡り',
     date: '2026/01/03',
     detail: '一人旅・2日間・徒歩中心',
-  },
-];
-
-export const settingsMock = [
-  {
-    id: 'settings-profile',
-    title: 'アカウント設定',
-    detail: 'メールアドレス・プロフィールの編集',
   },
 ];
