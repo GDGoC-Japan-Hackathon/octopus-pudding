@@ -8,6 +8,11 @@ export const endpoints = {
   users: {
     me: '/users/me',
     profileImage: '/users/me/profile-image',
+    friends: {
+      requestsCreate: '/users/me/friends/requests',
+      requestsIncoming: '/users/me/friends/requests/incoming',
+      requestsOutgoing: '/users/me/friends/requests/outgoing',
+    },
   },
   trips: {
     create: '/trips',
