@@ -10,6 +10,7 @@ from sqlalchemy import (
     Date,
     Enum as SQLEnum,
     UniqueConstraint,
+    CheckConstraint,
     Float,
     Text,
 )
@@ -47,6 +48,42 @@ class TripModel(Base):
     updated_at = Column(DateTime(timezone=True),
                         server_default=func.now(),
                         onupdate=func.now())
+
+
+class FriendModel(Base):
+    """フレンド申請 / 関係情報"""
+    __tablename__ = "friends"
+
+    id = Column(Integer, primary_key=True, index=True)
+    requester_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    addressee_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status = Column(String(20), nullable=False, default="pending")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "requester_user_id",
+            "addressee_user_id",
+            name="uq_friends_requester_addressee",
+        ),
+        CheckConstraint(
+            "requester_user_id <> addressee_user_id",
+            name="ck_friends_not_self",
+        ),
+    )
     
     
 class TripPreferenceModel(Base):
