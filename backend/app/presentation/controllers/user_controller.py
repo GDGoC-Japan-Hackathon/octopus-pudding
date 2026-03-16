@@ -1,7 +1,8 @@
 import logging
 from urllib.parse import urlparse
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
+from google.api_core.exceptions import NotFound
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
@@ -48,6 +49,11 @@ def _upload_profile_image_blocking(
 def _generate_download_signed_url_blocking(object_path: str) -> str:
     storage_client = CloudStorageClient()
     return storage_client.generate_download_signed_url(object_path)
+
+
+def _download_profile_image_blocking(object_path: str) -> tuple[bytes, str]:
+    storage_client = CloudStorageClient()
+    return storage_client.download_object(object_path)
 
 
 def _resolve_object_path(raw_value: str, bucket_name: str) -> str:
@@ -181,7 +187,7 @@ async def upload_me_profile_image(
 async def get_me_profile_image_url(
     current_user: User = Depends(get_current_user),
 ):
-    """Generate short-lived signed URL for current user's profile image."""
+    """Deprecated: generate signed URL for current user's profile image."""
     if not current_user.profile_image_url:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -224,6 +230,58 @@ async def get_me_profile_image_url(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate profile image URL",
+        )
+
+
+@router.get("/me/profile-image")
+async def get_me_profile_image(
+    current_user: User = Depends(get_current_user),
+):
+    """Return current user's profile image binary from private GCS object."""
+    if not current_user.profile_image_url:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile image is not set",
+        )
+
+    if not settings.gcs_bucket_name:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GCS bucket is not configured",
+        )
+
+    try:
+        object_path = _resolve_object_path(
+            raw_value=current_user.profile_image_url,
+            bucket_name=settings.gcs_bucket_name,
+        )
+        content, content_type = await run_in_threadpool(
+            _download_profile_image_blocking,
+            object_path,
+        )
+        return Response(content=content, media_type=content_type)
+    except ValueError as exc:
+        logger.exception(
+            "failed to resolve object path for profile image download: user_id=%s",
+            current_user.id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
+    except NotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile image is not found",
+        )
+    except Exception:
+        logger.exception(
+            "failed to stream profile image: user_id=%s",
+            current_user.id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch profile image",
         )
 
 

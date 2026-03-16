@@ -8,6 +8,7 @@ export const endpoints = {
   users: {
     me: '/users/me',
     profileImage: '/users/me/profile-image',
+    profileImageGet: '/users/me/profile-image',
     profileImageUrl: '/users/me/profile-image-url',
     friends: {
       list: '/users/me/friends',

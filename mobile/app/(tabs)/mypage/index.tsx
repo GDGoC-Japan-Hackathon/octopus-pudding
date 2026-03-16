@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 
 import { uploadProfileImage } from '@/features/auth/api/upload-profile-image';
-import { getMyProfileImageUrl } from '@/features/auth/api/get-profile-image-url';
+import { getMyProfileImageBinary } from '@/features/auth/api/get-profile-image-binary';
 import { createFriendRequest } from '@/features/friends/api/create-friend-request';
 import { getIncomingFriendRequests } from '@/features/friends/api/get-incoming-friend-requests';
 import { AppHeader } from '@/features/travel/components/AppHeader';
@@ -34,11 +34,11 @@ export default function MyPageScreen() {
   const [friendUserIdInput, setFriendUserIdInput] = useState('');
   const [isSendingFriendRequest, setIsSendingFriendRequest] = useState(false);
   const [incomingRequestCount, setIncomingRequestCount] = useState<number>(0);
-  const [profileImageSignedUrl, setProfileImageSignedUrl] = useState<string | null>(null);
-  const [didRetrySignedUrl, setDidRetrySignedUrl] = useState(false);
+  const [profileImageDataUri, setProfileImageDataUri] = useState<string | null>(null);
+  const [didRetryProfileImage, setDidRetryProfileImage] = useState(false);
 
   const profileImageUrl = backendUser?.profile_image_url ?? null;
-  const hasProfileImage = !!profileImageSignedUrl && !isAvatarLoadError;
+  const hasProfileImage = !!profileImageDataUri && !isAvatarLoadError;
   const parsedFriendUserId = useMemo(() => Number(friendUserIdInput.trim()), [friendUserIdInput]);
   const isFriendUserIdValid =
     friendUserIdInput.trim().length > 0 &&
@@ -49,29 +49,29 @@ export default function MyPageScreen() {
     setIsAvatarLoadError(false);
   }, [profileImageUrl]);
 
-  const loadSignedProfileImageUrl = useCallback(async () => {
+  const loadProfileImageDataUri = useCallback(async () => {
     if (!profileImageUrl) {
-      setProfileImageSignedUrl(null);
+      setProfileImageDataUri(null);
       return;
     }
     try {
-      const response = await getMyProfileImageUrl();
-      setProfileImageSignedUrl(response.signed_url);
-      setDidRetrySignedUrl(false);
+      const dataUri = await getMyProfileImageBinary();
+      setProfileImageDataUri(dataUri);
+      setDidRetryProfileImage(false);
       setIsAvatarLoadError(false);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
-        setProfileImageSignedUrl(null);
+        setProfileImageDataUri(null);
         return;
       }
-      setProfileImageSignedUrl(null);
+      setProfileImageDataUri(null);
     }
   }, [profileImageUrl]);
 
   useFocusEffect(
     useCallback(() => {
-      void loadSignedProfileImageUrl();
-    }, [loadSignedProfileImageUrl])
+      void loadProfileImageDataUri();
+    }, [loadProfileImageDataUri])
   );
 
   const loadIncomingRequestCount = useCallback(async () => {
@@ -178,7 +178,7 @@ export default function MyPageScreen() {
       } catch {
         // Keep optimistic update even if refresh fails.
       }
-      await loadSignedProfileImageUrl();
+      await loadProfileImageDataUri();
       Alert.alert('完了', 'プロフィール画像を更新しました。');
     } catch (error) {
       if (error instanceof ApiError) {
@@ -221,13 +221,13 @@ export default function MyPageScreen() {
           <View style={styles.avatarWrap}>
             {hasProfileImage ? (
               <Image
-                source={{ uri: profileImageSignedUrl as string }}
+                source={{ uri: profileImageDataUri as string }}
                 style={styles.avatar}
                 onError={() => {
                   setIsAvatarLoadError(true);
-                  if (!didRetrySignedUrl) {
-                    setDidRetrySignedUrl(true);
-                    void loadSignedProfileImageUrl();
+                  if (!didRetryProfileImage) {
+                    setDidRetryProfileImage(true);
+                    void loadProfileImageDataUri();
                   }
                 }}
               />

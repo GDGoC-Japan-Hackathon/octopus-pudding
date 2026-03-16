@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import BinaryIO, Optional
 from uuid import uuid4
 
+from google.auth import default as google_auth_default
+from google.api_core.exceptions import NotFound
 from google.cloud import storage
 
 from app.shared.config import settings
@@ -40,9 +42,33 @@ class CloudStorageClient:
             raise ValueError("GCS bucket name is not configured")
 
         self.bucket_name = resolved_bucket
-        self.client = client or storage.Client()
+        self.credentials = None
+        self.project_id = None
+
+        if client is not None:
+            self.client = client
+            self.credentials = getattr(client, "_credentials", None)
+            self.project_id = getattr(client, "project", None)
+        else:
+            project_id = None
+            creds = None
+            try:
+                creds, default_project = google_auth_default()
+                project_id = default_project
+            except Exception as exc:
+                logger.warning("failed to load GCP ADC credentials: %s", exc)
+
+            self.credentials = creds
+            self.project_id = project_id
+            self.client = storage.Client(project=project_id, credentials=creds)
+
         self.bucket = self.client.bucket(self.bucket_name)
-        logger.info("cloud storage client initialized: bucket=%s", self.bucket_name)
+        logger.info(
+            "cloud storage client initialized: bucket=%s project=%s creds=%s",
+            self.bucket_name,
+            self.project_id,
+            type(self.credentials).__name__ if self.credentials is not None else "None",
+        )
 
     def upload_profile_image(
         self,
@@ -100,3 +126,19 @@ class CloudStorageClient:
             method="PUT",
             content_type=content_type,
         )
+
+    def download_object(self, object_path: str) -> tuple[bytes, str]:
+        """Download private object bytes and return (content, content_type)."""
+        blob = self.bucket.blob(object_path)
+        try:
+            content = blob.download_as_bytes()
+        except NotFound:
+            logger.info(
+                "GCS object not found: bucket=%s object_path=%s",
+                self.bucket_name,
+                object_path,
+            )
+            raise
+
+        content_type = blob.content_type or "application/octet-stream"
+        return content, content_type
