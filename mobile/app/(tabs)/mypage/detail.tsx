@@ -1,11 +1,11 @@
 import { useLocalSearchParams } from 'expo-router';
 import { ScrollView, Text, View } from 'react-native';
 
-import { AppHeader } from '@/components/travel/AppHeader';
-import { travelStyles } from '@/components/travel/styles';
-import { friendsMock, settingsMock, tripHistoryMock, weatherMock } from '@/data/travel';
+import { AppHeader } from '@/features/travel/components/AppHeader';
+import { travelStyles } from '@/features/travel/styles';
+import { friendsMock, tripHistoryMock, weatherMock } from '@/data/travel';
 
-type MyPageSection = 'friends' | 'history' | 'settings';
+type MyPageSection = 'friends' | 'history';
 
 type FriendRouteParams = {
   section?: MyPageSection;
@@ -17,7 +17,6 @@ export default function MyPageDetailScreen() {
 
   const friend = friendsMock.find((item) => item.id === id);
   const history = tripHistoryMock.find((item) => item.id === id);
-  const setting = settingsMock.find((item) => item.id === id);
 
   if (!section) {
     return (
@@ -59,22 +58,6 @@ export default function MyPageDetailScreen() {
             <Text style={travelStyles.heading}>{history.title}</Text>
             <Text style={travelStyles.sectionBody}>旅行日: {history.date}</Text>
             <Text style={travelStyles.sectionBody}>内容: {history.detail}</Text>
-          </View>
-        </View>
-      </ScrollView>
-    );
-  }
-
-  if (section === 'settings' && setting) {
-    return (
-      <ScrollView style={travelStyles.screen} contentContainerStyle={{ paddingBottom: 24 }}>
-        <AppHeader title="設定詳細" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
-
-        <View style={travelStyles.container}>
-          <View style={travelStyles.detailSection}>
-            <Text style={travelStyles.sectionTitleText}>設定項目</Text>
-            <Text style={travelStyles.heading}>{setting.title}</Text>
-            <Text style={travelStyles.sectionBody}>{setting.detail}</Text>
           </View>
         </View>
       </ScrollView>

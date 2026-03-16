@@ -20,6 +20,11 @@ class UserRepository(ABC):
     async def get_by_email(self, email: str) -> Optional[User]:
         """Get user by email"""
         pass
+
+    @abstractmethod
+    async def get_by_firebase_uid(self, firebase_uid: str) -> Optional[User]:
+        """Get user by Firebase UID"""
+        pass
     
     @abstractmethod
     async def get_by_username(self, username: str) -> Optional[User]:
@@ -44,6 +49,11 @@ class UserRepository(ABC):
     @abstractmethod
     async def exists_by_email(self, email: str) -> bool:
         """Check if user exists by email"""
+        pass
+
+    @abstractmethod
+    async def exists_by_firebase_uid(self, firebase_uid: str) -> bool:
+        """Check if user exists by Firebase UID"""
         pass
     
     @abstractmethod

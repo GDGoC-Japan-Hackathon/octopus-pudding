@@ -17,7 +17,9 @@ class UserRepositoryImpl(UserRepository):
         db_user = UserModel(
             email=user.email,
             username=user.username,
-            hashed_password=user.hashed_password,
+            firebase_uid=user.firebase_uid,
+            profile_image_url=user.profile_image_url,
+            nearest_station=user.nearest_station,
             is_active=user.is_active
         )
         self.db.add(db_user)
@@ -34,6 +36,14 @@ class UserRepositoryImpl(UserRepository):
     async def get_by_email(self, email: str) -> Optional[User]:
         """Get user by email"""
         result = await self.db.execute(select(UserModel).where(UserModel.email == email))
+        db_user = result.scalar_one_or_none()
+        return self._to_entity(db_user) if db_user else None
+
+    async def get_by_firebase_uid(self, firebase_uid: str) -> Optional[User]:
+        """Get user by Firebase UID"""
+        result = await self.db.execute(
+            select(UserModel).where(UserModel.firebase_uid == firebase_uid)
+        )
         db_user = result.scalar_one_or_none()
         return self._to_entity(db_user) if db_user else None
     
@@ -58,7 +68,9 @@ class UserRepositoryImpl(UserRepository):
         
         db_user.email = user.email
         db_user.username = user.username
-        db_user.hashed_password = user.hashed_password
+        db_user.firebase_uid = user.firebase_uid
+        db_user.profile_image_url = user.profile_image_url
+        db_user.nearest_station = user.nearest_station
         db_user.is_active = user.is_active
         db_user.updated_at = user.updated_at
         
@@ -81,6 +93,13 @@ class UserRepositoryImpl(UserRepository):
         """Check if user exists by email"""
         result = await self.db.execute(select(UserModel.id).where(UserModel.email == email))
         return result.first() is not None
+
+    async def exists_by_firebase_uid(self, firebase_uid: str) -> bool:
+        """Check if user exists by Firebase UID"""
+        result = await self.db.execute(
+            select(UserModel.id).where(UserModel.firebase_uid == firebase_uid)
+        )
+        return result.first() is not None
     
     async def exists_by_username(self, username: str) -> bool:
         """Check if user exists by username"""
@@ -93,7 +112,9 @@ class UserRepositoryImpl(UserRepository):
             id=db_user.id,
             email=db_user.email,
             username=db_user.username,
-            hashed_password=db_user.hashed_password,
+            firebase_uid=db_user.firebase_uid,
+            profile_image_url=db_user.profile_image_url,
+            nearest_station=db_user.nearest_station,
             is_active=db_user.is_active,
             created_at=db_user.created_at,
             updated_at=db_user.updated_at

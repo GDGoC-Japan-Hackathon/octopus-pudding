@@ -168,6 +168,20 @@ docker compose exec backend poetry run alembic downgrade -1
 - `PUT /api/v1/users/{user_id}` - ユーザー更新
 - `DELETE /api/v1/users/{user_id}` - ユーザー削除
 
+### フレンド機能（申請承認型）
+- `POST /api/v1/users/me/friends/requests` - フレンド申請送信
+- `GET /api/v1/users/me/friends/requests/incoming` - 受信申請一覧
+- `GET /api/v1/users/me/friends/requests/outgoing` - 送信申請一覧
+- `PATCH /api/v1/users/me/friends/requests/{request_id}` - 申請ステータス更新（accepted/rejected/blocked）
+- `GET /api/v1/users/me/friends` - 承認済みフレンド一覧
+- `DELETE /api/v1/users/me/friends/{friend_user_id}` - フレンド解除
+
+最小フロー:
+1. Aが `POST /users/me/friends/requests` でBへ申請
+2. Bが `GET /users/me/friends/requests/incoming` で受信確認
+3. Bが `PATCH /users/me/friends/requests/{request_id}` で `accepted`
+4. A/Bともに `GET /users/me/friends` で相手を確認
+
 ## プロジェクト構造
 
 ```

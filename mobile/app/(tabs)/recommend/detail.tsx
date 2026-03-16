@@ -1,8 +1,8 @@
 import { useLocalSearchParams } from 'expo-router';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 
-import { AppHeader } from '@/components/travel/AppHeader';
-import { travelStyles } from '@/components/travel/styles';
+import { AppHeader } from '@/features/travel/components/AppHeader';
+import { travelStyles } from '@/features/travel/styles';
 import { recommendedPlans, timelineMock, weatherMock } from '@/data/travel';
 
 export default function RecommendationDetailScreen() {

@@ -1,8 +1,12 @@
-.PHONY: migrate dry-run apply current rollback up down status
+.PHONY: migrate dry-run apply current rollback up down status logs logs-api logs-db deps
 
 # Docker Composeサービスを起動
 up:
-	docker compose up -d
+	docker compose up -d --build
+
+# APIコンテナ内の依存関係を再同期
+deps:
+	docker compose exec api poetry install --only=main --no-interaction --no-ansi --no-root
 
 # Docker Composeサービスを停止
 down:
@@ -11,6 +15,18 @@ down:
 # サービスの状態を確認
 status:
 	docker compose ps
+
+# 全サービスのログを表示
+logs:
+	docker compose logs -f
+
+# APIサービスのログを表示
+logs-api:
+	docker compose logs api
+
+# DBサービスのログを表示
+logs-db:
+	docker compose logs db
 
 # マイグレーションを作成（例: make migrate name="add hoge table"）
 migrate:

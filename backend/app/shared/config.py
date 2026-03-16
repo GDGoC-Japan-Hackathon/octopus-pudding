@@ -10,14 +10,17 @@ class Settings(BaseSettings):
     api_port: int = 8000
     debug: bool = True
     
-    # Security
-    secret_key: str = "your-secret-key-here"
-    algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    # Firebase
+    firebase_project_id: str
+
+    # Google Cloud Storage
+    gcs_bucket_name: str = ""
+    gcs_signed_url_expiration_seconds: int = 900
     
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"
 
 
 settings = Settings() 

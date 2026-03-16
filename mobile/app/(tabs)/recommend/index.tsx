@@ -1,9 +1,9 @@
 import { Link } from 'expo-router';
 import { FlatList, Pressable, View } from 'react-native';
 
-import { AppHeader } from '@/components/travel/AppHeader';
-import { PhotoCard } from '@/components/travel/PhotoCard';
-import { travelStyles } from '@/components/travel/styles';
+import { AppHeader } from '@/features/travel/components/AppHeader';
+import { PhotoCard } from '@/features/travel/components/PhotoCard';
+import { travelStyles } from '@/features/travel/styles';
 import { recommendedPlans, weatherMock } from '@/data/travel';
 
 export default function RecommendationListScreen() {

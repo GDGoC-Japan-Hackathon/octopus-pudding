@@ -1,18 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from app.application.services.user_service import UserService
 from app.domain.entities.user import User
 from app.infrastructure.database.base import get_db
+from app.infrastructure.external import CloudStorageClient
 from app.infrastructure.repositories.user_repository_impl import UserRepositoryImpl
+from app.presentation.dependencies.auth import get_current_user
 from app.presentation.dto.user_dto import UserUpdate, UserResponse
-from app.shared.auth_utils import verify_token
 from app.shared.exceptions import UserNotFoundError
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
@@ -21,25 +21,20 @@ def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     return UserService(user_repository)
 
 
-async def get_current_user_entity(
-    token: str = Depends(oauth2_scheme),
-    user_service: UserService = Depends(get_user_service),
-) -> User:
-    """Resolve current user from bearer token."""
-    email = verify_token(token)
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-        )
-
-    user = await user_service.get_user_by_email(email)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-    return user
+def _upload_profile_image_blocking(
+    file_obj,
+    user_id: int,
+    original_filename: str,
+    content_type: str,
+):
+    """Run blocking GCS upload in worker thread."""
+    storage_client = CloudStorageClient()
+    return storage_client.upload_profile_image(
+        file=file_obj,
+        user_id=user_id,
+        original_filename=original_filename,
+        content_type=content_type,
+    )
 
 
 @router.get("/", response_model=List[UserResponse])
@@ -54,7 +49,7 @@ async def get_users(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_user_entity)):
+async def get_me(current_user: User = Depends(get_current_user)):
     """Get current authenticated user."""
     return UserResponse.model_validate(current_user)
 
@@ -62,7 +57,7 @@ async def get_me(current_user: User = Depends(get_current_user_entity)):
 @router.patch("/me", response_model=UserResponse)
 async def update_me(
     user: UserUpdate,
-    current_user: User = Depends(get_current_user_entity),
+    current_user: User = Depends(get_current_user),
     user_service: UserService = Depends(get_user_service),
 ):
     """Update current authenticated user."""
@@ -77,6 +72,51 @@ async def update_me(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+
+
+@router.post("/me/profile-image", response_model=UserResponse)
+async def upload_me_profile_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
+):
+    """Upload profile image to Cloud Storage and persist URL to users.profile_image_url."""
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only image files are allowed",
+        )
+
+    try:
+        uploaded = await run_in_threadpool(
+            _upload_profile_image_blocking,
+            file.file,
+            user_id=current_user.id,
+            original_filename=file.filename or "profile-image",
+            content_type=file.content_type,
+        )
+        updated_user = await user_service.update_user(
+            current_user.id,
+            profile_image_url=uploaded.object_url,
+        )
+        return UserResponse.model_validate(updated_user)
+    except UserNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Profile image upload failed",
+        )
+    finally:
+        await file.close()
 
 
 @router.get("/{user_id}", response_model=UserResponse)

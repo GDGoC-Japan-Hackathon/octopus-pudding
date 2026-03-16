@@ -13,13 +13,18 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):
-    email: Optional[EmailStr] = None
     username: Optional[str] = None
-    password: Optional[str] = None
+    profile_image_url: Optional[str] = None
+    nearest_station: Optional[str] = None
+
+    model_config = {"extra": "forbid"}
 
 
 class UserResponse(UserBase):
     id: int
+    firebase_uid: Optional[str] = None
+    profile_image_url: Optional[str] = None
+    nearest_station: Optional[str] = None
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None

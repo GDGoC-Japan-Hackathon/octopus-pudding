@@ -9,7 +9,9 @@ class User:
     id: Optional[int]
     email: str
     username: str
-    hashed_password: str
+    firebase_uid: Optional[str] = None
+    profile_image_url: Optional[str] = None
+    nearest_station: Optional[str] = None
     is_active: bool = True
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

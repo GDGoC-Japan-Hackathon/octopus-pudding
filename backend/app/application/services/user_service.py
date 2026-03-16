@@ -28,6 +28,10 @@ class UserService:
     async def get_user_by_email(self, email: str) -> Optional[User]:
         """Get user by email"""
         return await self.user_repository.get_by_email(email)
+
+    async def get_user_by_firebase_uid(self, firebase_uid: str) -> Optional[User]:
+        """Get user by Firebase UID"""
+        return await self.user_repository.get_by_firebase_uid(firebase_uid)
     
     async def get_all_users(self, skip: int = 0, limit: int = 100) -> List[User]:
         """Get all users with pagination"""
