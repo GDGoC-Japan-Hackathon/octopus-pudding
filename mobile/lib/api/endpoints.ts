@@ -7,6 +7,7 @@ export const endpoints = {
   },
   users: {
     me: '/users/me',
+    profileImage: '/users/me/profile-image',
   },
   trips: {
     create: '/trips',
