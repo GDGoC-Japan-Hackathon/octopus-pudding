@@ -5,11 +5,13 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -53,6 +55,8 @@ const formItems = [
 
 const destinationSuggestions = ['東京', '大阪', '京都', '札幌', '福岡', '那覇', '箱根', '軽井沢'] as const;
 type DateFieldKey = 'startDate' | 'endDate';
+const BUDGET_SLIDER_MIN = 0;
+const BUDGET_SLIDER_STEP = 10000;
 
 function parseDateInput(value: string) {
   if (!value) return null;
@@ -82,12 +86,19 @@ function formatDateDisplay(value: string) {
   return `${parsed.getFullYear()}/${String(parsed.getMonth() + 1).padStart(2, '0')}/${String(parsed.getDate()).padStart(2, '0')}`;
 }
 
+function clampBudgetValue(value: number, max: number) {
+  const stepped = Math.round(value / BUDGET_SLIDER_STEP) * BUDGET_SLIDER_STEP;
+  return Math.min(max, Math.max(BUDGET_SLIDER_MIN, stepped));
+}
+
 export default function PlanCreateScreen() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResolvingCurrentLocation, setIsResolvingCurrentLocation] = useState(false);
   const [activeDateField, setActiveDateField] = useState<DateFieldKey>('startDate');
   const [isIosDateModalVisible, setIsIosDateModalVisible] = useState(false);
+  const [budgetSliderWidth, setBudgetSliderWidth] = useState(1);
+  const budgetSliderProgress = useRef(new Animated.Value(0)).current;
   const [fields, setFields] = useState<CreateTripFormValues>({
     origin: '',
     destination: '',
@@ -178,6 +189,79 @@ export default function PlanCreateScreen() {
     }
     return '開始日〜終了日を選択';
   }, [fields.endDate, fields.startDate]);
+
+  const participantCountNumber = useMemo(() => {
+    const parsed = Number(fields.participantCount);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      return 1;
+    }
+    return parsed;
+  }, [fields.participantCount]);
+
+  const budgetSliderMax = useMemo(() => participantCountNumber * 100000, [participantCountNumber]);
+
+  const budgetRawValue = useMemo(() => {
+    const parsed = Number(fields.budget);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 0;
+    }
+    return parsed;
+  }, [fields.budget]);
+
+  const budgetSliderValue = useMemo(() => Math.min(budgetRawValue, budgetSliderMax), [budgetRawValue, budgetSliderMax]);
+
+  const budgetDisplayLabel = useMemo(() => {
+    if (budgetRawValue <= 0) {
+      return '未設定';
+    }
+    if (budgetRawValue >= budgetSliderMax) {
+      return `${budgetSliderMax.toLocaleString('ja-JP')}円+`;
+    }
+    return `${budgetRawValue.toLocaleString('ja-JP')}円`;
+  }, [budgetRawValue, budgetSliderMax]);
+
+  const updateBudgetFromRatio = useCallback(
+    (ratio: number) => {
+      const normalized = Math.min(1, Math.max(0, ratio));
+      budgetSliderProgress.setValue(normalized);
+      const nextValue = clampBudgetValue(BUDGET_SLIDER_MIN + normalized * budgetSliderMax, budgetSliderMax);
+      updateField('budget', nextValue <= 0 ? '' : String(nextValue));
+    },
+    [budgetSliderMax, budgetSliderProgress, updateField]
+  );
+
+  const budgetSliderPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (event) => {
+          updateBudgetFromRatio(event.nativeEvent.locationX / budgetSliderWidth);
+        },
+        onPanResponderMove: (event) => {
+          updateBudgetFromRatio(event.nativeEvent.locationX / budgetSliderWidth);
+        },
+      }),
+    [budgetSliderWidth, updateBudgetFromRatio]
+  );
+
+  useEffect(() => {
+    budgetSliderProgress.setValue(budgetSliderMax > 0 ? budgetSliderValue / budgetSliderMax : 0);
+  }, [budgetSliderMax, budgetSliderProgress, budgetSliderValue]);
+
+  const budgetFillWidth = useMemo(
+    () => budgetSliderProgress.interpolate({ inputRange: [0, 1], outputRange: [0, budgetSliderWidth] }),
+    [budgetSliderProgress, budgetSliderWidth]
+  );
+
+  const budgetThumbTranslateX = useMemo(
+    () =>
+      budgetSliderProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, Math.max(0, budgetSliderWidth - 24)],
+      }),
+    [budgetSliderProgress, budgetSliderWidth]
+  );
 
   const handleIosDateChange = useCallback(
     (event: DateTimePickerEvent, selectedDate?: Date) => {
@@ -284,15 +368,85 @@ export default function PlanCreateScreen() {
                 </Pressable>
               ) : null}
             </View>
-            <TextInput
-              style={travelStyles.input}
-              value={fields[item.key]}
-              onChangeText={(value) => updateField(item.key, value)}
-              placeholder={item.placeholder}
-              placeholderTextColor="#94A3B8"
-              keyboardType={item.key === 'budget' || item.key === 'participantCount' ? 'numeric' : 'default'}
-              autoCapitalize="none"
-            />
+            {item.key === 'participantCount' ? (
+              <View style={styles.stepperWrap}>
+                <Pressable
+                  style={[styles.stepperButton, Number(fields.participantCount) <= 1 ? styles.stepperButtonDisabled : null]}
+                  onPress={() => {
+                    const next = Math.max(1, Number(fields.participantCount || '1') - 1);
+                    updateField('participantCount', String(next));
+                  }}
+                  disabled={Number(fields.participantCount) <= 1}
+                >
+                  <MaterialIcons name="remove" size={20} color={Number(fields.participantCount) <= 1 ? '#94A3B8' : '#334155'} />
+                </Pressable>
+
+                <View style={styles.stepperValueWrap}>
+                  <Text style={styles.stepperValueText}>{fields.participantCount || '1'}</Text>
+                  <Text style={styles.stepperValueUnit}>人</Text>
+                </View>
+
+                <Pressable
+                  style={styles.stepperButton}
+                  onPress={() => {
+                    const next = Math.max(1, Number(fields.participantCount || '1') + 1);
+                    updateField('participantCount', String(next));
+                  }}
+                >
+                  <MaterialIcons name="add" size={20} color="#334155" />
+                </Pressable>
+              </View>
+            ) : item.key === 'budget' ? (
+              <View style={styles.budgetSection}>
+                <View style={styles.budgetHeaderRow}>
+                  <Text style={styles.budgetValueLabel}>{budgetDisplayLabel}</Text>
+                  <Text style={styles.budgetRangeLabel}>{budgetSliderMax.toLocaleString('ja-JP')}円+</Text>
+                </View>
+                <Text style={styles.budgetHintText}>1人あたり上限目安: 100,000円+</Text>
+
+                <View
+                  style={styles.budgetSliderWrap}
+                  onLayout={(event) => setBudgetSliderWidth(Math.max(1, event.nativeEvent.layout.width))}
+                  {...budgetSliderPanResponder.panHandlers}
+                >
+                  <View style={styles.budgetSliderTrack} />
+                  <Animated.View
+                    style={[
+                      styles.budgetSliderFill,
+                      { width: budgetFillWidth },
+                    ]}
+                  />
+                  <Animated.View
+                    style={[
+                      styles.budgetSliderThumb,
+                      { transform: [{ translateX: budgetThumbTranslateX }] },
+                    ]}
+                  />
+                </View>
+
+                <TextInput
+                  style={[travelStyles.input, styles.budgetManualInput]}
+                  value={fields.budget}
+                  onChangeText={(value) => {
+                    const sanitized = value.replace(/[^0-9]/g, '');
+                    updateField('budget', sanitized);
+                  }}
+                  placeholder="例: 120000"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                />
+              </View>
+            ) : (
+              <TextInput
+                style={travelStyles.input}
+                value={fields[item.key]}
+                onChangeText={(value) => updateField(item.key, value)}
+                placeholder={item.placeholder}
+                placeholderTextColor="#94A3B8"
+                keyboardType="default"
+                autoCapitalize="none"
+              />
+            )}
             {item.key === 'destination' ? (
               <>
                 <View style={styles.destinationSuggestionWrap}>
@@ -459,6 +613,103 @@ const styles = StyleSheet.create({
   scheduleHelperText: {
     fontSize: 12,
     color: '#64748B',
+  },
+  stepperWrap: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  stepperButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperButtonDisabled: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+  },
+  stepperValueWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  stepperValueText: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  stepperValueUnit: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  budgetSection: {
+    marginTop: 10,
+    gap: 10,
+  },
+  budgetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  budgetValueLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  budgetRangeLabel: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  budgetHintText: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  budgetSliderWrap: {
+    height: 32,
+    justifyContent: 'center',
+  },
+  budgetSliderTrack: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: '#E2E8F0',
+  },
+  budgetSliderFill: {
+    position: 'absolute',
+    left: 0,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: '#F97316',
+  },
+  budgetSliderThumb: {
+    position: 'absolute',
+    left: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 3,
+    borderColor: '#F97316',
+    shadowColor: '#F97316',
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  budgetManualInput: {
+    marginTop: 0,
   },
   destinationSuggestionWrap: {
     flexDirection: 'row',
