@@ -151,7 +151,7 @@ export default function PlansListScreen() {
         sortOrder,
         participantCount: peopleFilter,
       }),
-    [endDateFilter, keyword, planItems, sortOrder, startDateFilter]
+    [endDateFilter, keyword, peopleFilter, planItems, sortOrder, startDateFilter]
   );
 
   const openPeoplePicker = useCallback(() => {
@@ -307,7 +307,7 @@ export default function PlansListScreen() {
                     </View>
                     <View style={styles.metaRow}>
                       <MaterialIcons name="group" size={18} color="#64748B" />
-                      <Text style={styles.metaText}>{peopleFilter ? `${peopleFilter}名` : plan.peopleLabel}</Text>
+                      <Text style={styles.metaText}>{plan.peopleLabel}</Text>
                     </View>
                   </View>
 
