@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel
@@ -9,7 +8,7 @@ class RecommendationListResponse(BaseModel):
     title: str
     location: str
     author: str
-    likes: int
+    save_count: int
     image: str
     category: str
 
@@ -40,3 +39,11 @@ class RecommendationDetailResponse(BaseModel):
     budget: str
     move_time: str
     days: list[RecommendationDayResponse]
+
+
+class RecommendationCloneRequest(BaseModel):
+    mode: str = "use"
+
+
+class RecommendationCloneResponse(BaseModel):
+    trip_id: int

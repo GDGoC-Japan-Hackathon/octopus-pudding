@@ -23,7 +23,7 @@ class Trip:
     is_public: bool = False
     cover_image_url: Optional[str] = None
     recommendation_category: Optional[str] = None
-    like_count: int = 0
+    save_count: int = 0
     status: str = "planned"
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

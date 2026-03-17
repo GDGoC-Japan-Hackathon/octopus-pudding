@@ -43,8 +43,8 @@ class TripService:
     ) -> TripAggregate:
         if trip.participant_count < 1:
             raise ValueError("participant_count must be greater than or equal to 1")
-        if trip.like_count < 0:
-            raise ValueError("like_count must be greater than or equal to 0")
+        if trip.save_count < 0:
+            raise ValueError("save_count must be greater than or equal to 0")
         trip.user_id = user_id
         return await self.trip_repository.create_trip(trip, preference)
 
@@ -66,9 +66,9 @@ class TripService:
         if "participant_count" in kwargs and kwargs["participant_count"] is not None:
             if kwargs["participant_count"] < 1:
                 raise ValueError("participant_count must be greater than or equal to 1")
-        if "like_count" in kwargs and kwargs["like_count"] is not None:
-            if kwargs["like_count"] < 0:
-                raise ValueError("like_count must be greater than or equal to 0")
+        if "save_count" in kwargs and kwargs["save_count"] is not None:
+            if kwargs["save_count"] < 0:
+                raise ValueError("save_count must be greater than or equal to 0")
 
         for key, value in kwargs.items():
             if value is not None and hasattr(trip, key):

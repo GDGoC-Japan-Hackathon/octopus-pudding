@@ -257,5 +257,11 @@ ALTER TABLE trips ALTER COLUMN like_count SET NOT NULL;
 
 UPDATE alembic_version SET version_num='f6a1c9d2b4e7' WHERE alembic_version.version_num = 'e5b7c2a1d9f4';
 
+-- Running upgrade f6a1c9d2b4e7 -> f8b2d4c6e1a9
+
+ALTER TABLE trips RENAME like_count TO save_count;
+
+UPDATE alembic_version SET version_num='f8b2d4c6e1a9' WHERE alembic_version.version_num = 'f6a1c9d2b4e7';
+
 COMMIT;
 
