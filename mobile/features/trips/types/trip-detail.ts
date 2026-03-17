@@ -7,6 +7,7 @@ export type TripDetailResponse = {
   destination: string;
   start_date: string;
   end_date: string;
+  participant_count: number;
   status: string;
   created_at?: string | null;
   updated_at?: string | null;

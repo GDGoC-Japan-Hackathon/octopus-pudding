@@ -8,6 +8,7 @@ export type EditTripBasicFormValues = {
   destination: string;
   startDate: string;
   endDate: string;
+  participantCount: string;
 };
 
 export type EditTripPreferenceFormValues = {
@@ -32,12 +33,17 @@ export function validateAndBuildTripBasicPayload(
   const destination = values.destination.trim();
   const startDate = values.startDate.trim();
   const endDate = values.endDate.trim();
+  const participantCountText = values.participantCount.trim();
 
   if (!origin || !destination || !startDate || !endDate) {
     return { ok: false, message: '出発地・目的地・出発日・終了日は必須です。' };
   }
   if (!DATE_PATTERN.test(startDate) || !DATE_PATTERN.test(endDate)) {
     return { ok: false, message: '日付は YYYY-MM-DD 形式で入力してください。' };
+  }
+  const participantCount = Number(participantCountText);
+  if (!Number.isInteger(participantCount) || participantCount < 1) {
+    return { ok: false, message: '人数は1以上の整数で入力してください。' };
   }
 
   return {
@@ -47,6 +53,7 @@ export function validateAndBuildTripBasicPayload(
       destination,
       start_date: startDate,
       end_date: endDate,
+      participant_count: participantCount,
     },
   };
 }

@@ -57,6 +57,10 @@ async def create_trip(
         start_date=payload.start_date,
         end_date=payload.end_date,
         participant_count=payload.participant_count,
+        is_public=payload.is_public,
+        cover_image_url=payload.cover_image_url,
+        recommendation_category=payload.recommendation_category,
+        save_count=payload.save_count,
         status=payload.status,
     )
 

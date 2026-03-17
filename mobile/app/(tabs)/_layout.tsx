@@ -50,7 +50,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="plans"
           options={{
-            title: '作成済み',
+            title: 'マイプラン',
             tabBarIcon: ({ color }) => <MaterialIcons name="bookmark" size={22} color={color} />,
           }}
         />

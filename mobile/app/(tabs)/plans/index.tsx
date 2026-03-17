@@ -149,6 +149,7 @@ export default function PlansListScreen() {
         startDate: startDateFilter,
         endDate: endDateFilter,
         sortOrder,
+        participantCount: peopleFilter,
       }),
     [endDateFilter, keyword, planItems, sortOrder, startDateFilter]
   );
@@ -216,7 +217,7 @@ export default function PlansListScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppHeader title="作成済み" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
+      <AppHeader title="マイプラン" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
         <View style={styles.searchSection}>

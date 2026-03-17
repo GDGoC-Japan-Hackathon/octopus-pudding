@@ -237,5 +237,31 @@ ALTER TABLE trips ALTER COLUMN participant_count SET NOT NULL;
 
 UPDATE alembic_version SET version_num='e5b7c2a1d9f4' WHERE alembic_version.version_num = 'd4f1a8c9b2e3';
 
+-- Running upgrade e5b7c2a1d9f4 -> f6a1c9d2b4e7
+
+ALTER TABLE trips ADD COLUMN is_public BOOLEAN;
+
+ALTER TABLE trips ADD COLUMN cover_image_url VARCHAR(1000);
+
+ALTER TABLE trips ADD COLUMN recommendation_category VARCHAR(100);
+
+ALTER TABLE trips ADD COLUMN like_count INTEGER;
+
+UPDATE trips SET is_public = FALSE WHERE is_public IS NULL;
+
+UPDATE trips SET like_count = 0 WHERE like_count IS NULL;
+
+ALTER TABLE trips ALTER COLUMN is_public SET NOT NULL;
+
+ALTER TABLE trips ALTER COLUMN like_count SET NOT NULL;
+
+UPDATE alembic_version SET version_num='f6a1c9d2b4e7' WHERE alembic_version.version_num = 'e5b7c2a1d9f4';
+
+-- Running upgrade f6a1c9d2b4e7 -> f8b2d4c6e1a9
+
+ALTER TABLE trips RENAME like_count TO save_count;
+
+UPDATE alembic_version SET version_num='f8b2d4c6e1a9' WHERE alembic_version.version_num = 'f6a1c9d2b4e7';
+
 COMMIT;
 

@@ -5,6 +5,7 @@ export type CreateTripFormValues = {
   destination: string;
   startDate: string;
   endDate: string;
+  participantCount: string;
   budget: string;
 };
 
@@ -27,12 +28,21 @@ export function validateAndBuildCreateTripPayload(
   const destination = values.destination.trim();
   const startDate = values.startDate.trim();
   const endDate = values.endDate.trim();
+  const participantCountText = values.participantCount.trim();
   const budgetText = values.budget.trim();
 
   if (!origin || !destination || !startDate || !endDate) {
     return {
       ok: false,
       message: '出発地・目的地・出発日・終了日は必須です。',
+    };
+  }
+
+  const participantCount = Number(participantCountText);
+  if (!Number.isInteger(participantCount) || participantCount < 1) {
+    return {
+      ok: false,
+      message: '人数は1以上の整数で入力してください。',
     };
   }
 
@@ -72,6 +82,7 @@ export function validateAndBuildCreateTripPayload(
       destination,
       start_date: startDate,
       end_date: endDate,
+      participant_count: participantCount,
       status: 'planned',
       preference: budget
         ? {

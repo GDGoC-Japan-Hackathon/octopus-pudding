@@ -1,4 +1,4 @@
-.PHONY: migrate dry-run apply current rollback up down status logs logs-api logs-db deps
+.PHONY: migrate dry-run apply current rollback up down status logs logs-api logs-db deps seed-trips-demo
 
 # Docker Composeサービスを起動
 up:
@@ -47,3 +47,7 @@ current:
 # DBのダウングレード（1つ前に戻す）
 rollback:
 	docker compose exec api poetry run alembic downgrade -1
+
+# 開発用のtrip確認データを投入
+seed-trips-demo:
+	docker compose exec api env PYTHONPATH=/app poetry run python scripts/seed_trip_demo.py --owner-user-id $(OWNER_USER_ID) $(if $(SHARED_USER_IDS),--shared-user-ids $(SHARED_USER_IDS),)

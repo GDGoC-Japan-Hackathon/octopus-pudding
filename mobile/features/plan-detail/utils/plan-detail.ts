@@ -170,6 +170,7 @@ export function toPlanDetailViewModel(
   return {
     title: `${aggregate.trip.origin} → ${aggregate.trip.destination}`,
     subtitle: `${aggregate.trip.start_date} - ${aggregate.trip.end_date} ・ ${statusLabel(aggregate.trip.status)}`,
+    intro: `総人数 ${aggregate.trip.participant_count}名`,
     budgetLabel: budgetLabel(aggregate),
     moveTimeLabel: activeDay ? moveTimeLabel(activeDay.items) : '未設定',
     days,

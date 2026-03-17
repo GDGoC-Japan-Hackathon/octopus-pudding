@@ -1,22 +1,43 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { recommendedPlans, weatherMock } from '@/data/travel';
+import { weatherMock } from '@/data/travel';
+import { getRecommendPlans } from '@/features/recommend/api/get-recommend-plans';
+import { type RecommendCategory } from '@/features/recommend/types';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 
-const categories = ['すべて', 'カフェ', '夜景', 'グルメ', '温泉'] as const;
+const categories: RecommendCategory[] = ['すべて', 'カフェ', '夜景', 'グルメ', '温泉'];
 
 export default function RecommendationListScreen() {
-  const [activeCategory, setActiveCategory] = useState<(typeof categories)[number]>('すべて');
+  const [activeCategory, setActiveCategory] = useState<RecommendCategory>('すべて');
+  const [recommendPlans, setRecommendPlans] = useState<Awaited<ReturnType<typeof getRecommendPlans>>>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setIsLoading(true);
+        const plans = await getRecommendPlans();
+        setRecommendPlans(plans);
+      } catch {
+        Alert.alert('取得失敗', 'おすすめ旅の取得に失敗しました。時間をおいて再度お試しください。');
+        setRecommendPlans([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void load();
+  }, []);
 
   const filteredPlans = useMemo(() => {
     if (activeCategory === 'すべて') {
-      return recommendedPlans;
+      return recommendPlans;
     }
-    return recommendedPlans.filter((plan) => plan.category === activeCategory);
-  }, [activeCategory]);
+    return recommendPlans.filter((plan) => plan.category === activeCategory);
+  }, [activeCategory, recommendPlans]);
 
   return (
     <View style={styles.screen}>
@@ -37,6 +58,19 @@ export default function RecommendationListScreen() {
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+        {isLoading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator color="#EC5B13" />
+            <Text style={styles.loadingText}>おすすめ旅を読み込み中...</Text>
+          </View>
+        ) : null}
+
+        {!isLoading && filteredPlans.length === 0 ? (
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyTitle}>おすすめ旅がありません</Text>
+          </View>
+        ) : null}
+
         {filteredPlans.map((plan) => (
           <Link key={plan.id} href={{ pathname: '/recommend/detail', params: { id: plan.id } }} asChild>
             <Pressable style={styles.card}>
@@ -59,8 +93,8 @@ export default function RecommendationListScreen() {
                   </View>
                   <Text style={styles.authorText}>{plan.author}</Text>
                   <View style={styles.likesWrap}>
-                    <MaterialIcons name="favorite" size={18} color="#EC5B13" />
-                    <Text style={styles.likesText}>{plan.likes.toLocaleString()}</Text>
+                    <MaterialIcons name="bookmark" size={18} color="#EC5B13" />
+                    <Text style={styles.likesText}>保存 {plan.saveCount.toLocaleString()}</Text>
                   </View>
                 </View>
 
@@ -210,6 +244,24 @@ const styles = StyleSheet.create({
   detailButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  loadingWrap: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    gap: 10,
+  },
+  loadingText: {
+    color: '#64748B',
+    fontSize: 13,
+  },
+  emptyWrap: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    color: '#0F172A',
+    fontSize: 16,
     fontWeight: '700',
   },
 });

@@ -5,6 +5,7 @@ export type TripListFilters = {
   startDate: string;
   endDate: string;
   sortOrder: TripSortOrder;
+  participantCount?: number | null;
 };
 
 export type TripListItemViewModel = {
@@ -13,6 +14,7 @@ export type TripListItemViewModel = {
   statusLabel: string;
   statusVariant: 'planned' | 'muted';
   dateLabel: string;
+  participantCount: number;
   peopleLabel: string;
   searchableText: string;
   startDateValue: number | null;

@@ -44,6 +44,10 @@ class TripModel(Base):
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
     participant_count = Column(Integer, nullable=False, default=1)
+    is_public = Column(Boolean, nullable=False, default=False)
+    cover_image_url = Column(String(1000), nullable=True)
+    recommendation_category = Column(String(100), nullable=True)
+    save_count = Column(Integer, nullable=False, default=0)
     status = Column(String(50), default="planned")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True),

@@ -8,6 +8,7 @@ export default function RecommendationTabLayout() {
       }}>
       <Stack.Screen name="index" options={{ title: 'おすすめ一覧' }} />
       <Stack.Screen name="detail" options={{ title: 'おすすめ詳細' }} />
+      <Stack.Screen name="customize" options={{ title: 'おすすめカスタマイズ' }} />
     </Stack>
   );
 }

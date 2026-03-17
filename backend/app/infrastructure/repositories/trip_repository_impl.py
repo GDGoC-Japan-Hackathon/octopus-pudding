@@ -46,6 +46,10 @@ class TripRepositoryImpl(TripRepository):
             start_date=trip.start_date,
             end_date=trip.end_date,
             participant_count=trip.participant_count,
+            is_public=trip.is_public,
+            cover_image_url=trip.cover_image_url,
+            recommendation_category=trip.recommendation_category,
+            save_count=trip.save_count,
             status=trip.status,
         )
         self.db.add(db_trip)
@@ -140,6 +144,10 @@ class TripRepositoryImpl(TripRepository):
         db_trip.start_date = trip.start_date
         db_trip.end_date = trip.end_date
         db_trip.participant_count = trip.participant_count
+        db_trip.is_public = trip.is_public
+        db_trip.cover_image_url = trip.cover_image_url
+        db_trip.recommendation_category = trip.recommendation_category
+        db_trip.save_count = trip.save_count
         db_trip.status = trip.status
 
         await self.db.commit()
@@ -555,6 +563,10 @@ class TripRepositoryImpl(TripRepository):
             start_date=db_trip.start_date,
             end_date=db_trip.end_date,
             participant_count=db_trip.participant_count,
+            is_public=db_trip.is_public,
+            cover_image_url=db_trip.cover_image_url,
+            recommendation_category=db_trip.recommendation_category,
+            save_count=db_trip.save_count,
             status=db_trip.status,
             created_at=db_trip.created_at,
             updated_at=db_trip.updated_at,

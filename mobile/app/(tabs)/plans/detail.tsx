@@ -176,6 +176,7 @@ export default function PlanDetailScreen() {
       heroBadge="LIVE MAP PREVIEW"
       title={detailView.title}
       subtitle={detailView.subtitle}
+      intro={detailView.intro}
       budgetLabel={detailView.budgetLabel}
       moveTimeLabel={detailView.moveTimeLabel}
       days={detailView.days}

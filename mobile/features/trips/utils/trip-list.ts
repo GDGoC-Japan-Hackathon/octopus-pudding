@@ -23,8 +23,9 @@ export function toTripListItemViewModel(plan: TripResponse): TripListItemViewMod
     statusLabel,
     statusVariant: plan.status === 'planned' ? 'planned' : 'muted',
     dateLabel: `${plan.start_date} - ${plan.end_date}`,
-    peopleLabel: '人数未設定',
-    searchableText: [plan.origin, plan.destination, statusLabel].join(' ').toLowerCase(),
+    participantCount: plan.participant_count,
+    peopleLabel: `${plan.participant_count}名`,
+    searchableText: [plan.origin, plan.destination, statusLabel, `${plan.participant_count}名`].join(' ').toLowerCase(),
     startDateValue: parseTripDateValue(plan.start_date),
   };
 }
@@ -40,8 +41,11 @@ export function filterTripListItems(items: TripListItemViewModel[], filters: Tri
       startFilterValue === null || (item.startDateValue !== null && item.startDateValue >= startFilterValue);
     const matchesEnd =
       endFilterValue === null || (item.startDateValue !== null && item.startDateValue <= endFilterValue);
+    const matchesPeople =
+      !(filters as TripListFilters & { participantCount?: number | null }).participantCount ||
+      item.participantCount === (filters as TripListFilters & { participantCount?: number | null }).participantCount;
 
-    return matchesKeyword && matchesStart && matchesEnd;
+    return matchesKeyword && matchesStart && matchesEnd && matchesPeople;
   });
 
   return filtered.sort((a, b) => {

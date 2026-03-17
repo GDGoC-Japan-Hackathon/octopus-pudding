@@ -22,9 +22,11 @@ type PlanDetailTemplateProps = {
   primaryActionLabel: string;
   onPrimaryAction?: () => void;
   primaryActionSlot?: ReactNode;
+  primaryButtonVariant?: 'orange' | 'gray';
   secondaryActionLabel?: string;
   onSecondaryAction?: () => void;
   secondaryActionDisabled?: boolean;
+  secondaryButtonVariant?: 'light' | 'orange' | 'gray';
   footerSlot?: ReactNode;
 };
 
@@ -45,9 +47,11 @@ export function PlanDetailTemplate({
   primaryActionLabel,
   onPrimaryAction,
   primaryActionSlot,
+  primaryButtonVariant = 'orange',
   secondaryActionLabel,
   onSecondaryAction,
   secondaryActionDisabled,
+  secondaryButtonVariant = 'light',
   footerSlot,
 }: PlanDetailTemplateProps) {
   return (
@@ -144,18 +148,37 @@ export function PlanDetailTemplate({
 
         <View style={styles.actionSection}>
           {primaryActionSlot ?? (
-            <Pressable style={styles.primaryButton} onPress={onPrimaryAction}>
+            <Pressable
+              style={[
+                styles.primaryButton,
+                primaryButtonVariant === 'gray' && styles.primaryButtonGray,
+              ]}
+              onPress={onPrimaryAction}
+            >
               <Text style={styles.primaryButtonText}>{primaryActionLabel}</Text>
             </Pressable>
           )}
 
           {secondaryActionLabel ? (
             <Pressable
-              style={[styles.secondaryButton, secondaryActionDisabled && styles.buttonDisabled]}
+              style={[
+                styles.secondaryButton,
+                secondaryButtonVariant === 'orange' && styles.secondaryButtonOrange,
+                secondaryButtonVariant === 'gray' && styles.secondaryButtonGray,
+                secondaryActionDisabled && styles.buttonDisabled,
+              ]}
               onPress={onSecondaryAction}
               disabled={secondaryActionDisabled}
             >
-              <Text style={styles.secondaryButtonText}>{secondaryActionLabel}</Text>
+              <Text
+                style={[
+                  styles.secondaryButtonText,
+                  secondaryButtonVariant === 'orange' && styles.secondaryButtonTextOrange,
+                  secondaryButtonVariant === 'gray' && styles.secondaryButtonTextGray,
+                ]}
+              >
+                {secondaryActionLabel}
+              </Text>
             </Pressable>
           ) : null}
 
@@ -441,6 +464,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  primaryButtonGray: {
+    backgroundColor: '#94A3B8',
+  },
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
@@ -453,10 +479,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  secondaryButtonOrange: {
+    backgroundColor: '#EC5B13',
+  },
+  secondaryButtonGray: {
+    backgroundColor: '#CBD5E1',
+  },
   secondaryButtonText: {
     color: '#0F172A',
     fontSize: 18,
     fontWeight: '700',
+  },
+  secondaryButtonTextOrange: {
+    color: '#FFFFFF',
+  },
+  secondaryButtonTextGray: {
+    color: '#FFFFFF',
   },
   buttonDisabled: {
     opacity: 0.6,

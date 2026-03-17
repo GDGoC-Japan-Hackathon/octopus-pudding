@@ -1,11 +1,11 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
-import { BackButton } from '@/components/back-button';
 import { getFriends } from '@/features/friends/api/get-friends';
 import { type FriendResponse } from '@/features/friends/types/friend-request';
 import { AppHeader } from '@/features/travel/components/AppHeader';
+import { deleteTrip } from '@/features/trips/api/delete-trip';
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
 import { addTripMember, removeTripMember } from '@/features/trips/api/trip-members';
 import { updateTrip } from '@/features/trips/api/update-trip';
@@ -22,7 +22,7 @@ import { ApiError } from '@/lib/api/client';
 
 const ATMOSPHERE_OPTIONS: TripAtmosphere[] = ['のんびり', 'アクティブ', 'グルメ', '映え'];
 
-type EditParams = {
+type CustomizeParams = {
   tripId?: string | string[];
 };
 
@@ -38,11 +38,15 @@ function parseTripId(raw: string | string[] | undefined): number | null {
   return parsed;
 }
 
-export default function TripEditScreen() {
-  const { tripId: rawTripId } = useLocalSearchParams<EditParams>();
+export default function RecommendCustomizeScreen() {
+  const router = useRouter();
+  const { tripId: rawTripId } = useLocalSearchParams<CustomizeParams>();
   const tripId = useMemo(() => parseTripId(rawTripId), [rawTripId]);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCommitted, setIsCommitted] = useState(false);
+
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -57,10 +61,6 @@ export default function TripEditScreen() {
   const [isLoadingFriends, setIsLoadingFriends] = useState(true);
   const [currentMemberUserIds, setCurrentMemberUserIds] = useState<Set<number>>(new Set());
   const [selectedMemberUserIds, setSelectedMemberUserIds] = useState<Set<number>>(new Set());
-
-  const [isSavingBasic, setIsSavingBasic] = useState(false);
-  const [isSavingPreference, setIsSavingPreference] = useState(false);
-  const [isSavingMembers, setIsSavingMembers] = useState(false);
 
   const refreshDetail = async (id: number) => {
     const detail = await getTripDetail(id);
@@ -111,64 +111,6 @@ export default function TripEditScreen() {
     void run();
   }, [tripId]);
 
-  const handleSaveBasic = async () => {
-    if (!tripId || isSavingBasic) {
-      return;
-    }
-    const result = validateAndBuildTripBasicPayload({
-      origin,
-      destination,
-      startDate,
-      endDate,
-      participantCount,
-    });
-    if (!result.ok) {
-      Alert.alert('入力エラー', result.message);
-      return;
-    }
-
-    try {
-      setIsSavingBasic(true);
-      await updateTrip(tripId, result.payload);
-      await refreshDetail(tripId);
-      Alert.alert('更新完了', '基本情報を更新しました。');
-    } catch (error) {
-      Alert.alert('更新失敗', getTripEditErrorMessage(error, '基本情報の更新に失敗しました'));
-    } finally {
-      setIsSavingBasic(false);
-    }
-  };
-
-  const handleSavePreference = async () => {
-    if (!tripId || isSavingPreference) {
-      return;
-    }
-
-    const result = parsePreferenceBudget({
-      budget,
-      transportType,
-    });
-    if (!result.ok) {
-      Alert.alert('入力エラー', result.message);
-      return;
-    }
-
-    try {
-      setIsSavingPreference(true);
-      await upsertTripPreference(tripId, {
-        atmosphere,
-        budget: result.budget,
-        transport_type: result.transportType,
-      });
-      await refreshDetail(tripId);
-      Alert.alert('更新完了', '好みを更新しました。');
-    } catch (error) {
-      Alert.alert('更新失敗', getTripEditErrorMessage(error, '好みの更新に失敗しました'));
-    } finally {
-      setIsSavingPreference(false);
-    }
-  };
-
   const toggleMember = (userId: number) => {
     setSelectedMemberUserIds((prev) => {
       const next = new Set(prev);
@@ -181,23 +123,61 @@ export default function TripEditScreen() {
     });
   };
 
-  const handleSaveMembers = async () => {
-    if (!tripId || isSavingMembers) {
+  const handleBack = async () => {
+    if (!tripId || isCommitted) {
+      router.back();
+      return;
+    }
+
+    try {
+      await deleteTrip(tripId);
+    } catch {
+      // ignore and still go back
+    } finally {
+      router.back();
+    }
+  };
+
+  const handleCommit = async () => {
+    if (!tripId || isSubmitting) {
+      return;
+    }
+
+    const basicResult = validateAndBuildTripBasicPayload({
+      origin,
+      destination,
+      startDate,
+      endDate,
+      participantCount,
+    });
+    if (!basicResult.ok) {
+      Alert.alert('入力エラー', basicResult.message);
+      return;
+    }
+
+    const preferenceResult = parsePreferenceBudget({
+      budget,
+      transportType,
+    });
+    if (!preferenceResult.ok) {
+      Alert.alert('入力エラー', preferenceResult.message);
       return;
     }
 
     const toAdd = Array.from(selectedMemberUserIds).filter((userId) => !currentMemberUserIds.has(userId));
     const toRemove = Array.from(currentMemberUserIds).filter((userId) => !selectedMemberUserIds.has(userId));
 
-    if (!toAdd.length && !toRemove.length) {
-      Alert.alert('変更なし', '同行者の変更はありません。');
-      return;
-    }
-
-    let hasError = false;
+    let hasMemberError = false;
 
     try {
-      setIsSavingMembers(true);
+      setIsSubmitting(true);
+
+      await updateTrip(tripId, basicResult.payload);
+      await upsertTripPreference(tripId, {
+        atmosphere,
+        budget: preferenceResult.budget,
+        transport_type: preferenceResult.transportType,
+      });
 
       for (const userId of toAdd) {
         try {
@@ -206,7 +186,7 @@ export default function TripEditScreen() {
           if (error instanceof ApiError && error.status === 409) {
             continue;
           }
-          hasError = true;
+          hasMemberError = true;
         }
       }
 
@@ -214,25 +194,28 @@ export default function TripEditScreen() {
         try {
           await removeTripMember(tripId, userId);
         } catch {
-          hasError = true;
+          hasMemberError = true;
         }
       }
 
       await refreshDetail(tripId);
-      if (hasError) {
-        Alert.alert('一部失敗', '一部の同行者更新に失敗しました。最新状態で再表示しています。');
+      setIsCommitted(true);
+      if (hasMemberError) {
+        Alert.alert('一部失敗', '一部の同行者更新に失敗しました。プランは保存されています。');
       } else {
-        Alert.alert('更新完了', '同行者を更新しました。');
+        Alert.alert(isCommitted ? '更新完了' : '保存完了', isCommitted ? 'マイプランを更新しました。' : 'マイプランに追加しました。');
       }
+    } catch (error) {
+      Alert.alert('更新失敗', getTripEditErrorMessage(error, 'プランの保存に失敗しました'));
     } finally {
-      setIsSavingMembers(false);
+      setIsSubmitting(false);
     }
   };
 
   if (!tripId) {
     return (
       <View style={travelStyles.screen}>
-        <AppHeader title="編集" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
+        <AppHeader title="カスタマイズ" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
         <View style={travelStyles.container}>
           <Text style={travelStyles.heading}>tripId が指定されていません</Text>
         </View>
@@ -242,9 +225,11 @@ export default function TripEditScreen() {
 
   return (
     <View style={travelStyles.screen}>
-      <AppHeader title="プラン編集" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
+      <AppHeader title="おすすめをカスタマイズ" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ ...travelStyles.container, paddingBottom: 24 }}>
-        <BackButton />
+        <Pressable style={travelStyles.pillButton} onPress={() => void handleBack()}>
+          <Text style={travelStyles.pillText}>← 戻る</Text>
+        </Pressable>
 
         {isLoading ? (
           <View style={travelStyles.detailSection}>
@@ -260,13 +245,6 @@ export default function TripEditScreen() {
           <TextInput style={travelStyles.input} value={startDate} onChangeText={setStartDate} placeholder="開始日 (YYYY-MM-DD)" />
           <TextInput style={travelStyles.input} value={endDate} onChangeText={setEndDate} placeholder="終了日 (YYYY-MM-DD)" />
           <TextInput style={travelStyles.input} value={participantCount} onChangeText={setParticipantCount} placeholder="人数" keyboardType="number-pad" />
-          <Pressable
-            style={[travelStyles.primaryButton, isSavingBasic ? { opacity: 0.6 } : null]}
-            onPress={handleSaveBasic}
-            disabled={isSavingBasic}
-          >
-            {isSavingBasic ? <ActivityIndicator color="#FFFFFF" /> : <Text style={travelStyles.primaryButtonText}>基本情報を更新</Text>}
-          </Pressable>
         </View>
 
         <View style={travelStyles.detailSection}>
@@ -288,13 +266,6 @@ export default function TripEditScreen() {
           </View>
           <TextInput style={travelStyles.input} value={budget} onChangeText={setBudget} placeholder="予算" keyboardType="number-pad" />
           <TextInput style={travelStyles.input} value={transportType} onChangeText={setTransportType} placeholder="移動手段 (例: train)" />
-          <Pressable
-            style={[travelStyles.primaryButton, isSavingPreference ? { opacity: 0.6 } : null]}
-            onPress={handleSavePreference}
-            disabled={isSavingPreference}
-          >
-            {isSavingPreference ? <ActivityIndicator color="#FFFFFF" /> : <Text style={travelStyles.primaryButtonText}>好みを更新</Text>}
-          </Pressable>
         </View>
 
         <View style={travelStyles.detailSection}>
@@ -325,14 +296,19 @@ export default function TripEditScreen() {
           ) : (
             <Text style={travelStyles.sectionBody}>フレンドがいません。先にフレンドを追加してください。</Text>
           )}
-          <Pressable
-            style={[travelStyles.primaryButton, isSavingMembers ? { opacity: 0.6 } : null]}
-            onPress={handleSaveMembers}
-            disabled={isSavingMembers}
-          >
-            {isSavingMembers ? <ActivityIndicator color="#FFFFFF" /> : <Text style={travelStyles.primaryButtonText}>同行者を更新</Text>}
-          </Pressable>
         </View>
+
+        <Pressable
+          style={[travelStyles.primaryButton, isSubmitting ? { opacity: 0.6 } : null]}
+          onPress={() => void handleCommit()}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={travelStyles.primaryButtonText}>{isCommitted ? '更新' : '決定'}</Text>
+          )}
+        </Pressable>
       </ScrollView>
     </View>
   );

@@ -40,6 +40,9 @@ export default function CreateIndexScreen() {
 
       <View style={travelStyles.container}>
         <View style={styles.heroBlock}>
+          <View style={styles.heroBadge}>
+            <Text style={styles.heroBadgeText}>CREATE YOUR TRIP</Text>
+          </View>
           <Text style={styles.heroTitle}>ふた旅へようこそ</Text>
           <Text style={styles.heroDescription}>最高の思い出を一緒に作りましょう</Text>
         </View>
@@ -59,6 +62,13 @@ export default function CreateIndexScreen() {
               </View>
 
               <Text style={styles.cardDescription}>{card.description}</Text>
+
+              {card.key === 'replan' ? (
+                <View style={styles.noteRow}>
+                  <MaterialIcons name="info-outline" size={16} color="#64748B" />
+                  <Text style={styles.noteText}>作成済みプラン詳細から再計画へ進みます</Text>
+                </View>
+              ) : null}
 
               <Pressable
                 style={[
@@ -97,7 +107,23 @@ const styles = StyleSheet.create({
   },
   heroBlock: {
     gap: 6,
+    marginBottom: 6,
+  },
+  heroBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#FFF1E8',
+    borderWidth: 1,
+    borderColor: '#FBD0B5',
     marginBottom: 4,
+  },
+  heroBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#EC5B13',
+    letterSpacing: 0.6,
   },
   heroTitle: {
     fontSize: 28,
@@ -129,7 +155,7 @@ const styles = StyleSheet.create({
   },
   cardBody: {
     paddingHorizontal: 20,
-    paddingVertical: 18,
+    paddingVertical: 20,
     gap: 14,
   },
   cardHeader: {
@@ -146,6 +172,18 @@ const styles = StyleSheet.create({
   cardDescription: {
     fontSize: 14,
     lineHeight: 22,
+    color: '#64748B',
+  },
+  noteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 2,
+  },
+  noteText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
     color: '#64748B',
   },
   cardButton: {

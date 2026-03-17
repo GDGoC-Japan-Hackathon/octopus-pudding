@@ -33,6 +33,11 @@ const formItems = [
     placeholder: '例: 2026-04-03',
   },
   {
+    key: 'participantCount',
+    label: '人数',
+    placeholder: '例: 4',
+  },
+  {
     key: 'budget',
     label: '予算（任意）',
     placeholder: '例: 120000',
@@ -47,6 +52,7 @@ export default function PlanCreateScreen() {
     destination: '',
     startDate: '',
     endDate: '',
+    participantCount: '1',
     budget: '',
   });
 
@@ -97,7 +103,7 @@ export default function PlanCreateScreen() {
               onChangeText={(value) => updateField(item.key, value)}
               placeholder={item.placeholder}
               placeholderTextColor="#94A3B8"
-              keyboardType={item.key === 'budget' ? 'numeric' : 'default'}
+              keyboardType={item.key === 'budget' || item.key === 'participantCount' ? 'numeric' : 'default'}
               autoCapitalize="none"
             />
           </View>
