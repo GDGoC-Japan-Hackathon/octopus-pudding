@@ -6,6 +6,10 @@ import { weatherMock } from '@/data/travel';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 import { travelStyles } from '@/features/travel/styles';
 import { createTrip } from '@/features/trips/api/create-trip';
+import {
+  type CreateTripFormValues,
+  validateAndBuildCreateTripPayload,
+} from '@/features/trips/utils/create-trip';
 
 const formItems = [
   {
@@ -35,12 +39,10 @@ const formItems = [
   },
 ] as const;
 
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
 export default function PlanCreateScreen() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [fields, setFields] = useState({
+  const [fields, setFields] = useState<CreateTripFormValues>({
     origin: '',
     destination: '',
     startDate: '',
@@ -53,54 +55,15 @@ export default function PlanCreateScreen() {
   };
 
   const handleSubmit = async () => {
-    const origin = fields.origin.trim();
-    const destination = fields.destination.trim();
-    const startDate = fields.startDate.trim();
-    const endDate = fields.endDate.trim();
-    const budgetText = fields.budget.trim();
-
-    if (!origin || !destination || !startDate || !endDate) {
-      Alert.alert('入力エラー', '出発地・目的地・出発日・終了日は必須です。');
+    const result = validateAndBuildCreateTripPayload(fields);
+    if (!result.ok) {
+      Alert.alert('入力エラー', result.message);
       return;
-    }
-
-    if (!DATE_PATTERN.test(startDate) || !DATE_PATTERN.test(endDate)) {
-      Alert.alert('入力エラー', '日付は YYYY-MM-DD 形式で入力してください。');
-      return;
-    }
-
-    const start = new Date(`${startDate}T00:00:00`);
-    const end = new Date(`${endDate}T00:00:00`);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
-      Alert.alert('入力エラー', '終了日は出発日以降の日付を入力してください。');
-      return;
-    }
-
-    let budget: number | undefined;
-    if (budgetText) {
-      const parsedBudget = Number(budgetText);
-      if (!Number.isInteger(parsedBudget) || parsedBudget <= 0) {
-        Alert.alert('入力エラー', '予算は正の整数で入力してください。');
-        return;
-      }
-      budget = parsedBudget;
     }
 
     try {
       setIsSubmitting(true);
-      const created = await createTrip({
-        origin,
-        destination,
-        start_date: startDate,
-        end_date: endDate,
-        status: 'planned',
-        preference: budget
-          ? {
-            atmosphere: 'のんびり',
-            budget,
-          }
-          : undefined,
-      });
+      const created = await createTrip(result.payload);
       Alert.alert('保存完了', '新規プランを作成しました。');
       router.replace({
         pathname: '/plans/detail',
