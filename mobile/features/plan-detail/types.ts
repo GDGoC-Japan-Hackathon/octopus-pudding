@@ -13,3 +13,13 @@ export type PlanDetailTimelineItem = {
   body: string;
   icon?: keyof typeof MaterialIcons.glyphMap;
 };
+
+export type PlanDetailViewModel = {
+  title: string;
+  subtitle: string;
+  budgetLabel: string;
+  moveTimeLabel: string;
+  days: PlanDetailDay[];
+  activeDayKey: string;
+  timeline: PlanDetailTimelineItem[];
+};

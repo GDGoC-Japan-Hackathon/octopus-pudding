@@ -19,8 +19,9 @@ import { weatherMock } from '@/data/travel';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 import { getTrips } from '@/features/trips/api/get-trips';
 import { type TripResponse } from '@/features/trips/types/trip-edit';
+import { type TripListItemViewModel, type TripSortOrder } from '@/features/trips/types/trip-list';
+import { filterTripListItems, toTripListItemViewModel } from '@/features/trips/utils/trip-list';
 
-type SortOrder = 'newest' | 'oldest';
 type PickerType = 'people' | 'start' | 'end' | null;
 type DatePart = 'year' | 'month' | 'day';
 
@@ -32,25 +33,12 @@ const PEOPLE_OPTIONS = Array.from({ length: 10 }, (_, index) => index + 1);
 const YEAR_OPTIONS = Array.from({ length: 31 }, (_, index) => 2000 + index);
 const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => index + 1);
 
-function parseDateValue(value: string): number | null {
-  const normalized = value.replace(/\./g, '/').replace(/-/g, '/');
-  const parsed = new Date(normalized).getTime();
-  return Number.isNaN(parsed) ? null : parsed;
-}
-
 function getDaysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
 }
 
 function formatDateLabel(year: number, month: number, day: number) {
   return `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
-}
-
-function formatStatus(status: string) {
-  if (status === 'planned') return '保存済み';
-  if (status === 'ongoing') return '進行中';
-  if (status === 'completed') return '完了';
-  return status;
 }
 
 type WheelPickerProps<T extends string | number> = {
@@ -120,7 +108,7 @@ export default function PlansListScreen() {
   const [peopleFilter, setPeopleFilter] = useState<number | null>(null);
   const [startDateFilter, setStartDateFilter] = useState('');
   const [endDateFilter, setEndDateFilter] = useState('');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
+  const [sortOrder, setSortOrder] = useState<TripSortOrder>('newest');
   const [activePicker, setActivePicker] = useState<PickerType>(null);
   const [activeDatePart, setActiveDatePart] = useState<DatePart>('year');
   const [draftPeople, setDraftPeople] = useState(1);
@@ -152,33 +140,18 @@ export default function PlansListScreen() {
     [draftMonth, draftYear]
   );
 
-  const filteredPlans = useMemo(() => {
-    const query = keyword.trim().toLowerCase();
-    const startFilterValue = startDateFilter ? parseDateValue(startDateFilter) : null;
-    const endFilterValue = endDateFilter ? parseDateValue(endDateFilter) : null;
+  const planItems = useMemo<TripListItemViewModel[]>(() => plans.map(toTripListItemViewModel), [plans]);
 
-    const filtered = plans.filter((plan) => {
-      const startValue = parseDateValue(plan.start_date);
-      const endValue = parseDateValue(plan.end_date);
-
-      const matchesKeyword =
-        query.length === 0 ||
-        plan.origin.toLowerCase().includes(query) ||
-        plan.destination.toLowerCase().includes(query) ||
-        formatStatus(plan.status).toLowerCase().includes(query);
-
-      const matchesStart = startFilterValue === null || (startValue !== null && startValue >= startFilterValue);
-      const matchesEnd = endFilterValue === null || (endValue !== null && endValue <= endFilterValue);
-
-      return matchesKeyword && matchesStart && matchesEnd;
-    });
-
-    return filtered.sort((a, b) => {
-      const aDate = parseDateValue(a.start_date) ?? 0;
-      const bDate = parseDateValue(b.start_date) ?? 0;
-      return sortOrder === 'newest' ? bDate - aDate : aDate - bDate;
-    });
-  }, [endDateFilter, keyword, plans, sortOrder, startDateFilter]);
+  const filteredPlans = useMemo(
+    () =>
+      filterTripListItems(planItems, {
+        keyword,
+        startDate: startDateFilter,
+        endDate: endDateFilter,
+        sortOrder,
+      }),
+    [endDateFilter, keyword, planItems, sortOrder, startDateFilter]
+  );
 
   const openPeoplePicker = useCallback(() => {
     setDraftPeople(peopleFilter ?? 1);
@@ -317,11 +290,11 @@ export default function PlansListScreen() {
                 <View style={styles.cardBody}>
                   <View style={styles.cardHeader}>
                     <Text style={styles.cardTitle} numberOfLines={2}>
-                      {plan.origin} → {plan.destination}
+                      {plan.title}
                     </Text>
-                    <View style={[styles.statusTag, plan.status !== 'planned' && styles.statusTagMuted]}>
-                      <Text style={[styles.statusTagText, plan.status !== 'planned' && styles.statusTagTextMuted]}>
-                        {formatStatus(plan.status)}
+                    <View style={[styles.statusTag, plan.statusVariant !== 'planned' && styles.statusTagMuted]}>
+                      <Text style={[styles.statusTagText, plan.statusVariant !== 'planned' && styles.statusTagTextMuted]}>
+                        {plan.statusLabel}
                       </Text>
                     </View>
                   </View>
@@ -329,13 +302,11 @@ export default function PlansListScreen() {
                   <View style={styles.metaStack}>
                     <View style={styles.metaRow}>
                       <MaterialIcons name="calendar-today" size={18} color="#64748B" />
-                      <Text style={styles.metaText}>
-                        {plan.start_date} - {plan.end_date}
-                      </Text>
+                      <Text style={styles.metaText}>{plan.dateLabel}</Text>
                     </View>
                     <View style={styles.metaRow}>
                       <MaterialIcons name="group" size={18} color="#64748B" />
-                      <Text style={styles.metaText}>{peopleFilter ? `${peopleFilter}名` : '人数未設定'}</Text>
+                      <Text style={styles.metaText}>{peopleFilter ? `${peopleFilter}名` : plan.peopleLabel}</Text>
                     </View>
                   </View>
 

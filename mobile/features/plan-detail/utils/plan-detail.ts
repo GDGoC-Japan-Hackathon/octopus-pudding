@@ -1,7 +1,7 @@
 import { type ItineraryItemResponse, type TripAggregateResponse } from '@/features/trips/types/trip-edit';
 import { ApiError } from '@/lib/api/client';
 
-import { type PlanDetailTimelineItem } from '@/features/plan-detail/types';
+import { type PlanDetailDay, type PlanDetailTimelineItem, type PlanDetailViewModel } from '@/features/plan-detail/types';
 
 export function parseTripId(rawTripId?: string): number | null {
   if (!rawTripId) {
@@ -159,4 +159,30 @@ export function toTimelineItems(items: ItineraryItemResponse[]): PlanDetailTimel
           ? 'train'
           : 'place',
   }));
+}
+
+export function toPlanDetailViewModel(
+  aggregate: TripAggregateResponse,
+  activeDayId: number | null
+): PlanDetailViewModel {
+  const groupedItineraryByDay = groupItineraryByDay(aggregate);
+  const activeDay =
+    groupedItineraryByDay.find((group) => group.tripDayId === activeDayId) ?? groupedItineraryByDay[0] ?? null;
+
+  const days: PlanDetailDay[] = groupedItineraryByDay.length
+    ? groupedItineraryByDay.map((group, index) => ({
+        key: String(group.tripDayId),
+        label: `Day ${group.dayNumber ?? index + 1}`,
+      }))
+    : [{ key: 'day1', label: 'Day 1' }];
+
+  return {
+    title: `${aggregate.trip.origin} → ${aggregate.trip.destination}`,
+    subtitle: `${aggregate.trip.start_date} - ${aggregate.trip.end_date} ・ ${statusLabel(aggregate.trip.status)}`,
+    budgetLabel: budgetLabel(aggregate),
+    moveTimeLabel: activeDay ? moveTimeLabel(activeDay.items) : '未設定',
+    days,
+    activeDayKey: activeDay ? String(activeDay.tripDayId) : 'day1',
+    timeline: activeDay ? toTimelineItems(activeDay.items) : [],
+  };
 }
