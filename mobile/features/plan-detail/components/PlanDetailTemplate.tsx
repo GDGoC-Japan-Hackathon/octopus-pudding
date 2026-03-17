@@ -21,7 +21,7 @@ type PlanDetailTemplateProps = {
   activeDayKey: string;
   onSelectDay: (dayKey: string) => void;
   timeline: PlanDetailTimelineItem[];
-  primaryActionLabel: string;
+  primaryActionLabel?: string;
   onPrimaryAction?: () => void;
   primaryActionSlot?: ReactNode;
   primaryButtonVariant?: 'orange' | 'gray';
