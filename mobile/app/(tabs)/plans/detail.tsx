@@ -24,7 +24,7 @@ import {
 } from '@/features/trips/api/ai-plan-generation';
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
 import { type AiPlanGenerationResponse } from '@/features/trips/types/ai-plan-generation';
-import { type TripAggregateResponse } from '@/features/trips/types/trip-edit';
+import { type TripDetailAggregateResponse } from '@/features/trips/types/trip-detail';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 
 const PLAN_IMAGE_URL =
@@ -33,7 +33,7 @@ const PLAN_IMAGE_URL =
 export default function PlanDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const tripId = useMemo(() => parseTripId(id), [id]);
-  const [aggregate, setAggregate] = useState<TripAggregateResponse | null>(null);
+  const [aggregate, setAggregate] = useState<TripDetailAggregateResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [generation, setGeneration] = useState<AiPlanGenerationResponse | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);

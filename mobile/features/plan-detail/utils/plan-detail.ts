@@ -1,4 +1,7 @@
-import { type ItineraryItemResponse, type TripAggregateResponse } from '@/features/trips/types/trip-edit';
+import {
+  type TripDetailAggregateResponse,
+  type TripDetailItineraryItemResponse,
+} from '@/features/trips/types/trip-detail';
 import { ApiError } from '@/lib/api/client';
 
 import { type PlanDetailDay, type PlanDetailTimelineItem, type PlanDetailViewModel } from '@/features/plan-detail/types';
@@ -75,7 +78,7 @@ export function toTimeLabel(value?: string | null) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-export function budgetLabel(aggregate: TripAggregateResponse) {
+export function budgetLabel(aggregate: TripDetailAggregateResponse) {
   const budget = aggregate.preference?.budget;
   if (!budget) {
     return '未設定';
@@ -83,7 +86,7 @@ export function budgetLabel(aggregate: TripAggregateResponse) {
   return `¥${budget.toLocaleString()}`;
 }
 
-export function moveTimeLabel(items: ItineraryItemResponse[]) {
+export function moveTimeLabel(items: TripDetailItineraryItemResponse[]) {
   if (!items.length) {
     return '未設定';
   }
@@ -102,7 +105,7 @@ export function statusLabel(status: string) {
   return status;
 }
 
-export function groupItineraryByDay(aggregate: TripAggregateResponse | null) {
+export function groupItineraryByDay(aggregate: TripDetailAggregateResponse | null) {
   if (!aggregate) {
     return [];
   }
@@ -118,7 +121,7 @@ export function groupItineraryByDay(aggregate: TripAggregateResponse | null) {
       tripDayId: number;
       dayNumber?: number;
       date?: string | null;
-      items: ItineraryItemResponse[];
+      items: TripDetailItineraryItemResponse[];
     }
   >();
 
@@ -145,7 +148,7 @@ export function groupItineraryByDay(aggregate: TripAggregateResponse | null) {
     }));
 }
 
-export function toTimelineItems(items: ItineraryItemResponse[]): PlanDetailTimelineItem[] {
+export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanDetailTimelineItem[] {
   return items.map((item) => ({
     id: item.id,
     start: toTimeLabel(item.start_time),
@@ -162,7 +165,7 @@ export function toTimelineItems(items: ItineraryItemResponse[]): PlanDetailTimel
 }
 
 export function toPlanDetailViewModel(
-  aggregate: TripAggregateResponse,
+  aggregate: TripDetailAggregateResponse,
   activeDayId: number | null
 ): PlanDetailViewModel {
   const groupedItineraryByDay = groupItineraryByDay(aggregate);

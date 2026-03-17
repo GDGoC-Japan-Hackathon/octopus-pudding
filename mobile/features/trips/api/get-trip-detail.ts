@@ -1,7 +1,7 @@
 import { apiFetch } from '@/lib/api/client';
 import { endpoints } from '@/lib/api/endpoints';
-import { type TripAggregateResponse } from '@/features/trips/types/trip-edit';
+import { type TripDetailAggregateResponse } from '@/features/trips/types/trip-detail';
 
-export async function getTripDetail(tripId: number): Promise<TripAggregateResponse> {
-  return apiFetch<TripAggregateResponse>(endpoints.trips.detail(tripId));
+export async function getTripDetail(tripId: number): Promise<TripDetailAggregateResponse> {
+  return apiFetch<TripDetailAggregateResponse>(endpoints.trips.detail(tripId));
 }
