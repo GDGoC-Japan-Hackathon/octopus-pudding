@@ -1,6 +1,7 @@
+import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { weatherMock } from '@/data/travel';
 import { AppHeader } from '@/features/travel/components/AppHeader';
@@ -47,6 +48,7 @@ const formItems = [
 export default function PlanCreateScreen() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResolvingCurrentLocation, setIsResolvingCurrentLocation] = useState(false);
   const [fields, setFields] = useState<CreateTripFormValues>({
     origin: '',
     destination: '',
@@ -59,6 +61,45 @@ export default function PlanCreateScreen() {
   const updateField = (key: (typeof formItems)[number]['key'], value: string) => {
     setFields((prev) => ({ ...prev, [key]: value }));
   };
+
+  const resolveCurrentLocationLabel = useCallback(async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      throw new Error('位置情報の利用が許可されていません。端末の設定から許可してください。');
+    }
+
+    const currentPosition = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+
+    const [place] = await Location.reverseGeocodeAsync({
+      latitude: currentPosition.coords.latitude,
+      longitude: currentPosition.coords.longitude,
+    });
+
+    const areaParts = [place?.region, place?.city, place?.district].filter(
+      (value): value is string => Boolean(value && value.trim())
+    );
+
+    if (areaParts.length) {
+      return areaParts.join(' ');
+    }
+
+    return `${currentPosition.coords.latitude.toFixed(4)}, ${currentPosition.coords.longitude.toFixed(4)}`;
+  }, []);
+
+  const handleUseCurrentLocation = useCallback(async () => {
+    try {
+      setIsResolvingCurrentLocation(true);
+      const origin = await resolveCurrentLocationLabel();
+      updateField('origin', origin);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '現在地の取得に失敗しました。';
+      Alert.alert('現在地を取得できませんでした', message);
+    } finally {
+      setIsResolvingCurrentLocation(false);
+    }
+  }, [resolveCurrentLocationLabel]);
 
   const handleSubmit = async () => {
     const result = validateAndBuildCreateTripPayload(fields);
@@ -96,7 +137,26 @@ export default function PlanCreateScreen() {
 
         {formItems.map((item) => (
           <View key={item.key}>
-            <Text style={[travelStyles.sectionBody, { fontWeight: '700' }]}>{item.label}</Text>
+            <View style={travelStyles.rowWrap}>
+              <Text style={[travelStyles.sectionBody, { fontWeight: '700' }]}>{item.label}</Text>
+              {item.key === 'origin' ? (
+                <Pressable
+                  style={[
+                    travelStyles.pillButton,
+                    styles.currentLocationButton,
+                    isResolvingCurrentLocation ? styles.currentLocationButtonDisabled : null,
+                  ]}
+                  onPress={handleUseCurrentLocation}
+                  disabled={isResolvingCurrentLocation}
+                >
+                  {isResolvingCurrentLocation ? (
+                    <ActivityIndicator color="#F97316" size="small" />
+                  ) : (
+                    <Text style={[travelStyles.pillText, styles.currentLocationButtonText]}>現在地を使う</Text>
+                  )}
+                </Pressable>
+              ) : null}
+            </View>
             <TextInput
               style={travelStyles.input}
               value={fields[item.key]}
@@ -124,3 +184,18 @@ export default function PlanCreateScreen() {
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  currentLocationButton: {
+    minWidth: 112,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 7,
+  },
+  currentLocationButtonDisabled: {
+    opacity: 0.7,
+  },
+  currentLocationButtonText: {
+    color: '#F97316',
+  },
+});
