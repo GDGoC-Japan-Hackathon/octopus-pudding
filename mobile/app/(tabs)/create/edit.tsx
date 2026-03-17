@@ -11,11 +11,15 @@ import { addTripMember, removeTripMember } from '@/features/trips/api/trip-membe
 import { updateTrip } from '@/features/trips/api/update-trip';
 import { upsertTripPreference } from '@/features/trips/api/upsert-trip-preference';
 import { type TripAtmosphere } from '@/features/trips/types/create-trip';
+import {
+  getTripEditErrorMessage,
+  parsePreferenceBudget,
+  validateAndBuildTripBasicPayload,
+} from '@/features/trips/utils/edit-trip';
 import { travelStyles } from '@/features/travel/styles';
 import { weatherMock } from '@/data/travel';
 import { ApiError } from '@/lib/api/client';
 
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ATMOSPHERE_OPTIONS: TripAtmosphere[] = ['のんびり', 'アクティブ', 'グルメ', '映え'];
 
 type EditParams = {
@@ -32,22 +36,6 @@ function parseTripId(raw: string | string[] | undefined): number | null {
     return null;
   }
   return parsed;
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (!(error instanceof ApiError)) {
-    return fallback;
-  }
-  if (error.status === 401) {
-    return '認証期限が切れています。再ログイン後にお試しください。';
-  }
-  if (error.status === 403) {
-    return 'このプランを編集する権限がありません。';
-  }
-  if (error.status === 404) {
-    return '対象プランが見つかりませんでした。';
-  }
-  return `${fallback} (${error.status})`;
 }
 
 export default function TripEditScreen() {
@@ -95,7 +83,7 @@ export default function TripEditScreen() {
       const list = await getFriends();
       setFriends(list);
     } catch (error) {
-      Alert.alert('取得失敗', getErrorMessage(error, 'フレンド一覧の取得に失敗しました'));
+      Alert.alert('取得失敗', getTripEditErrorMessage(error, 'フレンド一覧の取得に失敗しました'));
       setFriends([]);
     } finally {
       setIsLoadingFriends(false);
@@ -112,7 +100,7 @@ export default function TripEditScreen() {
         setIsLoading(true);
         await Promise.all([refreshDetail(tripId), refreshFriends()]);
       } catch (error) {
-        Alert.alert('取得失敗', getErrorMessage(error, 'プラン詳細の取得に失敗しました'));
+        Alert.alert('取得失敗', getTripEditErrorMessage(error, 'プラン詳細の取得に失敗しました'));
       } finally {
         setIsLoading(false);
       }
@@ -125,27 +113,24 @@ export default function TripEditScreen() {
     if (!tripId || isSavingBasic) {
       return;
     }
-    if (!origin.trim() || !destination.trim() || !startDate.trim() || !endDate.trim()) {
-      Alert.alert('入力エラー', '出発地・目的地・出発日・終了日は必須です。');
-      return;
-    }
-    if (!DATE_PATTERN.test(startDate.trim()) || !DATE_PATTERN.test(endDate.trim())) {
-      Alert.alert('入力エラー', '日付は YYYY-MM-DD 形式で入力してください。');
+    const result = validateAndBuildTripBasicPayload({
+      origin,
+      destination,
+      startDate,
+      endDate,
+    });
+    if (!result.ok) {
+      Alert.alert('入力エラー', result.message);
       return;
     }
 
     try {
       setIsSavingBasic(true);
-      await updateTrip(tripId, {
-        origin: origin.trim(),
-        destination: destination.trim(),
-        start_date: startDate.trim(),
-        end_date: endDate.trim(),
-      });
+      await updateTrip(tripId, result.payload);
       await refreshDetail(tripId);
       Alert.alert('更新完了', '基本情報を更新しました。');
     } catch (error) {
-      Alert.alert('更新失敗', getErrorMessage(error, '基本情報の更新に失敗しました'));
+      Alert.alert('更新失敗', getTripEditErrorMessage(error, '基本情報の更新に失敗しました'));
     } finally {
       setIsSavingBasic(false);
     }
@@ -156,27 +141,26 @@ export default function TripEditScreen() {
       return;
     }
 
-    let parsedBudget: number | undefined;
-    if (budget.trim()) {
-      const value = Number(budget.trim());
-      if (!Number.isInteger(value) || value <= 0) {
-        Alert.alert('入力エラー', '予算は正の整数で入力してください。');
-        return;
-      }
-      parsedBudget = value;
+    const result = parsePreferenceBudget({
+      budget,
+      transportType,
+    });
+    if (!result.ok) {
+      Alert.alert('入力エラー', result.message);
+      return;
     }
 
     try {
       setIsSavingPreference(true);
       await upsertTripPreference(tripId, {
         atmosphere,
-        budget: parsedBudget,
-        transport_type: transportType.trim() || undefined,
+        budget: result.budget,
+        transport_type: result.transportType,
       });
       await refreshDetail(tripId);
       Alert.alert('更新完了', '好みを更新しました。');
     } catch (error) {
-      Alert.alert('更新失敗', getErrorMessage(error, '好みの更新に失敗しました'));
+      Alert.alert('更新失敗', getTripEditErrorMessage(error, '好みの更新に失敗しました'));
     } finally {
       setIsSavingPreference(false);
     }
