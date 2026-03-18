@@ -165,11 +165,6 @@ export default function LoginScreen() {
     <View style={styles.screen}>
       <View style={styles.card}>
         <Text style={styles.title}>{mode === 'login' ? 'ログイン' : '新規登録'}</Text>
-        <Text style={styles.subtitle}>
-          {mode === 'login'
-            ? 'Firebase認証でログインします。'
-            : 'Firebase認証でアカウントを作成します。'}
-        </Text>
 
         <Text style={styles.label}>メールアドレス</Text>
         <TextInput
@@ -312,11 +307,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     color: '#0F172A',
-  },
-  subtitle: {
-    fontSize: 13,
-    color: '#64748B',
-    marginBottom: 4,
   },
   label: {
     fontSize: 13,
