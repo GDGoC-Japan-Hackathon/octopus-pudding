@@ -8,6 +8,8 @@ import { type PlanDetailDay, type PlanDetailTimelineItem } from '@/features/plan
 type PlanDetailTemplateProps = {
   headerTitle: string;
   weatherLabel: string;
+  headerLeftSlot?: ReactNode;
+  headerRightSlot?: ReactNode;
   heroImage: string;
   heroBadge: string;
   title: string;
@@ -33,6 +35,8 @@ type PlanDetailTemplateProps = {
 export function PlanDetailTemplate({
   headerTitle,
   weatherLabel,
+  headerLeftSlot,
+  headerRightSlot,
   heroImage,
   heroBadge,
   title,
@@ -56,7 +60,7 @@ export function PlanDetailTemplate({
 }: PlanDetailTemplateProps) {
   return (
     <View style={styles.screen}>
-      <AppHeader title={headerTitle} weatherLabel={weatherLabel} />
+      <AppHeader title={headerTitle} weatherLabel={weatherLabel} leftSlot={headerLeftSlot} rightSlot={headerRightSlot} />
 
       <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
         <View style={styles.heroWrap}>

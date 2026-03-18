@@ -39,6 +39,14 @@ export default function PlanDetailScreen() {
   const [generation, setGeneration] = useState<AiPlanGenerationResponse | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeDayId, setActiveDayId] = useState<number | null>(null);
+  const headerBackSlot = (
+    <Link href="/plans" asChild>
+      <Pressable style={styles.headerBackButton}>
+        <MaterialIcons name="arrow-back" size={16} color="#EC5B13" />
+        <Text style={styles.headerBackButtonText}>戻る</Text>
+      </Pressable>
+    </Link>
+  );
 
   const groupedItineraryByDay = useMemo(() => groupItineraryByDay(aggregate), [aggregate]);
 
@@ -134,7 +142,7 @@ export default function PlanDetailScreen() {
   if (!tripId) {
     return (
       <View style={styles.screen}>
-        <AppHeader title="計画詳細" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
+        <AppHeader title="計画詳細" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} leftSlot={headerBackSlot} />
         <View style={styles.centerState}>
           <Text style={styles.centerTitle}>tripId が不正です</Text>
         </View>
@@ -145,7 +153,7 @@ export default function PlanDetailScreen() {
   if (isLoading) {
     return (
       <View style={styles.screen}>
-        <AppHeader title="計画詳細" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
+        <AppHeader title="計画詳細" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} leftSlot={headerBackSlot} />
         <View style={styles.centerState}>
           <ActivityIndicator color="#EC5B13" />
           <Text style={styles.centerBody}>読み込み中...</Text>
@@ -157,7 +165,7 @@ export default function PlanDetailScreen() {
   if (!aggregate) {
     return (
       <View style={styles.screen}>
-        <AppHeader title="計画詳細" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
+        <AppHeader title="計画詳細" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} leftSlot={headerBackSlot} />
         <View style={styles.centerState}>
           <Text style={styles.centerTitle}>計画が見つかりませんでした</Text>
         </View>
@@ -173,6 +181,7 @@ export default function PlanDetailScreen() {
     <PlanDetailTemplate
       headerTitle="計画詳細"
       weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`}
+      headerLeftSlot={headerBackSlot}
       heroImage={PLAN_IMAGE_URL}
       heroBadge="LIVE MAP PREVIEW"
       title={detailView.title}
@@ -236,6 +245,23 @@ const styles = StyleSheet.create({
   centerBody: {
     fontSize: 14,
     color: '#64748B',
+  },
+  headerBackButton: {
+    minHeight: 32,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    backgroundColor: '#FFF7ED',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  headerBackButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#EC5B13',
   },
   actionRow: {
     flexDirection: 'row',

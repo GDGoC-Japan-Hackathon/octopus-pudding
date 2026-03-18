@@ -32,8 +32,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const syncBackendUser = useCallback(async (user: User): Promise<AuthenticatedUser> => {
+    console.log('Backend sync start', { uid: user.uid, email: user.email });
     const idToken = await user.getIdToken(true);
-    return fetchAuthenticatedUserWithToken(idToken);
+    const authenticatedUser = await fetchAuthenticatedUserWithToken(idToken);
+    console.log('Backend sync success', { id: authenticatedUser.id, email: authenticatedUser.email });
+    return authenticatedUser;
   }, []);
 
   const getIdToken = useCallback(async (forceRefresh = false): Promise<string | null> => {
@@ -57,6 +60,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const auth = getFirebaseAuth();
     const unsubscribe = onAuthStateChanged(auth, async (nextUser: User | null) => {
+      console.log('onAuthStateChanged', {
+        uid: nextUser?.uid ?? null,
+        email: nextUser?.email ?? null,
+      });
       setFirebaseUser(nextUser);
       if (!nextUser) {
         setBackendUser(null);
@@ -67,7 +74,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const me = await syncBackendUser(nextUser);
         setBackendUser(me);
-      } catch {
+      } catch (error) {
+        console.error('Backend sync from auth state failed', error);
         setBackendUser(null);
       } finally {
         setIsLoading(false);
@@ -80,34 +88,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = useCallback(async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      const user = await signInWithFirebaseEmail(email, password);
-      const me = await syncBackendUser(user);
-      setFirebaseUser(user);
-      setBackendUser(me);
+      console.log('Context signIn start', { email });
+      await signInWithFirebaseEmail(email, password);
     } catch (error) {
+      console.error('Context signIn failed', error);
       setFirebaseUser(null);
       setBackendUser(null);
-      throw error;
-    } finally {
       setIsLoading(false);
+      throw error;
     }
-  }, [syncBackendUser]);
+  }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      const user = await signUpWithFirebaseEmail(email, password);
-      const me = await syncBackendUser(user);
-      setFirebaseUser(user);
-      setBackendUser(me);
+      console.log('Context signUp start', { email });
+      await signUpWithFirebaseEmail(email, password);
     } catch (error) {
+      console.error('Context signUp failed', error);
       setFirebaseUser(null);
       setBackendUser(null);
-      throw error;
-    } finally {
       setIsLoading(false);
+      throw error;
     }
-  }, [syncBackendUser]);
+  }, []);
 
   const signOut = useCallback(async () => {
     await signOutFromFirebase();

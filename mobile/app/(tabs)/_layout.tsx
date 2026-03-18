@@ -1,17 +1,18 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 
 export default function TabLayout() {
   const { isAuthenticated, isLoading } = useAuth();
+  const insets = useSafeAreaInsets();
 
   if (isLoading) {
     return (
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <View style={styles.loading}>
           <ActivityIndicator />
         </View>
@@ -24,7 +25,7 @@ export default function TabLayout() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -32,10 +33,11 @@ export default function TabLayout() {
           tabBarInactiveTintColor: '#64748B',
           tabBarButton: HapticTab,
           tabBarStyle: {
-            height: 60,
-            paddingTop: 2,
-            paddingBottom: 2,
+            height: 60 + insets.bottom,
+            paddingTop: 4,
+            paddingBottom: Math.max(insets.bottom, 6),
             backgroundColor: '#FFFFFF',
+            borderTopWidth: 1,
             borderTopColor: '#E2E8F0',
             overflow: 'visible',
           },
@@ -91,6 +93,10 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   loading: {
     flex: 1,
     alignItems: 'center',
@@ -107,7 +113,7 @@ const styles = StyleSheet.create({
   createButtonWrap: {
     width: 63,
     height: 63,
-    marginTop: 5,
+    marginTop: -18,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -1,6 +1,25 @@
+import { MaterialIcons } from '@expo/vector-icons';
+import DateTimePicker, {
+  DateTimePickerAndroid,
+  type DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
+import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Modal,
+  PanResponder,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { weatherMock } from '@/data/travel';
 import { AppHeader } from '@/features/travel/components/AppHeader';
@@ -19,18 +38,8 @@ const formItems = [
   },
   {
     key: 'destination',
-    label: '目的地',
-    placeholder: '例: 札幌',
-  },
-  {
-    key: 'startDate',
-    label: '出発日',
-    placeholder: '例: 2026-04-01',
-  },
-  {
-    key: 'endDate',
-    label: '終了日',
-    placeholder: '例: 2026-04-03',
+    label: '目的地（都市・エリア）',
+    placeholder: '例: 京都 / 札幌 / 箱根 / 那覇',
   },
   {
     key: 'participantCount',
@@ -44,9 +53,52 @@ const formItems = [
   },
 ] as const;
 
+const destinationSuggestions = ['東京', '大阪', '京都', '札幌', '福岡', '那覇', '箱根', '軽井沢'] as const;
+type DateFieldKey = 'startDate' | 'endDate';
+const BUDGET_SLIDER_MIN = 0;
+const BUDGET_SLIDER_STEP = 10000;
+
+function parseDateInput(value: string) {
+  if (!value) return null;
+  const [yearText, monthText, dayText] = value.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  const parsed = new Date(year, month - 1, day);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatDateInput(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatDateDisplay(value: string) {
+  const parsed = parseDateInput(value);
+  if (!parsed) return value;
+  return `${parsed.getFullYear()}/${String(parsed.getMonth() + 1).padStart(2, '0')}/${String(parsed.getDate()).padStart(2, '0')}`;
+}
+
+function clampBudgetValue(value: number, max: number) {
+  const stepped = Math.round(value / BUDGET_SLIDER_STEP) * BUDGET_SLIDER_STEP;
+  return Math.min(max, Math.max(BUDGET_SLIDER_MIN, stepped));
+}
+
 export default function PlanCreateScreen() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResolvingCurrentLocation, setIsResolvingCurrentLocation] = useState(false);
+  const [activeDateField, setActiveDateField] = useState<DateFieldKey>('startDate');
+  const [isIosDateModalVisible, setIsIosDateModalVisible] = useState(false);
+  const [budgetSliderWidth, setBudgetSliderWidth] = useState(1);
+  const budgetSliderProgress = useRef(new Animated.Value(0)).current;
   const [fields, setFields] = useState<CreateTripFormValues>({
     origin: '',
     destination: '',
@@ -59,6 +111,206 @@ export default function PlanCreateScreen() {
   const updateField = (key: (typeof formItems)[number]['key'], value: string) => {
     setFields((prev) => ({ ...prev, [key]: value }));
   };
+
+  const applyDateField = useCallback((field: DateFieldKey, date: Date) => {
+    const formatted = formatDateInput(date);
+
+    setFields((prev) => {
+      const next = { ...prev, [field]: formatted };
+      const start = parseDateInput(field === 'startDate' ? formatted : prev.startDate);
+      const end = parseDateInput(field === 'endDate' ? formatted : prev.endDate);
+
+      if (start && end && end.getTime() < start.getTime()) {
+        if (field === 'startDate') {
+          next.endDate = formatted;
+        } else {
+          next.startDate = formatted;
+        }
+      }
+
+      return next;
+    });
+  }, []);
+
+  const openAndroidDatePicker = useCallback(
+    (field: DateFieldKey) => {
+      const baseValue =
+        parseDateInput(fields[field]) ??
+        (field === 'endDate' ? parseDateInput(fields.startDate) : null) ??
+        new Date();
+
+      DateTimePickerAndroid.open({
+        mode: 'date',
+        display: 'calendar',
+        value: baseValue,
+        minimumDate: field === 'endDate' ? parseDateInput(fields.startDate) ?? undefined : undefined,
+        onChange: (event, selectedDate) => {
+          if (event.type !== 'set' || !selectedDate) {
+            return;
+          }
+
+          applyDateField(field, selectedDate);
+
+          if (field === 'startDate') {
+            setTimeout(() => {
+              openAndroidDatePicker('endDate');
+            }, 0);
+          }
+        },
+      });
+    },
+    [applyDateField, fields.endDate, fields.startDate]
+  );
+
+  const openSchedulePicker = useCallback(() => {
+    if (Platform.OS === 'android') {
+      openAndroidDatePicker('startDate');
+      return;
+    }
+
+    setActiveDateField(fields.endDate ? 'endDate' : 'startDate');
+    setIsIosDateModalVisible(true);
+  }, [fields.endDate, openAndroidDatePicker]);
+
+  const iosPickerValue = useMemo(
+    () =>
+      parseDateInput(fields[activeDateField]) ??
+      (activeDateField === 'endDate' ? parseDateInput(fields.startDate) : null) ??
+      new Date(),
+    [activeDateField, fields.endDate, fields.startDate]
+  );
+
+  const scheduleLabel = useMemo(() => {
+    if (fields.startDate && fields.endDate) {
+      return `${formatDateDisplay(fields.startDate)} 〜 ${formatDateDisplay(fields.endDate)}`;
+    }
+    if (fields.startDate) {
+      return `${formatDateDisplay(fields.startDate)} 〜 終了日を選択`;
+    }
+    return '開始日〜終了日を選択';
+  }, [fields.endDate, fields.startDate]);
+
+  const participantCountNumber = useMemo(() => {
+    const parsed = Number(fields.participantCount);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      return 1;
+    }
+    return parsed;
+  }, [fields.participantCount]);
+
+  const budgetSliderMax = useMemo(() => participantCountNumber * 100000, [participantCountNumber]);
+
+  const budgetRawValue = useMemo(() => {
+    const parsed = Number(fields.budget);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 0;
+    }
+    return parsed;
+  }, [fields.budget]);
+
+  const budgetSliderValue = useMemo(() => Math.min(budgetRawValue, budgetSliderMax), [budgetRawValue, budgetSliderMax]);
+
+  const budgetDisplayLabel = useMemo(() => {
+    if (budgetRawValue <= 0) {
+      return '未設定';
+    }
+    if (budgetRawValue >= budgetSliderMax) {
+      return `${budgetSliderMax.toLocaleString('ja-JP')}円+`;
+    }
+    return `${budgetRawValue.toLocaleString('ja-JP')}円`;
+  }, [budgetRawValue, budgetSliderMax]);
+
+  const updateBudgetFromRatio = useCallback(
+    (ratio: number) => {
+      const normalized = Math.min(1, Math.max(0, ratio));
+      budgetSliderProgress.setValue(normalized);
+      const nextValue = clampBudgetValue(BUDGET_SLIDER_MIN + normalized * budgetSliderMax, budgetSliderMax);
+      updateField('budget', nextValue <= 0 ? '' : String(nextValue));
+    },
+    [budgetSliderMax, budgetSliderProgress, updateField]
+  );
+
+  const budgetSliderPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (event) => {
+          updateBudgetFromRatio(event.nativeEvent.locationX / budgetSliderWidth);
+        },
+        onPanResponderMove: (event) => {
+          updateBudgetFromRatio(event.nativeEvent.locationX / budgetSliderWidth);
+        },
+      }),
+    [budgetSliderWidth, updateBudgetFromRatio]
+  );
+
+  useEffect(() => {
+    budgetSliderProgress.setValue(budgetSliderMax > 0 ? budgetSliderValue / budgetSliderMax : 0);
+  }, [budgetSliderMax, budgetSliderProgress, budgetSliderValue]);
+
+  const budgetFillWidth = useMemo(
+    () => budgetSliderProgress.interpolate({ inputRange: [0, 1], outputRange: [0, budgetSliderWidth] }),
+    [budgetSliderProgress, budgetSliderWidth]
+  );
+
+  const budgetThumbTranslateX = useMemo(
+    () =>
+      budgetSliderProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, Math.max(0, budgetSliderWidth - 24)],
+      }),
+    [budgetSliderProgress, budgetSliderWidth]
+  );
+
+  const handleIosDateChange = useCallback(
+    (event: DateTimePickerEvent, selectedDate?: Date) => {
+      if (event.type === 'dismissed' || !selectedDate) {
+        return;
+      }
+      applyDateField(activeDateField, selectedDate);
+    },
+    [activeDateField, applyDateField]
+  );
+
+  const resolveCurrentLocationLabel = useCallback(async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      throw new Error('位置情報の利用が許可されていません。端末の設定から許可してください。');
+    }
+
+    const currentPosition = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+
+    const [place] = await Location.reverseGeocodeAsync({
+      latitude: currentPosition.coords.latitude,
+      longitude: currentPosition.coords.longitude,
+    });
+
+    const areaParts = [place?.region, place?.city, place?.district].filter(
+      (value): value is string => Boolean(value && value.trim())
+    );
+
+    if (areaParts.length) {
+      return areaParts.join(' ');
+    }
+
+    return `${currentPosition.coords.latitude.toFixed(4)}, ${currentPosition.coords.longitude.toFixed(4)}`;
+  }, []);
+
+  const handleUseCurrentLocation = useCallback(async () => {
+    try {
+      setIsResolvingCurrentLocation(true);
+      const origin = await resolveCurrentLocationLabel();
+      updateField('origin', origin);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '現在地の取得に失敗しました。';
+      Alert.alert('現在地を取得できませんでした', message);
+    } finally {
+      setIsResolvingCurrentLocation(false);
+    }
+  }, [resolveCurrentLocationLabel, updateField]);
 
   const handleSubmit = async () => {
     const result = validateAndBuildCreateTripPayload(fields);
@@ -96,16 +348,151 @@ export default function PlanCreateScreen() {
 
         {formItems.map((item) => (
           <View key={item.key}>
-            <Text style={[travelStyles.sectionBody, { fontWeight: '700' }]}>{item.label}</Text>
-            <TextInput
-              style={travelStyles.input}
-              value={fields[item.key]}
-              onChangeText={(value) => updateField(item.key, value)}
-              placeholder={item.placeholder}
-              placeholderTextColor="#94A3B8"
-              keyboardType={item.key === 'budget' || item.key === 'participantCount' ? 'numeric' : 'default'}
-              autoCapitalize="none"
-            />
+            <View style={travelStyles.rowWrap}>
+              <Text style={[travelStyles.sectionBody, styles.fieldLabel]}>{item.label}</Text>
+              {item.key === 'origin' ? (
+                <Pressable
+                  style={[
+                    travelStyles.pillButton,
+                    styles.currentLocationButton,
+                    isResolvingCurrentLocation ? styles.currentLocationButtonDisabled : null,
+                  ]}
+                  onPress={handleUseCurrentLocation}
+                  disabled={isResolvingCurrentLocation}
+                >
+                  {isResolvingCurrentLocation ? (
+                    <ActivityIndicator color="#F97316" size="small" />
+                  ) : (
+                    <Text style={[travelStyles.pillText, styles.currentLocationButtonText]}>現在地を使う</Text>
+                  )}
+                </Pressable>
+              ) : null}
+            </View>
+            {item.key === 'participantCount' ? (
+              <View style={styles.stepperWrap}>
+                <Pressable
+                  style={[styles.stepperButton, Number(fields.participantCount) <= 1 ? styles.stepperButtonDisabled : null]}
+                  onPress={() => {
+                    const next = Math.max(1, Number(fields.participantCount || '1') - 1);
+                    updateField('participantCount', String(next));
+                  }}
+                  disabled={Number(fields.participantCount) <= 1}
+                >
+                  <MaterialIcons name="remove" size={20} color={Number(fields.participantCount) <= 1 ? '#94A3B8' : '#334155'} />
+                </Pressable>
+
+                <View style={styles.stepperValueWrap}>
+                  <Text style={styles.stepperValueText}>{fields.participantCount || '1'}</Text>
+                  <Text style={styles.stepperValueUnit}>人</Text>
+                </View>
+
+                <Pressable
+                  style={styles.stepperButton}
+                  onPress={() => {
+                    const next = Math.max(1, Number(fields.participantCount || '1') + 1);
+                    updateField('participantCount', String(next));
+                  }}
+                >
+                  <MaterialIcons name="add" size={20} color="#334155" />
+                </Pressable>
+              </View>
+            ) : item.key === 'budget' ? (
+              <View style={styles.budgetSection}>
+                <View style={styles.budgetHeaderRow}>
+                  <Text style={styles.budgetValueLabel}>{budgetDisplayLabel}</Text>
+                  <Text style={styles.budgetRangeLabel}>{budgetSliderMax.toLocaleString('ja-JP')}円+</Text>
+                </View>
+                <Text style={styles.budgetHintText}>1人あたり上限目安: 100,000円+</Text>
+
+                <View
+                  style={styles.budgetSliderWrap}
+                  onLayout={(event) => setBudgetSliderWidth(Math.max(1, event.nativeEvent.layout.width))}
+                  {...budgetSliderPanResponder.panHandlers}
+                >
+                  <View style={styles.budgetSliderTrack} />
+                  <Animated.View
+                    style={[
+                      styles.budgetSliderFill,
+                      { width: budgetFillWidth },
+                    ]}
+                  />
+                  <Animated.View
+                    style={[
+                      styles.budgetSliderThumb,
+                      { transform: [{ translateX: budgetThumbTranslateX }] },
+                    ]}
+                  />
+                </View>
+
+                <TextInput
+                  style={[travelStyles.input, styles.budgetManualInput]}
+                  value={fields.budget}
+                  onChangeText={(value) => {
+                    const sanitized = value.replace(/[^0-9]/g, '');
+                    updateField('budget', sanitized);
+                  }}
+                  placeholder="例: 120000"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                />
+              </View>
+            ) : (
+              <TextInput
+                style={travelStyles.input}
+                value={fields[item.key]}
+                onChangeText={(value) => updateField(item.key, value)}
+                placeholder={item.placeholder}
+                placeholderTextColor="#94A3B8"
+                keyboardType="default"
+                autoCapitalize="none"
+              />
+            )}
+            {item.key === 'destination' ? (
+              <>
+                <View style={styles.destinationSuggestionWrap}>
+                  {destinationSuggestions.map((suggestion) => {
+                    const isSelected = fields.destination.trim() === suggestion;
+                    return (
+                      <Pressable
+                        key={suggestion}
+                        style={[styles.destinationSuggestionChip, isSelected ? styles.destinationSuggestionChipSelected : null]}
+                        onPress={() => updateField('destination', suggestion)}
+                      >
+                        <Text
+                          style={[
+                            styles.destinationSuggestionText,
+                            isSelected ? styles.destinationSuggestionTextSelected : null,
+                          ]}
+                        >
+                          {suggestion}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.scheduleSection}>
+                  <Text style={[travelStyles.sectionBody, styles.fieldLabel]}>日程</Text>
+                  <Pressable style={styles.scheduleInput} onPress={openSchedulePicker}>
+                    <View style={styles.scheduleInputBody}>
+                      <MaterialIcons name="calendar-month" size={20} color="#F97316" />
+                      <View style={styles.scheduleTextWrap}>
+                        <Text
+                          style={[
+                            styles.scheduleValueText,
+                            !(fields.startDate || fields.endDate) ? styles.schedulePlaceholderText : null,
+                          ]}
+                        >
+                          {scheduleLabel}
+                        </Text>
+                        <Text style={styles.scheduleHelperText}>タップしてカレンダーで選択</Text>
+                      </View>
+                    </View>
+                    <MaterialIcons name="chevron-right" size={20} color="#94A3B8" />
+                  </Pressable>
+                </View>
+              </>
+            ) : null}
           </View>
         ))}
 
@@ -121,6 +508,302 @@ export default function PlanCreateScreen() {
           )}
         </Pressable>
       </View>
+
+      <Modal visible={isIosDateModalVisible} transparent animationType="slide" onRequestClose={() => setIsIosDateModalVisible(false)}>
+        <View style={styles.dateModalOverlay}>
+          <View style={styles.dateModalSheet}>
+            <View style={styles.dateModalHeader}>
+              <Text style={styles.dateModalTitle}>日程を選択</Text>
+              <Pressable onPress={() => setIsIosDateModalVisible(false)}>
+                <Text style={styles.dateModalCloseText}>完了</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.dateFieldTabs}>
+              <Pressable
+                style={[styles.dateFieldTab, activeDateField === 'startDate' ? styles.dateFieldTabActive : null]}
+                onPress={() => setActiveDateField('startDate')}
+              >
+                <Text style={[styles.dateFieldTabText, activeDateField === 'startDate' ? styles.dateFieldTabTextActive : null]}>
+                  開始日
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.dateFieldTab, activeDateField === 'endDate' ? styles.dateFieldTabActive : null]}
+                onPress={() => setActiveDateField('endDate')}
+              >
+                <Text style={[styles.dateFieldTabText, activeDateField === 'endDate' ? styles.dateFieldTabTextActive : null]}>
+                  終了日
+                </Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.datePreviewCard}>
+              <Text style={styles.datePreviewText}>{scheduleLabel}</Text>
+            </View>
+
+            <DateTimePicker
+              mode="date"
+              display="inline"
+              value={iosPickerValue}
+              minimumDate={activeDateField === 'endDate' ? parseDateInput(fields.startDate) ?? undefined : undefined}
+              onChange={handleIosDateChange}
+            />
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  currentLocationButton: {
+    minWidth: 112,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 7,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  currentLocationButtonDisabled: {
+    opacity: 0.7,
+  },
+  currentLocationButtonText: {
+    color: '#F97316',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  scheduleSection: {
+    marginTop: 14,
+  },
+  scheduleInput: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  scheduleInputBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  scheduleTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  scheduleValueText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  schedulePlaceholderText: {
+    color: '#94A3B8',
+  },
+  scheduleHelperText: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  stepperWrap: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  stepperButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperButtonDisabled: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+  },
+  stepperValueWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  stepperValueText: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  stepperValueUnit: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  budgetSection: {
+    marginTop: 10,
+    gap: 10,
+  },
+  budgetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  budgetValueLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  budgetRangeLabel: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  budgetHintText: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  budgetSliderWrap: {
+    height: 32,
+    justifyContent: 'center',
+  },
+  budgetSliderTrack: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: '#E2E8F0',
+  },
+  budgetSliderFill: {
+    position: 'absolute',
+    left: 0,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: '#F97316',
+  },
+  budgetSliderThumb: {
+    position: 'absolute',
+    left: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 3,
+    borderColor: '#F97316',
+    shadowColor: '#F97316',
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  budgetManualInput: {
+    marginTop: 0,
+  },
+  destinationSuggestionWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  destinationSuggestionChip: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  destinationSuggestionChipSelected: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FDBA74',
+  },
+  destinationSuggestionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  destinationSuggestionTextSelected: {
+    color: '#EA580C',
+  },
+  dateModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.28)',
+    justifyContent: 'flex-end',
+  },
+  dateModalSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 32,
+  },
+  dateModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  dateModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  dateModalCloseText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#F97316',
+  },
+  dateFieldTabs: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  dateFieldTab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+  },
+  dateFieldTabActive: {
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+  },
+  dateFieldTabText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  dateFieldTabTextActive: {
+    color: '#EA580C',
+  },
+  datePreviewCard: {
+    borderRadius: 14,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  datePreviewText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
+  },
+});

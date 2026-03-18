@@ -34,7 +34,7 @@ export function validateAndBuildCreateTripPayload(
   if (!origin || !destination || !startDate || !endDate) {
     return {
       ok: false,
-      message: '出発地・目的地・出発日・終了日は必須です。',
+      message: '出発地・目的地・日程は必須です。',
     };
   }
 

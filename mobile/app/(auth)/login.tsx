@@ -16,6 +16,11 @@ export default function LoginScreen() {
   const handleSubmit = async () => {
     setError(null);
     setIsSubmitting(true);
+    console.log('Auth submit pressed', {
+      mode,
+      email: email.trim(),
+      hasPassword: Boolean(password),
+    });
     try {
       console.log('[auth] submit start', { mode, email: email.trim() });
       if (mode === 'login') {
@@ -34,6 +39,7 @@ export default function LoginScreen() {
             : '新規登録に失敗しました。メール形式やパスワード(6文字以上)を確認してください。';
       setError(message);
     } finally {
+      console.log('Auth submit finished');
       setIsSubmitting(false);
     }
   };
