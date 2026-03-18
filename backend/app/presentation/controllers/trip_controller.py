@@ -61,7 +61,7 @@ async def create_trip(
         counts_as_saved_recommendation=payload.counts_as_saved_recommendation,
         is_public=payload.is_public,
         cover_image_url=payload.cover_image_url,
-        recommendation_category=payload.recommendation_category,
+        recommendation_categories=payload.recommendation_categories,
         save_count=payload.save_count,
         status=payload.status,
     )

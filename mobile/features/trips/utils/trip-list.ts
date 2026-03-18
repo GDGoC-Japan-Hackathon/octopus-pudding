@@ -1,14 +1,8 @@
 import { type TripResponse } from '@/features/trips/types/trip-edit';
 import { type TripListFilters, type TripListItemViewModel } from '@/features/trips/types/trip-list';
 
-function parseCategories(value?: string | null): string[] {
-  if (!value) {
-    return [];
-  }
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
+function parseCategories(value?: string[] | null): string[] {
+  return value?.filter(Boolean) ?? [];
 }
 
 export function parseTripDateValue(value: string): number | null {
@@ -26,7 +20,7 @@ export function formatTripStatusLabel(status: string) {
 
 export function toTripListItemViewModel(plan: TripResponse): TripListItemViewModel {
   const statusLabel = formatTripStatusLabel(plan.status);
-  const categories = parseCategories(plan.recommendation_category);
+  const categories = parseCategories(plan.recommendation_categories);
 
   return {
     id: plan.id,

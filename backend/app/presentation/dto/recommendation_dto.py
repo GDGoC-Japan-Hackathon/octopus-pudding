@@ -11,7 +11,7 @@ class RecommendationListResponse(BaseModel):
     save_count: int
     is_saved_by_me: bool
     saved_trip_id: Optional[int] = None
-    category: str
+    categories: list[str]
     image: str
 
 

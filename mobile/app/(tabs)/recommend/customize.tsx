@@ -83,7 +83,7 @@ export default function RecommendCustomizeScreen() {
     setStartDate(detail.trip.start_date);
     setEndDate(detail.trip.end_date);
     setParticipantCount(String(detail.trip.participant_count ?? 1));
-    setSelectedCategories(parseSelectedCategories(detail.trip.recommendation_category));
+    setSelectedCategories(detail.trip.recommendation_categories ?? []);
     setSourceTripId(detail.trip.source_trip_id ?? null);
     setIsCommitted(detail.trip.counts_as_saved_recommendation ?? false);
 
@@ -197,7 +197,7 @@ export default function RecommendCustomizeScreen() {
 
       await updateTrip(tripId, {
         ...basicResult.payload,
-        recommendation_category: selectedCategories.join(', '),
+        recommendation_categories: selectedCategories,
       });
       await upsertTripPreference(tripId, {
         atmosphere,

@@ -8,6 +8,7 @@ export type TripDetailResponse = {
   start_date: string;
   end_date: string;
   participant_count: number;
+  recommendation_categories?: string[] | null;
   status: string;
   created_at?: string | null;
   updated_at?: string | null;

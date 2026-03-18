@@ -103,7 +103,7 @@ async def clone_recommendation(
         counts_as_saved_recommendation=payload.mode == "use",
         is_public=False,
         cover_image_url=source_trip.cover_image_url,
-        recommendation_category=source_trip.recommendation_category,
+        recommendation_categories=source_trip.recommendation_categories,
         save_count=0,
         status=source_trip.status,
     )
@@ -242,7 +242,7 @@ async def list_recommendations(
             save_count=trip.save_count,
             is_saved_by_me=trip.id in saved_trip_map,
             saved_trip_id=saved_trip_map.get(trip.id),
-            category=trip.recommendation_category or "その他",
+            categories=trip.recommendation_categories or ["その他"],
             image=trip.cover_image_url or "",
         )
         for trip, user in rows

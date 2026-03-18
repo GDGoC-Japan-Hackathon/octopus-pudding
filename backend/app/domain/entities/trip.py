@@ -24,7 +24,7 @@ class Trip:
     counts_as_saved_recommendation: bool = False
     is_public: bool = False
     cover_image_url: Optional[str] = None
-    recommendation_category: Optional[str] = None
+    recommendation_categories: list[str] = field(default_factory=list)
     save_count: int = 0
     status: str = "planned"
     created_at: Optional[datetime] = None

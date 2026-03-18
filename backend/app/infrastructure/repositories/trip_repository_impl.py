@@ -50,7 +50,7 @@ class TripRepositoryImpl(TripRepository):
             counts_as_saved_recommendation=trip.counts_as_saved_recommendation,
             is_public=trip.is_public,
             cover_image_url=trip.cover_image_url,
-            recommendation_category=trip.recommendation_category,
+            recommendation_categories=trip.recommendation_categories,
             save_count=trip.save_count,
             status=trip.status,
         )
@@ -150,7 +150,7 @@ class TripRepositoryImpl(TripRepository):
         db_trip.counts_as_saved_recommendation = trip.counts_as_saved_recommendation
         db_trip.is_public = trip.is_public
         db_trip.cover_image_url = trip.cover_image_url
-        db_trip.recommendation_category = trip.recommendation_category
+        db_trip.recommendation_categories = trip.recommendation_categories
         db_trip.save_count = trip.save_count
         db_trip.status = trip.status
 
@@ -584,7 +584,7 @@ class TripRepositoryImpl(TripRepository):
             counts_as_saved_recommendation=db_trip.counts_as_saved_recommendation,
             is_public=db_trip.is_public,
             cover_image_url=db_trip.cover_image_url,
-            recommendation_category=db_trip.recommendation_category,
+            recommendation_categories=db_trip.recommendation_categories or [],
             save_count=db_trip.save_count,
             status=db_trip.status,
             created_at=db_trip.created_at,

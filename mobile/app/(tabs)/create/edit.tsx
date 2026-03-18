@@ -81,7 +81,7 @@ export default function TripEditScreen() {
     setStartDate(detail.trip.start_date);
     setEndDate(detail.trip.end_date);
     setParticipantCount(String(detail.trip.participant_count ?? 1));
-    setSelectedCategories(parseSelectedCategories(detail.trip.recommendation_category));
+    setSelectedCategories(detail.trip.recommendation_categories ?? []);
 
     setAtmosphere(detail.preference?.atmosphere ?? 'のんびり');
     setBudget(detail.preference?.budget ? String(detail.preference.budget) : '');
@@ -144,7 +144,7 @@ export default function TripEditScreen() {
       setIsSavingBasic(true);
       await updateTrip(tripId, {
         ...result.payload,
-        recommendation_category: selectedCategories.join(', '),
+        recommendation_categories: selectedCategories,
       });
       await refreshDetail(tripId);
       Alert.alert('更新完了', '基本情報を更新しました。');

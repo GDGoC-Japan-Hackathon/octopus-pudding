@@ -23,7 +23,7 @@ class TripCreate(BaseModel):
     counts_as_saved_recommendation: bool = False
     is_public: bool = False
     cover_image_url: Optional[str] = None
-    recommendation_category: Optional[str] = None
+    recommendation_categories: list[str] = Field(default_factory=list)
     save_count: int = 0
     status: str = "planned"
     preference: Optional[TripPreferenceCreate] = None
@@ -39,7 +39,7 @@ class TripUpdate(BaseModel):
     counts_as_saved_recommendation: Optional[bool] = None
     is_public: Optional[bool] = None
     cover_image_url: Optional[str] = None
-    recommendation_category: Optional[str] = None
+    recommendation_categories: Optional[list[str]] = None
     save_count: Optional[int] = None
     status: Optional[str] = None
 
@@ -190,7 +190,7 @@ class TripResponse(BaseModel):
     counts_as_saved_recommendation: bool
     is_public: bool
     cover_image_url: Optional[str] = None
-    recommendation_category: Optional[str] = None
+    recommendation_categories: list[str] = Field(default_factory=list)
     save_count: int
     status: str
     created_at: Optional[datetime] = None

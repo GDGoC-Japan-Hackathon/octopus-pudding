@@ -24,7 +24,7 @@ TRIP_DEFINITIONS = [
         "participant_count": 1,
         "is_public": True,
         "cover_image_url": "https://lh3.googleusercontent.com/aida-public/AB6AXuCRcE2C8EgkbmVFpM8pb0LjqQxAwD5JZ_wBHaDld6wzmXof7O0rq0Jowsr34WmS3KseT-IqF0p3WxAw3_a88GMtsypaDmwN3WVWbytgw4FACOqUhWrflUfzdOOdPA6F05VvVZJA9V_6G5z9aE9rwoI2Xo8wIydT5RJMtz98QEN0FoSlesfLG77uBjGKX0zBGrCwfu4Kf04NUxnKGbKgFnby3KbI2hBgYqZ_6kR0cxtHiH5_c1nC4FPcUw_hXT78CS7n2_1AMqniO9Gu",
-        "recommendation_category": "カフェ",
+        "recommendation_categories": ["カフェ"],
         "save_count": 1240,
         "status": "planned",
         "preference": {
@@ -69,7 +69,7 @@ TRIP_DEFINITIONS = [
         "participant_count": 4,
         "is_public": True,
         "cover_image_url": "https://lh3.googleusercontent.com/aida-public/AB6AXuDkBQrKxtkwk63NDF9iM2N1llKE_N1gxzW1zdIKpIjKbnDMI2219sQYpen4CHRSD3_uGItySPvssh7w7FtqAfNXIKR1p7u7xYriqFilEbH0zU7CAozx-xl9B92h6-Ujv2HmILGEPOq_YMnD0ECjuYymlNTIzaYDB6R8tOx2ss3kbJE04YC19__lpkBdijkwci1_M_364oCFI9-ZaDEMBgUXNYnBhPlowcHuKSTy1Ej_ULFeNsgm1ZZfPMpzhDbJllQ6Ri-OVv9LUTtT",
-        "recommendation_category": "夜景",
+        "recommendation_categories": ["夜景", "グルメ"],
         "save_count": 850,
         "status": "planned",
         "preference": {
@@ -129,7 +129,7 @@ TRIP_DEFINITIONS = [
         "participant_count": 6,
         "is_public": True,
         "cover_image_url": "https://lh3.googleusercontent.com/aida-public/AB6AXuDlzxTBRQa5Xep8a6-CyTYH_Wdea0IUP4Y62hdJsx6sSmzKKGwsK8Z6hbHdenkZKn625MCHyNntEima16o4ZdMF2F6IRT2T9VfknpRZxsoELcY_-KDfRRQfu7PCZ5D0ie0tZgw5mCpCCzZ-oz2Co-qUUAb0ac2aepwwXB81Tislw9_9Fd-syfpcnolAt4xmLSfu7JGnsu3Pif_WXLzJ_zT05RUDuP0_3gYEi_vtNGkYM7YIjI4k3Y9kQbLAsoxjbCMN-xvsD4dOkPz7",
-        "recommendation_category": "グルメ",
+        "recommendation_categories": ["グルメ", "温泉"],
         "save_count": 2105,
         "status": "planned",
         "preference": {
@@ -224,7 +224,7 @@ async def seed_trips(owner_user_id: int, shared_user_ids: list[int]) -> None:
                 existing_trip.participant_count = definition["participant_count"]
                 existing_trip.is_public = definition["is_public"]
                 existing_trip.cover_image_url = definition["cover_image_url"]
-                existing_trip.recommendation_category = definition["recommendation_category"]
+                existing_trip.recommendation_categories = definition["recommendation_categories"]
                 existing_trip.save_count = definition["save_count"]
                 existing_trip.status = definition["status"]
                 skipped_count += 1
@@ -239,7 +239,7 @@ async def seed_trips(owner_user_id: int, shared_user_ids: list[int]) -> None:
                 participant_count=definition["participant_count"],
                 is_public=definition["is_public"],
                 cover_image_url=definition["cover_image_url"],
-                recommendation_category=definition["recommendation_category"],
+                recommendation_categories=definition["recommendation_categories"],
                 save_count=definition["save_count"],
                 status=definition["status"],
             )

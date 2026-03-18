@@ -2,13 +2,6 @@ import { apiFetch } from '@/lib/api/client';
 import { endpoints } from '@/lib/api/endpoints';
 import { type RecommendPlanListItem } from '@/features/recommend/types';
 
-function parseCategories(value: string): string[] {
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 type RecommendPlanListItemResponse = {
   id: number | string;
   title: string;
@@ -23,7 +16,7 @@ type RecommendPlanListItemResponse = {
   saved_trip_id?: number | string | null;
   savedTripId?: number | string | null;
   image: string;
-  category: string;
+  categories: string[];
 };
 
 export async function getRecommendPlans(): Promise<RecommendPlanListItem[]> {
@@ -42,7 +35,7 @@ export async function getRecommendPlans(): Promise<RecommendPlanListItem[]> {
         : plan.saved_trip_id !== undefined && plan.saved_trip_id !== null
           ? String(plan.saved_trip_id)
           : null,
-    categories: parseCategories(plan.category),
+    categories: plan.categories,
     image: plan.image,
   }));
 }

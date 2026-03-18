@@ -14,6 +14,7 @@ from sqlalchemy import (
     Float,
     Text,
 )
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.sql import func
 from app.infrastructure.database.base import Base
 
@@ -48,7 +49,7 @@ class TripModel(Base):
     counts_as_saved_recommendation = Column(Boolean, nullable=False, default=False)
     is_public = Column(Boolean, nullable=False, default=False)
     cover_image_url = Column(String(1000), nullable=True)
-    recommendation_category = Column(String(100), nullable=True)
+    recommendation_categories = Column(ARRAY(String(100)), nullable=True)
     save_count = Column(Integer, nullable=False, default=0)
     status = Column(String(50), default="planned")
     created_at = Column(DateTime(timezone=True), server_default=func.now())

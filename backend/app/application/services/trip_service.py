@@ -32,6 +32,8 @@ from app.shared.exceptions import (
 class TripService:
     """Trip application service."""
 
+    ALLOWED_RECOMMENDATION_CATEGORIES = {"カフェ", "夜景", "グルメ", "温泉"}
+
     def __init__(self, trip_repository: TripRepository):
         self.trip_repository = trip_repository
 
@@ -45,6 +47,12 @@ class TripService:
             raise ValueError("participant_count must be greater than or equal to 1")
         if trip.save_count < 0:
             raise ValueError("save_count must be greater than or equal to 0")
+        invalid_categories = [
+            category for category in trip.recommendation_categories
+            if category not in self.ALLOWED_RECOMMENDATION_CATEGORIES
+        ]
+        if invalid_categories:
+            raise ValueError("recommendation_categories contains invalid values")
         trip.user_id = user_id
         return await self.trip_repository.create_trip(trip, preference)
 
@@ -69,6 +77,13 @@ class TripService:
         if "save_count" in kwargs and kwargs["save_count"] is not None:
             if kwargs["save_count"] < 0:
                 raise ValueError("save_count must be greater than or equal to 0")
+        if "recommendation_categories" in kwargs and kwargs["recommendation_categories"] is not None:
+            invalid_categories = [
+                category for category in kwargs["recommendation_categories"]
+                if category not in self.ALLOWED_RECOMMENDATION_CATEGORIES
+            ]
+            if invalid_categories:
+                raise ValueError("recommendation_categories contains invalid values")
 
         for key, value in kwargs.items():
             if value is not None and hasattr(trip, key):
