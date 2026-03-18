@@ -44,6 +44,8 @@ class TripModel(Base):
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
     participant_count = Column(Integer, nullable=False, default=1)
+    source_trip_id = Column(Integer, ForeignKey("trips.id"), nullable=True)
+    counts_as_saved_recommendation = Column(Boolean, nullable=False, default=False)
     is_public = Column(Boolean, nullable=False, default=False)
     cover_image_url = Column(String(1000), nullable=True)
     recommendation_category = Column(String(100), nullable=True)

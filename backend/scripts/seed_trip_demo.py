@@ -209,15 +209,17 @@ async def seed_trips(owner_user_id: int, shared_user_ids: list[int]) -> None:
 
         for definition in TRIP_DEFINITIONS:
             existing_trip_result = await db.execute(
-                select(TripModel).where(
+                select(TripModel)
+                .where(
                     TripModel.user_id == owner_user_id,
                     TripModel.origin == definition["origin"],
                     TripModel.destination == definition["destination"],
                     TripModel.start_date == definition["start_date"],
                     TripModel.end_date == definition["end_date"],
                 )
+                .order_by(TripModel.id.desc())
             )
-            existing_trip = existing_trip_result.scalar_one_or_none()
+            existing_trip = existing_trip_result.scalars().first()
             if existing_trip is not None:
                 existing_trip.participant_count = definition["participant_count"]
                 existing_trip.is_public = definition["is_public"]

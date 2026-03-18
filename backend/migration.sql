@@ -263,5 +263,19 @@ ALTER TABLE trips RENAME like_count TO save_count;
 
 UPDATE alembic_version SET version_num='f8b2d4c6e1a9' WHERE alembic_version.version_num = 'f6a1c9d2b4e7';
 
+-- Running upgrade f8b2d4c6e1a9 -> a1c3d5e7f901
+
+ALTER TABLE trips ADD COLUMN source_trip_id INTEGER;
+
+ALTER TABLE trips ADD COLUMN counts_as_saved_recommendation BOOLEAN;
+
+UPDATE trips SET counts_as_saved_recommendation = FALSE WHERE counts_as_saved_recommendation IS NULL;
+
+ALTER TABLE trips ALTER COLUMN counts_as_saved_recommendation SET NOT NULL;
+
+ALTER TABLE trips ADD CONSTRAINT fk_trips_source_trip_id_trips FOREIGN KEY(source_trip_id) REFERENCES trips (id);
+
+UPDATE alembic_version SET version_num='a1c3d5e7f901' WHERE alembic_version.version_num = 'f8b2d4c6e1a9';
+
 COMMIT;
 

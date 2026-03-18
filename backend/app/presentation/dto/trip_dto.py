@@ -19,6 +19,8 @@ class TripCreate(BaseModel):
     start_date: dt_date
     end_date: dt_date
     participant_count: int = 1
+    source_trip_id: Optional[int] = None
+    counts_as_saved_recommendation: bool = False
     is_public: bool = False
     cover_image_url: Optional[str] = None
     recommendation_category: Optional[str] = None
@@ -33,6 +35,8 @@ class TripUpdate(BaseModel):
     start_date: Optional[dt_date] = None
     end_date: Optional[dt_date] = None
     participant_count: Optional[int] = None
+    source_trip_id: Optional[int] = None
+    counts_as_saved_recommendation: Optional[bool] = None
     is_public: Optional[bool] = None
     cover_image_url: Optional[str] = None
     recommendation_category: Optional[str] = None
@@ -182,6 +186,8 @@ class TripResponse(BaseModel):
     start_date: dt_date
     end_date: dt_date
     participant_count: int
+    source_trip_id: Optional[int] = None
+    counts_as_saved_recommendation: bool
     is_public: bool
     cover_image_url: Optional[str] = None
     recommendation_category: Optional[str] = None

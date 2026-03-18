@@ -13,6 +13,10 @@ type RecommendPlanDetailResponse = {
   budget: string;
   move_time?: string;
   moveTime?: string;
+  is_saved_by_me?: boolean;
+  isSavedByMe?: boolean;
+  saved_trip_id?: number | string | null;
+  savedTripId?: number | string | null;
   days: RecommendPlanDetail['days'];
 };
 
@@ -28,6 +32,13 @@ export async function getRecommendPlanDetail(id: string): Promise<RecommendPlanD
     intro: plan.intro,
     budget: plan.budget,
     moveTime: plan.moveTime ?? plan.move_time ?? '',
+    isSavedByMe: plan.isSavedByMe ?? plan.is_saved_by_me ?? false,
+    savedTripId:
+      plan.savedTripId !== undefined && plan.savedTripId !== null
+        ? String(plan.savedTripId)
+        : plan.saved_trip_id !== undefined && plan.saved_trip_id !== null
+          ? String(plan.saved_trip_id)
+          : null,
     days: plan.days,
   };
 }

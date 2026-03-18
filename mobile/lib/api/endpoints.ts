@@ -21,6 +21,8 @@ export const endpoints = {
     list: '/recommendations/',
     detail: (recommendationId: number | string) => `/recommendations/${recommendationId}`,
     clone: (recommendationId: number | string) => `/recommendations/${recommendationId}/clone`,
+    confirmSave: (recommendationId: number | string, tripId: number | string) =>
+      `/recommendations/${recommendationId}/confirm-save/${tripId}`,
   },
   trips: {
     create: '/trips/',

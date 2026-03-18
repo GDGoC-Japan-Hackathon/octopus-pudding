@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { Link } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { weatherMock } from '@/data/travel';
@@ -15,22 +16,24 @@ export default function RecommendationListScreen() {
   const [recommendPlans, setRecommendPlans] = useState<Awaited<ReturnType<typeof getRecommendPlans>>>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setIsLoading(true);
-        const plans = await getRecommendPlans();
-        setRecommendPlans(plans);
-      } catch {
-        Alert.alert('取得失敗', 'おすすめ旅の取得に失敗しました。時間をおいて再度お試しください。');
-        setRecommendPlans([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    void load();
+  const loadRecommendations = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const plans = await getRecommendPlans();
+      setRecommendPlans(plans);
+    } catch {
+      Alert.alert('取得失敗', 'おすすめ旅の取得に失敗しました。時間をおいて再度お試しください。');
+      setRecommendPlans([]);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadRecommendations();
+    }, [loadRecommendations])
+  );
 
   const filteredPlans = useMemo(() => {
     if (activeCategory === 'すべて') {

@@ -31,6 +31,8 @@ export default function RecommendationDetailScreen() {
         setIsLoading(true);
         const detail = await getRecommendPlanDetail(id);
         setPlan(detail);
+        setIsSavedToPlans(detail?.isSavedByMe ?? false);
+        setSavedTripId(detail?.savedTripId ? Number(detail.savedTripId) : null);
       } catch {
         Alert.alert('取得失敗', 'おすすめ詳細の取得に失敗しました。');
         setPlan(null);

@@ -284,9 +284,6 @@ export default function PlansListScreen() {
             <Link key={plan.id} href={{ pathname: '/plans/detail', params: { id: String(plan.id) } }} asChild>
               <Pressable style={styles.card}>
                 <Image source={{ uri: PLAN_IMAGE_URL }} style={styles.cardImage} />
-                <View style={styles.favoriteBadge}>
-                  <MaterialIcons name="favorite" size={20} color="#EC5B13" />
-                </View>
 
                 <View style={styles.cardBody}>
                   <View style={styles.cardHeader}>

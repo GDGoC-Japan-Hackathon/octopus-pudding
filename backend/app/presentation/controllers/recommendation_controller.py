@@ -16,6 +16,7 @@ from app.presentation.dependencies.auth import get_current_user
 from app.presentation.dto.recommendation_dto import (
     RecommendationCloneRequest,
     RecommendationCloneResponse,
+    RecommendationConfirmSaveResponse,
     RecommendationDayResponse,
     RecommendationDetailResponse,
     RecommendationListResponse,
@@ -23,6 +24,23 @@ from app.presentation.dto.recommendation_dto import (
 )
 
 router = APIRouter()
+
+
+async def _get_saved_trip_map(db: AsyncSession, user_id: int) -> dict[int, int]:
+    saved_result = await db.execute(
+        select(TripModel.source_trip_id, TripModel.id)
+        .where(
+            TripModel.user_id == user_id,
+            TripModel.source_trip_id.is_not(None),
+            TripModel.counts_as_saved_recommendation.is_(True),
+        )
+        .order_by(TripModel.id.desc())
+    )
+    mapping: dict[int, int] = {}
+    for source_trip_id, trip_id in saved_result.all():
+        if source_trip_id is not None and source_trip_id not in mapping:
+            mapping[source_trip_id] = trip_id
+    return mapping
 
 
 def _timeline_icon_from_category(category: str | None) -> str:
@@ -55,6 +73,19 @@ async def clone_recommendation(
     if source_trip is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recommendation not found")
 
+    existing_result = await db.execute(
+        select(TripModel)
+        .where(
+            TripModel.user_id == current_user.id,
+            TripModel.source_trip_id == recommendation_id,
+            TripModel.counts_as_saved_recommendation.is_(payload.mode == "use"),
+        )
+        .order_by(TripModel.id.desc())
+    )
+    existing_trip = existing_result.scalar_one_or_none()
+    if existing_trip is not None:
+        return RecommendationCloneResponse(trip_id=existing_trip.id)
+
     cloned_trip = TripModel(
         user_id=current_user.id,
         origin=source_trip.origin,
@@ -62,6 +93,8 @@ async def clone_recommendation(
         start_date=source_trip.start_date,
         end_date=source_trip.end_date,
         participant_count=source_trip.participant_count,
+        source_trip_id=recommendation_id,
+        counts_as_saved_recommendation=payload.mode == "use",
         is_public=False,
         cover_image_url=source_trip.cover_image_url,
         recommendation_category=source_trip.recommendation_category,
@@ -70,6 +103,9 @@ async def clone_recommendation(
     )
     db.add(cloned_trip)
     await db.flush()
+
+    if payload.mode == "use":
+        source_trip.save_count = (source_trip.save_count or 0) + 1
 
     preference_result = await db.execute(
         select(TripPreferenceModel).where(TripPreferenceModel.trip_id == recommendation_id)
@@ -141,8 +177,48 @@ async def clone_recommendation(
     return RecommendationCloneResponse(trip_id=cloned_trip.id)
 
 
+@router.post(
+    "/{recommendation_id}/confirm-save/{trip_id}",
+    response_model=RecommendationConfirmSaveResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def confirm_recommendation_save(
+    recommendation_id: int,
+    trip_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    source_result = await db.execute(
+        select(TripModel).where(TripModel.id == recommendation_id, TripModel.is_public.is_(True))
+    )
+    source_trip = source_result.scalar_one_or_none()
+    if source_trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recommendation not found")
+
+    trip_result = await db.execute(
+        select(TripModel).where(
+            TripModel.id == trip_id,
+            TripModel.user_id == current_user.id,
+            TripModel.source_trip_id == recommendation_id,
+        )
+    )
+    saved_trip = trip_result.scalar_one_or_none()
+    if saved_trip is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved trip not found")
+
+    if not saved_trip.counts_as_saved_recommendation:
+        saved_trip.counts_as_saved_recommendation = True
+        source_trip.save_count = (source_trip.save_count or 0) + 1
+        await db.commit()
+
+    return RecommendationConfirmSaveResponse(trip_id=saved_trip.id)
+
+
 @router.get("/", response_model=list[RecommendationListResponse])
-async def list_recommendations(db: AsyncSession = Depends(get_db)):
+async def list_recommendations(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(
         select(TripModel, UserModel)
         .join(UserModel, UserModel.id == TripModel.user_id)
@@ -150,6 +226,7 @@ async def list_recommendations(db: AsyncSession = Depends(get_db)):
         .order_by(TripModel.created_at.desc(), TripModel.id.desc())
     )
     rows = result.all()
+    saved_trip_map = await _get_saved_trip_map(db, current_user.id)
     return [
         RecommendationListResponse(
             id=trip.id,
@@ -157,6 +234,8 @@ async def list_recommendations(db: AsyncSession = Depends(get_db)):
             location=trip.destination,
             author=user.username,
             save_count=trip.save_count,
+            is_saved_by_me=trip.id in saved_trip_map,
+            saved_trip_id=saved_trip_map.get(trip.id),
             image=trip.cover_image_url or "",
             category=trip.recommendation_category or "その他",
         )
@@ -167,6 +246,7 @@ async def list_recommendations(db: AsyncSession = Depends(get_db)):
 @router.get("/{recommendation_id}", response_model=RecommendationDetailResponse)
 async def get_recommendation_detail(
     recommendation_id: int,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -216,6 +296,7 @@ async def get_recommendation_detail(
         select(TripPreferenceModel).where(TripPreferenceModel.trip_id == recommendation_id)
     )
     preference = preference_result.scalar_one_or_none()
+    saved_trip_map = await _get_saved_trip_map(db, current_user.id)
 
     return RecommendationDetailResponse(
         id=trip.id,
@@ -237,6 +318,8 @@ async def get_recommendation_detail(
             if not items_by_day_id
             else f"{len(days)}日間"
         ),
+        is_saved_by_me=recommendation_id in saved_trip_map,
+        saved_trip_id=saved_trip_map.get(recommendation_id),
         days=[
             RecommendationDayResponse(
                 key=f"day{day.day_number}",

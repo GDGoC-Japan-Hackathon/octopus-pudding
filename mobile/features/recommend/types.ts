@@ -8,6 +8,8 @@ export type RecommendPlanListItem = {
   location: string;
   author: string;
   saveCount: number;
+  isSavedByMe: boolean;
+  savedTripId?: string | null;
   image: string;
   category: string;
 };
@@ -28,5 +30,7 @@ export type RecommendPlanDetail = {
   intro: string;
   budget: string;
   moveTime: string;
+  isSavedByMe: boolean;
+  savedTripId?: string | null;
   days: RecommendPlanDetailDay[];
 };

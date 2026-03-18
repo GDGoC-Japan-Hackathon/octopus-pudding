@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { getFriends } from '@/features/friends/api/get-friends';
+import { confirmRecommendTripSave } from '@/features/recommend/api/confirm-recommend-trip-save';
 import { type FriendResponse } from '@/features/friends/types/friend-request';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 import { deleteTrip } from '@/features/trips/api/delete-trip';
@@ -46,6 +47,7 @@ export default function RecommendCustomizeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCommitted, setIsCommitted] = useState(false);
+  const [sourceTripId, setSourceTripId] = useState<number | null>(null);
 
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
@@ -69,6 +71,8 @@ export default function RecommendCustomizeScreen() {
     setStartDate(detail.trip.start_date);
     setEndDate(detail.trip.end_date);
     setParticipantCount(String(detail.trip.participant_count ?? 1));
+    setSourceTripId(detail.trip.source_trip_id ?? null);
+    setIsCommitted(detail.trip.counts_as_saved_recommendation ?? false);
 
     setAtmosphere(detail.preference?.atmosphere ?? 'のんびり');
     setBudget(detail.preference?.budget ? String(detail.preference.budget) : '');
@@ -196,6 +200,10 @@ export default function RecommendCustomizeScreen() {
         } catch {
           hasMemberError = true;
         }
+      }
+
+      if (!isCommitted && sourceTripId) {
+        await confirmRecommendTripSave(sourceTripId, tripId);
       }
 
       await refreshDetail(tripId);

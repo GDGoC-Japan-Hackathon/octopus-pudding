@@ -46,6 +46,8 @@ class TripRepositoryImpl(TripRepository):
             start_date=trip.start_date,
             end_date=trip.end_date,
             participant_count=trip.participant_count,
+            source_trip_id=trip.source_trip_id,
+            counts_as_saved_recommendation=trip.counts_as_saved_recommendation,
             is_public=trip.is_public,
             cover_image_url=trip.cover_image_url,
             recommendation_category=trip.recommendation_category,
@@ -144,6 +146,8 @@ class TripRepositoryImpl(TripRepository):
         db_trip.start_date = trip.start_date
         db_trip.end_date = trip.end_date
         db_trip.participant_count = trip.participant_count
+        db_trip.source_trip_id = trip.source_trip_id
+        db_trip.counts_as_saved_recommendation = trip.counts_as_saved_recommendation
         db_trip.is_public = trip.is_public
         db_trip.cover_image_url = trip.cover_image_url
         db_trip.recommendation_category = trip.recommendation_category
@@ -155,6 +159,19 @@ class TripRepositoryImpl(TripRepository):
         return self._to_trip_entity(db_trip)
 
     async def delete_trip(self, trip_id: int) -> bool:
+        trip_result = await self.db.execute(select(TripModel).where(TripModel.id == trip_id))
+        db_trip = trip_result.scalar_one_or_none()
+        if db_trip is None:
+            return False
+
+        if db_trip.source_trip_id is not None and db_trip.counts_as_saved_recommendation:
+            source_trip_result = await self.db.execute(
+                select(TripModel).where(TripModel.id == db_trip.source_trip_id)
+            )
+            source_trip = source_trip_result.scalar_one_or_none()
+            if source_trip is not None:
+                source_trip.save_count = max((source_trip.save_count or 0) - 1, 0)
+
         # 1. replan_items を削除（replan_sessions, itinerary_items より先に削除が必要）
         session_ids_result = await self.db.execute(
             select(ReplanSessionModel.id).where(ReplanSessionModel.trip_id == trip_id)
@@ -563,6 +580,8 @@ class TripRepositoryImpl(TripRepository):
             start_date=db_trip.start_date,
             end_date=db_trip.end_date,
             participant_count=db_trip.participant_count,
+            source_trip_id=db_trip.source_trip_id,
+            counts_as_saved_recommendation=db_trip.counts_as_saved_recommendation,
             is_public=db_trip.is_public,
             cover_image_url=db_trip.cover_image_url,
             recommendation_category=db_trip.recommendation_category,
