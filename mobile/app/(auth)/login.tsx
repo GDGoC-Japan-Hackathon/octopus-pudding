@@ -25,6 +25,12 @@ function getAuthErrorMessage(mode: AuthMode, error: unknown): string {
     switch (code) {
       case 'auth/invalid-email':
         return 'メールアドレスの形式を確認してください。';
+      case 'auth/wrong-password':
+        return 'パスワードが間違っています。';
+      case 'auth/invalid-credential':
+      case 'auth/invalid-login-credentials':
+      case 'auth/user-not-found':
+        return 'メールアドレスまたはパスワードが間違っています。';
       case 'auth/too-many-requests':
         return '試行回数が多すぎます。時間をおいて再度お試しください。';
       default:

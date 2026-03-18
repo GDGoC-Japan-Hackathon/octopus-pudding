@@ -104,6 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      setIsLoading(true);
+
       try {
         const me = await syncBackendUser(nextUser);
         setBackendUser(me);
@@ -119,7 +121,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [syncBackendUser]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    setIsLoading(true);
     try {
       console.log('Context signIn start', { email });
       await signInWithFirebaseEmail(email, password);
@@ -133,7 +134,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
-    setIsLoading(true);
     try {
       console.log('Context signUp start', { email });
       await signUpWithFirebaseEmail(email, password);
