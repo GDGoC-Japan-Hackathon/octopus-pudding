@@ -39,7 +39,7 @@ export default function RecommendationListScreen() {
     if (activeCategory === 'すべて') {
       return recommendPlans;
     }
-    return recommendPlans.filter((plan) => plan.category === activeCategory);
+    return recommendPlans.filter((plan) => plan.categories.includes(activeCategory));
   }, [activeCategory, recommendPlans]);
 
   return (
@@ -77,32 +77,43 @@ export default function RecommendationListScreen() {
         {filteredPlans.map((plan) => (
           <Link key={plan.id} href={{ pathname: '/recommend/detail', params: { id: plan.id } }} asChild>
             <Pressable style={styles.card}>
-              <View style={styles.imageWrap}>
-                <Image source={{ uri: plan.image }} style={styles.cardImage} />
-                <View style={styles.locationTag}>
-                  <Text style={styles.locationTagText}>{plan.location}</Text>
-                </View>
-              </View>
+              <Image source={{ uri: plan.image }} style={styles.cardImage} />
 
               <View style={styles.cardBody}>
-                <View style={styles.titleRow}>
-                  <Text style={styles.cardTitle}>{plan.title}</Text>
-                  <MaterialIcons name="more-vert" size={20} color="#94A3B8" />
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardTitle} numberOfLines={2}>
+                    {plan.title}
+                  </Text>
                 </View>
 
-                <View style={styles.authorRow}>
-                  <View style={styles.avatar}>
-                    <MaterialIcons name="person" size={16} color="#EC5B13" />
+                <View style={styles.metaStack}>
+                  <View style={styles.metaRow}>
+                    <MaterialIcons name="calendar-today" size={18} color="#64748B" />
+                    <Text style={styles.metaText}>{plan.dateLabel}</Text>
                   </View>
-                  <Text style={styles.authorText}>{plan.author}</Text>
-                  <View style={styles.likesWrap}>
-                    <MaterialIcons name="bookmark" size={18} color="#EC5B13" />
-                    <Text style={styles.likesText}>保存 {plan.saveCount.toLocaleString()}</Text>
+                  <View style={styles.metaRow}>
+                    <MaterialIcons name="group" size={18} color="#64748B" />
+                    <Text style={styles.metaText}>{plan.peopleLabel}</Text>
                   </View>
                 </View>
 
-                <View style={styles.detailButton}>
-                  <Text style={styles.detailButtonText}>詳細を見る</Text>
+                <View style={styles.cardFooter}>
+                  <View style={styles.footerMeta}>
+                    <View style={styles.footerMetaRow}>
+                      <MaterialIcons name="bookmark" size={18} color="#EC5B13" />
+                      <Text style={styles.footerMetaText}>保存 {plan.saveCount.toLocaleString()}</Text>
+                    </View>
+                    <View style={styles.categoryList}>
+                      {plan.categories.map((category) => (
+                        <View key={`${plan.id}-${category}`} style={styles.categoryTag}>
+                          <Text style={styles.categoryTagText}>{category}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={styles.detailButton}>
+                    <Text style={styles.detailButtonText}>詳細を表示</Text>
+                  </View>
                 </View>
               </View>
             </Pressable>
@@ -162,83 +173,93 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#F1F5F9',
     shadowColor: '#0F172A',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  imageWrap: {
-    position: 'relative',
-  },
   cardImage: {
     width: '100%',
-    aspectRatio: 1,
+    aspectRatio: 16 / 9,
     backgroundColor: '#E2E8F0',
-  },
-  locationTag: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-  },
-  locationTagText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#EC5B13',
   },
   cardBody: {
     padding: 16,
-    gap: 14,
   },
-  titleRow: {
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'space-between',
     gap: 8,
+    marginBottom: 12,
   },
   cardTitle: {
     flex: 1,
     fontSize: 20,
     lineHeight: 26,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#0F172A',
   },
-  authorRow: {
+  metaStack: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FFF1E8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  authorText: {
-    flex: 1,
+  metaText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#334155',
+    color: '#64748B',
   },
-  likesWrap: {
+  cardFooter: {
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  footerMeta: {
+    gap: 8,
+    flex: 1,
+    justifyContent: 'center',
+    minWidth: 0,
+  },
+  footerMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  likesText: {
-    fontSize: 14,
-    fontWeight: '500',
+  footerMetaText: {
+    fontSize: 13,
     color: '#64748B',
+    fontWeight: '600',
+  },
+  categoryList: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignContent: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  categoryTag: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#FFF1E8',
+  },
+  categoryTagText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#EC5B13',
   },
   detailButton: {
-    height: 44,
+    width: 108,
+    paddingVertical: 10,
     borderRadius: 12,
     backgroundColor: '#EC5B13',
     alignItems: 'center',
@@ -246,8 +267,8 @@ const styles = StyleSheet.create({
   },
   detailButtonText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
   },
   loadingWrap: {
     paddingVertical: 24,

@@ -290,11 +290,6 @@ export default function PlansListScreen() {
                     <Text style={styles.cardTitle} numberOfLines={2}>
                       {plan.title}
                     </Text>
-                    <View style={[styles.statusTag, plan.statusVariant !== 'planned' && styles.statusTagMuted]}>
-                      <Text style={[styles.statusTagText, plan.statusVariant !== 'planned' && styles.statusTagTextMuted]}>
-                        {plan.statusLabel}
-                      </Text>
-                    </View>
                   </View>
 
                   <View style={styles.metaStack}>
@@ -309,6 +304,17 @@ export default function PlansListScreen() {
                   </View>
 
                   <View style={styles.cardFooter}>
+                    <View style={styles.footerMeta}>
+                      {plan.categories.length ? (
+                        <View style={styles.categoryList}>
+                          {plan.categories.map((category) => (
+                            <View key={`${plan.id}-${category}`} style={styles.categoryTag}>
+                              <Text style={styles.categoryTagText}>{category}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      ) : null}
+                    </View>
                     <View style={styles.detailButton}>
                       <Text style={styles.detailButtonText}>詳細を表示</Text>
                     </View>
@@ -585,23 +591,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0F172A',
   },
-  statusTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: '#FFF1E8',
-  },
-  statusTagMuted: {
-    backgroundColor: '#F1F5F9',
-  },
-  statusTagText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#EC5B13',
-  },
-  statusTagTextMuted: {
-    color: '#64748B',
-  },
   metaStack: {
     gap: 8,
     marginBottom: 16,
@@ -619,13 +608,40 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  footerMeta: {
+    flex: 1,
+    justifyContent: 'center',
+    minWidth: 0,
+  },
+  categoryList: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignContent: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  categoryTag: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#FFF1E8',
+  },
+  categoryTagText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#EC5B13',
   },
   detailButton: {
     backgroundColor: '#EC5B13',
-    paddingHorizontal: 18,
+    width: 108,
     paddingVertical: 10,
     borderRadius: 12,
+    alignItems: 'center',
   },
   detailButtonText: {
     color: '#FFFFFF',

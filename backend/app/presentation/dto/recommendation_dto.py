@@ -6,13 +6,13 @@ from pydantic import BaseModel
 class RecommendationListResponse(BaseModel):
     id: int
     title: str
-    location: str
-    author: str
+    date_label: str
+    participant_count: int
     save_count: int
     is_saved_by_me: bool
     saved_trip_id: Optional[int] = None
-    image: str
     category: str
+    image: str
 
 
 class RecommendationTimelineItemResponse(BaseModel):

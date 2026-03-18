@@ -26,6 +26,12 @@ from app.presentation.dto.recommendation_dto import (
 router = APIRouter()
 
 
+def _build_trip_duration_label(start_date, end_date) -> str:
+    total_days = (end_date - start_date).days + 1
+    nights = max(total_days - 1, 0)
+    return f"{nights}泊{total_days}日"
+
+
 async def _get_saved_trip_map(db: AsyncSession, user_id: int) -> dict[int, int]:
     saved_result = await db.execute(
         select(TripModel.source_trip_id, TripModel.id)
@@ -231,13 +237,13 @@ async def list_recommendations(
         RecommendationListResponse(
             id=trip.id,
             title=f"{trip.origin} → {trip.destination}",
-            location=trip.destination,
-            author=user.username,
+            date_label=_build_trip_duration_label(trip.start_date, trip.end_date),
+            participant_count=trip.participant_count,
             save_count=trip.save_count,
             is_saved_by_me=trip.id in saved_trip_map,
             saved_trip_id=saved_trip_map.get(trip.id),
-            image=trip.cover_image_url or "",
             category=trip.recommendation_category or "その他",
+            image=trip.cover_image_url or "",
         )
         for trip, user in rows
     ]

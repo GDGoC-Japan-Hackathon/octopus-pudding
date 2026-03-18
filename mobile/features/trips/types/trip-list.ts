@@ -16,6 +16,7 @@ export type TripListItemViewModel = {
   dateLabel: string;
   participantCount: number;
   peopleLabel: string;
+  categories: string[];
   searchableText: string;
   startDateValue: number | null;
 };

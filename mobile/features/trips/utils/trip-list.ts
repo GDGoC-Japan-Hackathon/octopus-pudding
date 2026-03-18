@@ -1,6 +1,16 @@
 import { type TripResponse } from '@/features/trips/types/trip-edit';
 import { type TripListFilters, type TripListItemViewModel } from '@/features/trips/types/trip-list';
 
+function parseCategories(value?: string | null): string[] {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export function parseTripDateValue(value: string): number | null {
   const normalized = value.replace(/\./g, '/').replace(/-/g, '/');
   const parsed = new Date(normalized).getTime();
@@ -16,6 +26,7 @@ export function formatTripStatusLabel(status: string) {
 
 export function toTripListItemViewModel(plan: TripResponse): TripListItemViewModel {
   const statusLabel = formatTripStatusLabel(plan.status);
+  const categories = parseCategories(plan.recommendation_category);
 
   return {
     id: plan.id,
@@ -25,7 +36,10 @@ export function toTripListItemViewModel(plan: TripResponse): TripListItemViewMod
     dateLabel: `${plan.start_date} - ${plan.end_date}`,
     participantCount: plan.participant_count,
     peopleLabel: `${plan.participant_count}名`,
-    searchableText: [plan.origin, plan.destination, statusLabel, `${plan.participant_count}名`].join(' ').toLowerCase(),
+    categories,
+    searchableText: [plan.origin, plan.destination, statusLabel, `${plan.participant_count}名`, ...categories]
+      .join(' ')
+      .toLowerCase(),
     startDateValue: parseTripDateValue(plan.start_date),
   };
 }

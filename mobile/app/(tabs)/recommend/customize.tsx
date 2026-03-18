@@ -22,6 +22,17 @@ import { weatherMock } from '@/data/travel';
 import { ApiError } from '@/lib/api/client';
 
 const ATMOSPHERE_OPTIONS: TripAtmosphere[] = ['のんびり', 'アクティブ', 'グルメ', '映え'];
+const RECOMMEND_CATEGORY_OPTIONS = ['カフェ', '夜景', 'グルメ', '温泉'] as const;
+
+function parseSelectedCategories(value?: string | null): string[] {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 type CustomizeParams = {
   tripId?: string | string[];
@@ -54,6 +65,7 @@ export default function RecommendCustomizeScreen() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [participantCount, setParticipantCount] = useState('1');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
 
   const [atmosphere, setAtmosphere] = useState<TripAtmosphere>('のんびり');
   const [budget, setBudget] = useState('');
@@ -71,6 +83,7 @@ export default function RecommendCustomizeScreen() {
     setStartDate(detail.trip.start_date);
     setEndDate(detail.trip.end_date);
     setParticipantCount(String(detail.trip.participant_count ?? 1));
+    setSelectedCategories(parseSelectedCategories(detail.trip.recommendation_category));
     setSourceTripId(detail.trip.source_trip_id ?? null);
     setIsCommitted(detail.trip.counts_as_saved_recommendation ?? false);
 
@@ -142,6 +155,12 @@ export default function RecommendCustomizeScreen() {
     }
   };
 
+  const toggleCategory = (category: string) => {
+    setSelectedCategories((prev) =>
+      prev.includes(category) ? prev.filter((item) => item !== category) : [...prev, category]
+    );
+  };
+
   const handleCommit = async () => {
     if (!tripId || isSubmitting) {
       return;
@@ -176,7 +195,10 @@ export default function RecommendCustomizeScreen() {
     try {
       setIsSubmitting(true);
 
-      await updateTrip(tripId, basicResult.payload);
+      await updateTrip(tripId, {
+        ...basicResult.payload,
+        recommendation_category: selectedCategories.join(', '),
+      });
       await upsertTripPreference(tripId, {
         atmosphere,
         budget: preferenceResult.budget,
@@ -253,6 +275,24 @@ export default function RecommendCustomizeScreen() {
           <TextInput style={travelStyles.input} value={startDate} onChangeText={setStartDate} placeholder="開始日 (YYYY-MM-DD)" />
           <TextInput style={travelStyles.input} value={endDate} onChangeText={setEndDate} placeholder="終了日 (YYYY-MM-DD)" />
           <TextInput style={travelStyles.input} value={participantCount} onChangeText={setParticipantCount} placeholder="人数" keyboardType="number-pad" />
+          <Text style={travelStyles.sectionBody}>カテゴリ</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {RECOMMEND_CATEGORY_OPTIONS.map((option) => {
+              const active = selectedCategories.includes(option);
+              return (
+                <Pressable
+                  key={option}
+                  style={[travelStyles.pillButton, active ? { borderColor: '#F97316', backgroundColor: '#FFF7ED' } : null]}
+                  onPress={() => toggleCategory(option)}
+                >
+                  <Text style={[travelStyles.pillText, active ? { color: '#F97316' } : null]}>
+                    {active ? '✓ ' : ''}
+                    {option}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
         <View style={travelStyles.detailSection}>
