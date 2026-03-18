@@ -24,7 +24,40 @@ type AuthContextValue = {
   setBackendUser: (user: AuthenticatedUser) => void;
 };
 
+type FirebaseAuthLikeError = {
+  code?: string;
+};
+
+const HANDLED_AUTH_ERROR_CODES = new Set([
+  'auth/email-already-in-use',
+  'auth/invalid-credential',
+  'auth/invalid-email',
+  'auth/too-many-requests',
+  'auth/user-not-found',
+  'auth/weak-password',
+  'auth/wrong-password',
+]);
+
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+function getFirebaseAuthErrorCode(error: unknown): string | null {
+  if (typeof error === 'object' && error && 'code' in error) {
+    return (error as FirebaseAuthLikeError).code ?? null;
+  }
+
+  return null;
+}
+
+function logAuthFailure(action: 'signIn' | 'signUp', error: unknown) {
+  const code = getFirebaseAuthErrorCode(error);
+
+  if (code && HANDLED_AUTH_ERROR_CODES.has(code)) {
+    console.log(`Context ${action} rejected`, { code });
+    return;
+  }
+
+  console.error(`Context ${action} failed`, error);
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
@@ -91,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Context signIn start', { email });
       await signInWithFirebaseEmail(email, password);
     } catch (error) {
-      console.error('Context signIn failed', error);
+      logAuthFailure('signIn', error);
       setFirebaseUser(null);
       setBackendUser(null);
       setIsLoading(false);
@@ -105,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Context signUp start', { email });
       await signUpWithFirebaseEmail(email, password);
     } catch (error) {
-      console.error('Context signUp failed', error);
+      logAuthFailure('signUp', error);
       setFirebaseUser(null);
       setBackendUser(null);
       setIsLoading(false);

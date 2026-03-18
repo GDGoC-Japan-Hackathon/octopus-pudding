@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@/features/auth/hooks/use-auth';
@@ -47,7 +47,7 @@ function getAuthErrorMessage(mode: AuthMode, error: unknown): string {
 }
 
 export default function LoginScreen() {
-  const { signIn, signUp } = useAuth();
+  const { isLoading, signIn, signUp } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -57,8 +57,10 @@ export default function LoginScreen() {
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
+  const submitLockRef = useRef(false);
 
   const isSignup = mode === 'signup';
+  const isBusy = isSubmitting || isLoading;
   const passwordValidation = validateSignupPassword(password);
   const canSubmit =
     !!email.trim() &&
@@ -110,6 +112,10 @@ export default function LoginScreen() {
   };
 
   const handleSubmit = async () => {
+    if (submitLockRef.current || isBusy) {
+      return;
+    }
+
     setError(null);
 
     if (isSignup) {
@@ -130,6 +136,7 @@ export default function LoginScreen() {
     }
 
     setConfirmPasswordError(null);
+    submitLockRef.current = true;
     setIsSubmitting(true);
     console.log('Auth submit pressed', {
       mode,
@@ -149,6 +156,7 @@ export default function LoginScreen() {
       setError(getAuthErrorMessage(mode, error));
     } finally {
       console.log('Auth submit finished');
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -255,10 +263,10 @@ export default function LoginScreen() {
 
         <Pressable
           onPress={handleSubmit}
-          disabled={isSubmitting || !canSubmit}
+          disabled={isBusy || !canSubmit}
           style={({ pressed }) => [
             styles.button,
-            (isSubmitting || !canSubmit) && styles.buttonDisabled,
+            (isBusy || !canSubmit) && styles.buttonDisabled,
             pressed && styles.buttonPressed,
           ]}
         >
@@ -271,7 +279,7 @@ export default function LoginScreen() {
 
         <Pressable
           onPress={handleModeToggle}
-          disabled={isSubmitting}
+          disabled={isBusy}
           style={styles.linkButton}
         >
           <Text style={styles.linkButtonText}>
