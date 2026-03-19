@@ -1,8 +1,8 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { BackButton } from '@/components/back-button';
 import { weatherMock } from '@/data/travel';
 import { getFriends } from '@/features/friends/api/get-friends';
 import { type FriendResponse } from '@/features/friends/types/friend-request';
@@ -57,6 +57,24 @@ export default function TripEditScreen() {
   const router = useRouter();
   const { tripId: rawTripId } = useLocalSearchParams<EditParams>();
   const tripId = useMemo(() => parseTripId(rawTripId), [rawTripId]);
+  const headerBackSlot = (
+    <Pressable
+      style={styles.headerBackButton}
+      onPress={() => {
+        if (!tripId) {
+          router.push('/plans');
+          return;
+        }
+        router.replace({
+          pathname: '/plans/detail',
+          params: { id: String(tripId) },
+        });
+      }}
+    >
+      <MaterialIcons name="arrow-back" size={16} color="#EC5B13" />
+      <Text style={styles.headerBackButtonText}>戻る</Text>
+    </Pressable>
+  );
 
   const [isLoading, setIsLoading] = useState(true);
   const [origin, setOrigin] = useState('');
@@ -269,17 +287,12 @@ export default function TripEditScreen() {
 
   return (
     <View style={travelStyles.screen}>
-      <AppHeader title="プラン編集" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
+      <AppHeader
+        title="プラン編集"
+        weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`}
+        leftSlot={headerBackSlot}
+      />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ ...travelStyles.container, paddingBottom: 24 }}>
-        <BackButton
-          onPress={() => {
-            router.replace({
-              pathname: '/plans/detail',
-              params: { id: String(tripId) },
-            });
-          }}
-        />
-
         {isLoading ? (
           <View style={travelStyles.detailSection}>
             <ActivityIndicator color="#F97316" />
@@ -398,3 +411,23 @@ export default function TripEditScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  headerBackButton: {
+    minHeight: 32,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    backgroundColor: '#FFF7ED',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  headerBackButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#EC5B13',
+  },
+});
