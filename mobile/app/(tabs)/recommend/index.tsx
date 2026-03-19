@@ -18,11 +18,15 @@ import {
 } from 'react-native';
 
 import { weatherMock } from '@/data/travel';
-import { getRecommendPlans } from '@/features/recommend/api/get-recommend-plans';
+import { getRecommendPlans, type RecommendPlanListItem } from '@/features/recommend/api/get-recommend-plans';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 
 type PickerType = 'category' | 'people' | 'start' | 'end' | null;
 type RecommendSortOrder = 'newest' | 'oldest';
+type RecommendPlanWithDates = RecommendPlanListItem & {
+  startDate: string;
+  endDate: string;
+};
 
 const CATEGORY_OPTIONS = ['カフェ', '夜景', 'グルメ', '温泉'] as const;
 const WHEEL_ITEM_HEIGHT = 44;
@@ -220,11 +224,12 @@ export default function RecommendationListScreen() {
   }, [activePicker]);
 
   const filteredPlans = useMemo(() => {
+    const plansWithDates = recommendPlans as RecommendPlanWithDates[];
     const query = keyword.trim().toLowerCase();
     const startFilterValue = startDateFilter ? parseDateValue(startDateFilter) : null;
     const endFilterValue = endDateFilter ? parseDateValue(endDateFilter) : null;
 
-    const filtered = recommendPlans.filter((plan) => {
+    const filtered = plansWithDates.filter((plan) => {
       const searchableText = [plan.title, plan.peopleLabel, ...plan.categories].join(' ').toLowerCase();
       const matchesKeyword = query.length === 0 || searchableText.includes(query);
       const matchesPeople = !peopleFilter || plan.participantCount === peopleFilter;
