@@ -23,9 +23,6 @@ import {
 import { weatherMock } from '@/data/travel';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 import { travelStyles } from '@/features/travel/styles';
-import { createAiPlanGeneration } from '@/features/trips/api/ai-plan-generation';
-import { createTrip } from '@/features/trips/api/create-trip';
-import { addTripMember } from '@/features/trips/api/trip-members';
 import {
   type CreateTripFormValues,
   validateAndBuildCreateTripPayload,
@@ -116,21 +113,8 @@ function FieldLabel({ label, required = false }: { label: string; required?: boo
   );
 }
 
-function getAiGenerationFailureMessage(errorMessage?: string | null) {
-  if (!errorMessage) {
-    return 'プランは作成されましたが、AIで日程を生成できませんでした。少し時間をおいて再度お試しください。';
-  }
-
-  if (errorMessage.includes('Gemini API error: 429') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
-    return 'プランは作成されましたが、AI生成が混み合っています。少し待ってからもう一度お試しください。';
-  }
-
-  return 'プランは作成されましたが、AIで日程を生成できませんでした。詳細画面から再度お試しください。';
-}
-
 export default function PlanCreateScreen() {
   const router = useRouter();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResolvingCurrentLocation, setIsResolvingCurrentLocation] = useState(false);
   const isResolvingCurrentLocationRef = useRef(false);
   const [activeDateField, setActiveDateField] = useState<DateFieldKey>('startDate');
@@ -359,36 +343,11 @@ export default function PlanCreateScreen() {
       Alert.alert('入力エラー', result.message);
       return;
     }
-
-    setIsSubmitting(true);
-    try {
-      const created = await createTrip(result.payload);
-
-      const memberPromises = selectedCompanionUserIds.map((userId) => addTripMember(created.trip.id, userId));
-      const results = await Promise.allSettled(memberPromises);
-      const hasMemberError = results.some((entry) => entry.status === 'rejected');
-      const aiGeneration = await createAiPlanGeneration(created.trip.id, { run_async: false });
-
-      clearCreateTripDraft();
-
-      if (aiGeneration.status === 'failed') {
-        Alert.alert('プラン作成完了', getAiGenerationFailureMessage(aiGeneration.error_message));
-      } else if (hasMemberError) {
-        Alert.alert(
-          'プラン作成完了',
-          'プランは作成されましたが、一部の同行者を追加できませんでした。プラン詳細画面から再度追加をお試しください。',
-        );
-      }
-
-      router.replace({
-        pathname: '/plans/detail',
-        params: { id: String(created.trip.id) },
-      });
-    } catch {
-      Alert.alert('作成失敗', 'プラン作成に失敗しました。ログイン状態やAPI接続を確認してください。');
-    } finally {
-      setIsSubmitting(false);
-    }
+    setCreateTripDraft({
+      formValues: fields,
+      selectedCompanionUserIds,
+    });
+    router.push('/create/generating');
   };
 
   return (
@@ -620,15 +579,10 @@ export default function PlanCreateScreen() {
         </View>
 
         <Pressable
-          style={[travelStyles.primaryButton, isSubmitting ? { opacity: 0.6 } : null]}
+          style={travelStyles.primaryButton}
           onPress={handleSubmit}
-          disabled={isSubmitting}
         >
-          {isSubmitting ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={travelStyles.primaryButtonText}>プランを作成する</Text>
-          )}
+          <Text style={travelStyles.primaryButtonText}>プランを作成する</Text>
         </Pressable>
       </View>
 
