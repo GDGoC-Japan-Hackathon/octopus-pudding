@@ -77,6 +77,8 @@ export default function PlanCreateScreen() {
   const router = useRouter();
   const [isResolvingCurrentLocation, setIsResolvingCurrentLocation] = useState(false);
   const isResolvingCurrentLocationRef = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [fields, setFields] = useState<CreateTripFormValues>(() => getCreateTripDraft().formValues);
   const [selectedCompanionUserIds, setSelectedCompanionUserIds] = useState<number[]>(
     () => getCreateTripDraft().selectedCompanionUserIds
@@ -178,17 +180,22 @@ export default function PlanCreateScreen() {
     router.push('/create/companions');
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
+    if (isSubmittingRef.current) {
+      return;
+    }
     const result = validateAndBuildCreateTripPayload(fields);
     if (!result.ok) {
       Alert.alert('入力エラー', result.message);
       return;
     }
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
     setCreateTripDraft({
       formValues: fields,
       selectedCompanionUserIds,
     });
-    router.push('/create/generating');
+    router.replace('/create/generating');
   };
 
   return (
@@ -383,10 +390,15 @@ export default function PlanCreateScreen() {
         </View>
 
         <Pressable
-          style={travelStyles.primaryButton}
+          style={[travelStyles.primaryButton, isSubmitting && styles.primaryButtonDisabled]}
           onPress={handleSubmit}
+          disabled={isSubmitting}
         >
-          <Text style={travelStyles.primaryButtonText}>プランを作成する</Text>
+          {isSubmitting ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={travelStyles.primaryButtonText}>プランを作成する</Text>
+          )}
         </Pressable>
       </View>
     </ScrollView>
@@ -594,5 +606,8 @@ const styles = StyleSheet.create({
   },
   destinationSuggestionTextSelected: {
     color: '#EA580C',
+  },
+  primaryButtonDisabled: {
+    opacity: 0.6,
   },
 });
