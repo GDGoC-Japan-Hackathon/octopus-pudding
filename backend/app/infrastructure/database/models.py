@@ -168,7 +168,13 @@ class ItineraryItemModel(Base):
     trip_day_id = Column(Integer, ForeignKey("trip_days.id"), nullable=False)
     name = Column(String(255), nullable=False)
     sequence = Column(Integer, nullable=True)
+    item_type = Column(String(50), nullable=False, default="place")
     category = Column(String(100))  # restaurant / sightseeing / hotel
+    transport_mode = Column(String(50))
+    travel_minutes = Column(Integer)
+    distance_meters = Column(Integer)
+    from_name = Column(String(255))
+    to_name = Column(String(255))
     latitude = Column(Float)
     longitude = Column(Float)
     start_time = Column(DateTime)

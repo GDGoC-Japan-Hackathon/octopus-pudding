@@ -25,6 +25,8 @@ class RecommendationTimelineItemResponse(BaseModel):
     end: str
     title: str
     body: str
+    item_type: str = "place"
+    meta_label: Optional[str] = None
     icon: Optional[str] = None
 
 

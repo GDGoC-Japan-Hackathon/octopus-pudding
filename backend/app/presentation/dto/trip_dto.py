@@ -74,7 +74,13 @@ class TripDayUpdate(BaseModel):
 
 class ItineraryItemCreate(BaseModel):
     name: str
+    item_type: str = "place"
     category: Optional[str] = None
+    transport_mode: Optional[str] = None
+    travel_minutes: Optional[int] = None
+    distance_meters: Optional[int] = None
+    from_name: Optional[str] = None
+    to_name: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     start_time: Optional[datetime] = None
@@ -85,7 +91,13 @@ class ItineraryItemCreate(BaseModel):
 
 class ItineraryItemUpdate(BaseModel):
     name: Optional[str] = None
+    item_type: Optional[str] = None
     category: Optional[str] = None
+    transport_mode: Optional[str] = None
+    travel_minutes: Optional[int] = None
+    distance_meters: Optional[int] = None
+    from_name: Optional[str] = None
+    to_name: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     start_time: Optional[datetime] = None
@@ -237,7 +249,13 @@ class ItineraryItemResponse(BaseModel):
     id: int
     trip_day_id: int
     name: str
+    item_type: str = "place"
     category: Optional[str] = None
+    transport_mode: Optional[str] = None
+    travel_minutes: Optional[int] = None
+    distance_meters: Optional[int] = None
+    from_name: Optional[str] = None
+    to_name: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     start_time: Optional[datetime] = None
