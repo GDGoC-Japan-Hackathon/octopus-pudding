@@ -356,29 +356,23 @@ export default function PlansListScreen() {
                   <Text style={styles.cardTitle} numberOfLines={2}>
                     {plan.title}
                   </Text>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      plan.statusVariant === 'planned'
-                        ? styles.statusBadgePlanned
-                        : plan.statusVariant === 'ongoing'
-                          ? styles.statusBadgeOngoing
-                          : styles.statusBadgeMuted,
-                    ]}
-                  >
-                    <Text
+                  {plan.status !== 'planned' ? (
+                    <View
                       style={[
-                        styles.statusBadgeText,
-                        plan.statusVariant === 'planned'
-                          ? styles.statusBadgeTextPlanned
-                          : plan.statusVariant === 'ongoing'
-                            ? styles.statusBadgeTextOngoing
-                            : styles.statusBadgeTextMuted,
+                        styles.statusBadge,
+                        plan.statusVariant === 'ongoing' ? styles.statusBadgeOngoing : styles.statusBadgeMuted,
                       ]}
                     >
-                      {plan.statusLabel}
-                    </Text>
-                  </View>
+                      <Text
+                        style={[
+                          styles.statusBadgeText,
+                          plan.statusVariant === 'ongoing' ? styles.statusBadgeTextOngoing : styles.statusBadgeTextMuted,
+                        ]}
+                      >
+                        {plan.statusLabel}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
 
                 <View style={styles.metaStack}>
