@@ -44,7 +44,7 @@ export default function CreateCompanionsScreen() {
       budget: getStringParam(params.budget),
       atmosphere: getStringParam(params.atmosphere),
       recommendationCategories: parseCategories(getStringParam(params.recommendationCategories)),
-      transportTypes: parseCategories(getStringParam(params.transportTypes)),
+      transportTypes: [],
     }),
     [params]
   );

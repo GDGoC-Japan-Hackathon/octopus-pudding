@@ -14,13 +14,13 @@ export type CreateTripFormValues = {
 
 export type CreateTripValidationResult =
   | {
-      ok: true;
-      payload: CreateTripRequest;
-    }
+    ok: true;
+    payload: CreateTripRequest;
+  }
   | {
-      ok: false;
-      message: string;
-    };
+    ok: false;
+    message: string;
+  };
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -35,12 +35,10 @@ export function validateAndBuildCreateTripPayload(
   const budgetText = values.budget.trim();
   const atmosphere = values.atmosphere.trim();
   const recommendationCategories = values.recommendationCategories;
-  const transportTypes = values.transportTypes;
-
   if (!origin || !destination || !startDate || !endDate) {
     return {
       ok: false,
-      message: '出発地・目的地・日程は必須です。',
+      message: '必須項目が未入力です',
     };
   }
 
@@ -116,7 +114,7 @@ export function validateAndBuildCreateTripPayload(
       preference: {
         atmosphere: atmosphere as TripAtmosphere,
         budget,
-        transport_type: transportTypes.join(','),
+        transport_type: 'train,bus',
       },
     },
   };

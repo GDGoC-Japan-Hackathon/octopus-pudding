@@ -53,10 +53,6 @@ const formItems = [
 const destinationSuggestions = ['東京', '大阪', '京都', '札幌', '福岡', '那覇', '箱根', '軽井沢'] as const;
 const ATMOSPHERE_OPTIONS = ['のんびり', 'アクティブ', 'グルメ', '映え'] as const;
 const RECOMMEND_CATEGORY_OPTIONS = ['カフェ', '夜景', 'グルメ', '温泉'] as const;
-const TRANSPORT_OPTIONS = [
-  { label: '電車', value: 'train' },
-  { label: 'バス', value: 'bus' },
-] as const;
 type DateFieldKey = 'startDate' | 'endDate';
 const BUDGET_STEP = 10000;
 const MAX_PARTICIPANT_COUNT = 10;
@@ -140,15 +136,6 @@ export default function PlanCreateScreen() {
       recommendationCategories: prev.recommendationCategories.includes(category)
         ? prev.recommendationCategories.filter((item) => item !== category)
         : [...prev.recommendationCategories, category],
-    }));
-  }, []);
-
-  const toggleTransportType = useCallback((transportType: string) => {
-    setFields((prev) => ({
-      ...prev,
-      transportTypes: prev.transportTypes.includes(transportType)
-        ? prev.transportTypes.filter((item) => item !== transportType)
-        : [...prev.transportTypes, transportType],
     }));
   }, []);
 
@@ -341,7 +328,6 @@ export default function PlanCreateScreen() {
         budget: fields.budget,
         atmosphere: fields.atmosphere,
         recommendationCategories: fields.recommendationCategories.join(','),
-        transportTypes: fields.transportTypes.join(','),
       },
     });
   };
@@ -369,7 +355,7 @@ export default function PlanCreateScreen() {
                   {isResolvingCurrentLocation ? (
                     <ActivityIndicator color="#F97316" size="small" />
                   ) : (
-                    <Text style={[travelStyles.pillText, styles.currentLocationButtonText]}>現在地を使う</Text>
+                    <Text style={[travelStyles.pillText, styles.currentLocationButtonText]}>現在地を入力</Text>
                   )}
                 </Pressable>
               ) : null}
@@ -520,7 +506,12 @@ export default function PlanCreateScreen() {
                 <Pressable
                   key={option}
                   style={[styles.optionChip, active && styles.optionChipActive]}
-                  onPress={() => setFields((prev) => ({ ...prev, atmosphere: option }))}
+                  onPress={() =>
+                    setFields((prev) => ({
+                      ...prev,
+                      atmosphere: prev.atmosphere === option ? '' : option,
+                    }))
+                  }
                 >
                   <Text style={[styles.optionChipText, active && styles.optionChipTextActive]}>{option}</Text>
                 </Pressable>
@@ -530,7 +521,7 @@ export default function PlanCreateScreen() {
         </View>
 
         <View style={styles.fieldBlock}>
-          <FieldLabel label="カテゴリ" />
+          <FieldLabel label="カテゴリ（複数選択可）" />
           <View style={styles.optionWrap}>
             {RECOMMEND_CATEGORY_OPTIONS.map((option) => {
               const active = fields.recommendationCategories.includes(option);
@@ -541,24 +532,6 @@ export default function PlanCreateScreen() {
                   onPress={() => toggleRecommendationCategory(option)}
                 >
                   <Text style={[styles.optionChipText, active && styles.optionChipTextActive]}>{option}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={styles.fieldBlock}>
-          <FieldLabel label="移動手段" />
-          <View style={styles.optionWrap}>
-            {TRANSPORT_OPTIONS.map((option) => {
-              const active = fields.transportTypes.includes(option.value);
-              return (
-                <Pressable
-                  key={option.value}
-                  style={[styles.optionChip, active && styles.optionChipActive]}
-                  onPress={() => toggleTransportType(option.value)}
-                >
-                  <Text style={[styles.optionChipText, active && styles.optionChipTextActive]}>{option.label}</Text>
                 </Pressable>
               );
             })}

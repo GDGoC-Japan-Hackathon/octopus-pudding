@@ -3,9 +3,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { BackButton } from '@/components/back-button';
+import { weatherMock } from '@/data/travel';
 import { getFriends } from '@/features/friends/api/get-friends';
 import { type FriendResponse } from '@/features/friends/types/friend-request';
 import { AppHeader } from '@/features/travel/components/AppHeader';
+import { travelStyles } from '@/features/travel/styles';
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
 import { addTripMember, removeTripMember } from '@/features/trips/api/trip-members';
 import { updateTrip } from '@/features/trips/api/update-trip';
@@ -16,8 +18,6 @@ import {
   parsePreferenceBudget,
   validateAndBuildTripBasicPayload,
 } from '@/features/trips/utils/edit-trip';
-import { travelStyles } from '@/features/travel/styles';
-import { weatherMock } from '@/data/travel';
 import { ApiError } from '@/lib/api/client';
 
 const ATMOSPHERE_OPTIONS: TripAtmosphere[] = ['のんびり', 'アクティブ', 'グルメ', '映え'];
