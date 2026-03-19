@@ -179,7 +179,7 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
     id: item.id,
     start: toTimeLabel(item.start_time),
     end: toTimeLabel(item.end_time),
-    title: item.item_type === 'transport' ? item.name || transportModeLabel(item.transport_mode) : item.name,
+    title: item.item_type === 'transport' ? transportModeLabel(item.transport_mode) : item.name,
     body:
       item.item_type === 'transport'
         ? item.from_name && item.to_name
@@ -191,6 +191,10 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
       item.item_type === 'transport'
         ? buildTransportMetaLabel(item.travel_minutes, item.distance_meters)
         : undefined,
+    durationLabel:
+      item.item_type === 'transport'
+        ? toTransportDurationLabel(item.travel_minutes, item.start_time, item.end_time)
+        : toDurationLabel(item.start_time, item.end_time),
     icon:
       item.item_type === 'transport'
         ? transportModeIcon(item.transport_mode)
@@ -216,13 +220,21 @@ function transportModeIcon(mode?: string | null): keyof typeof MaterialIcons.gly
 
 function buildTransportMetaLabel(travelMinutes?: number | null, distanceMeters?: number | null) {
   const parts: string[] = [];
-  if (typeof travelMinutes === 'number') {
-    parts.push(`${travelMinutes}分`);
-  }
   if (typeof distanceMeters === 'number') {
     parts.push(distanceMeters >= 1000 ? `${(distanceMeters / 1000).toFixed(1)}km` : `${distanceMeters}m`);
   }
   return parts.join(' / ') || undefined;
+}
+
+function toTransportDurationLabel(
+  travelMinutes?: number | null,
+  start?: string | null,
+  end?: string | null
+) {
+  if (typeof travelMinutes === 'number' && travelMinutes > 0) {
+    return `${travelMinutes}分`;
+  }
+  return toDurationLabel(start, end);
 }
 
 export function toPlanDetailViewModel(

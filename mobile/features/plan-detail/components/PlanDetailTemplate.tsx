@@ -109,54 +109,59 @@ export function PlanDetailTemplate({
         <View style={styles.timelineSection}>
           {timeline.length ? (
             timeline.map((item) => (
-              <View key={String(item.id)}>
-                <View style={styles.timelineRow}>
-                  <View style={styles.timeColumn}>
-                    <Text style={styles.timeTextStrong}>{item.start}</Text>
-                    <Text style={styles.timeTextMuted}>{item.end}</Text>
-                  </View>
+              <View
+                key={String(item.id)}
+                style={[
+                  styles.timelineEntry,
+                  item.itemType === 'transport' ? styles.timelineEntryTransport : styles.timelineEntryPlace,
+                ]}
+              >
+                {item.itemType === 'transport' ? (
+                  <View style={styles.transportRow}>
+                    <View style={styles.transportConnectorColumn}>
+                      <View style={styles.transportConnectorLine} />
+                    </View>
 
-                  <View style={styles.cardColumn}>
-                    <View
-                      style={[
-                        styles.timelineCard,
-                        item.itemType === 'transport' && styles.timelineCardTransport,
-                      ]}
-                    >
-                      <View style={styles.timelineCardHeader}>
-                        <View style={styles.timelineCardTitleRow}>
-                          <View
-                            style={[
-                              styles.timelineIconWrap,
-                              item.itemType === 'transport' && styles.timelineIconWrapTransport,
-                            ]}
-                          >
-                            <MaterialIcons name={item.icon ?? 'place'} size={16} color="#EC5B13" />
-                          </View>
-                          <Text style={styles.timelineCardTitle}>{item.title}</Text>
-                        </View>
+                    <View style={styles.transportBubbleWrap}>
+                      <View style={styles.transportBubble}>
+                        <MaterialIcons name={item.icon ?? 'directions-bus'} size={18} color="#2563EB" />
+                        <Text style={styles.transportTitle}>{item.title}</Text>
+                        {item.metaLabel ? <View style={styles.transportDot} /> : null}
+                        {item.durationLabel ? <Text style={styles.transportDuration}>{item.durationLabel}</Text> : null}
+                        {item.metaLabel ? <Text style={styles.transportMeta}>{item.metaLabel}</Text> : null}
                       </View>
-                      <View
-                        style={[
-                          styles.durationBadge,
-                          item.itemType === 'transport' && styles.durationBadgeTransport,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.durationBadgeText,
-                            item.itemType === 'transport' && styles.durationBadgeTextTransport,
-                          ]}
-                        >
-                          {item.itemType === 'transport'
-                            ? item.metaLabel ?? '移動'
-                            : `滞在: ${item.start} - ${item.end}`}
-                        </Text>
-                      </View>
-                      <Text style={styles.timelineCardBody}>{item.body}</Text>
                     </View>
                   </View>
-                </View>
+                ) : (
+                  <View style={styles.timelineRow}>
+                    <View style={styles.timeColumn}>
+                      <Text style={styles.timeTextStrong}>{item.start}</Text>
+                      <Text style={styles.timeTextMuted}>{item.end}</Text>
+                    </View>
+
+                    <View style={styles.cardColumn}>
+                      <View style={styles.timelineCard}>
+                        <View style={styles.timelineCardHeader}>
+                          <View style={styles.timelineCardTitleRow}>
+                            <View style={styles.timelineIconWrap}>
+                              <MaterialIcons name={item.icon ?? 'place'} size={16} color="#EC5B13" />
+                            </View>
+                            <Text style={styles.timelineCardTitle}>{item.title}</Text>
+                          </View>
+                          <MaterialIcons name="more-horiz" size={18} color="#CBD5E1" />
+                        </View>
+
+                        {item.durationLabel ? (
+                          <View style={styles.durationBadge}>
+                            <Text style={styles.durationBadgeText}>滞在: {item.durationLabel}</Text>
+                          </View>
+                        ) : null}
+
+                        <Text style={styles.timelineCardBody}>{item.body}</Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
               </View>
             ))
           ) : (
@@ -353,6 +358,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 4,
   },
+  timelineEntry: {
+    width: '100%',
+  },
+  timelineEntryPlace: {
+    marginBottom: 2,
+  },
+  timelineEntryTransport: {
+    marginVertical: 4,
+  },
   timelineRow: {
     flexDirection: 'row',
     gap: 14,
@@ -380,7 +394,7 @@ const styles = StyleSheet.create({
   timelineCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 18,
-    padding: 16,
+    padding: 20,
     borderWidth: 1,
     borderColor: '#F1F5F9',
     shadowColor: '#0F172A',
@@ -389,17 +403,17 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  timelineCardTransport: {
-    backgroundColor: '#F8FBFF',
-    borderColor: '#BFDBFE',
-  },
   timelineCardHeader: {
-    marginBottom: 10,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
   },
   timelineCardTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    flex: 1,
   },
   timelineIconWrap: {
     width: 32,
@@ -408,9 +422,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF1E8',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  timelineIconWrapTransport: {
-    backgroundColor: '#DBEAFE',
   },
   timelineCardTitle: {
     flex: 1,
@@ -421,29 +432,82 @@ const styles = StyleSheet.create({
   durationBadge: {
     alignSelf: 'flex-start',
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingVertical: 4,
+    borderRadius: 7,
     backgroundColor: '#FFF7ED',
     borderWidth: 1,
     borderColor: '#FED7AA',
     marginBottom: 10,
-  },
-  durationBadgeTransport: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#BFDBFE',
   },
   durationBadgeText: {
     fontSize: 10,
     fontWeight: '700',
     color: '#EC5B13',
   },
-  durationBadgeTextTransport: {
-    color: '#2563EB',
-  },
   timelineCardBody: {
     fontSize: 13,
     lineHeight: 20,
     color: '#475569',
+  },
+  transportRow: {
+    flexDirection: 'row',
+    gap: 14,
+    height: 72,
+  },
+  transportConnectorColumn: {
+    width: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transportConnectorLine: {
+    width: 2,
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: '#E2E8F0',
+  },
+  transportBubbleWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transportBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+    flexWrap: 'wrap',
+  },
+  transportTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  transportDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: '#CBD5E1',
+  },
+  transportDuration: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#2563EB',
+  },
+  transportMeta: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
   },
   emptyTimelineCard: {
     backgroundColor: '#FFFFFF',
