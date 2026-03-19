@@ -545,6 +545,7 @@ export default function PlanCreateScreen() {
             <DateTimePicker
               mode="date"
               display="inline"
+              themeVariant="light"
               value={iosPickerValue}
               minimumDate={activeDateField === 'endDate' ? parseDateInput(fields.startDate) ?? undefined : undefined}
               onChange={handleIosDateChange}
