@@ -1,4 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import DateTimePicker, { DateTimePickerAndroid, type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
 import { Link } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -7,6 +8,7 @@ import {
   Alert,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,23 +24,42 @@ import { type TripResponse } from '@/features/trips/types/trip-edit';
 import { type TripListItemViewModel, type TripSortOrder } from '@/features/trips/types/trip-list';
 import { filterTripListItems, toTripListItemViewModel } from '@/features/trips/utils/trip-list';
 
-type PickerType = 'people' | 'start' | 'end' | null;
-type DatePart = 'year' | 'month' | 'day';
+type PickerType = 'category' | 'people' | 'start' | 'end' | null;
 
 const PLAN_IMAGE_URL =
   'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1200&q=80';
 const WHEEL_ITEM_HEIGHT = 44;
 const WHEEL_VISIBLE_ROWS = 5;
 const PEOPLE_OPTIONS = Array.from({ length: 10 }, (_, index) => index + 1);
-const YEAR_OPTIONS = Array.from({ length: 31 }, (_, index) => 2000 + index);
-const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => index + 1);
+const CATEGORY_OPTIONS = ['カフェ', '夜景', 'グルメ', '温泉'] as const;
 
-function getDaysInMonth(year: number, month: number): number {
-  return new Date(year, month, 0).getDate();
+function parseDateInput(value: string) {
+  if (!value) return null;
+  const normalized = value.replace(/\./g, '/').replace(/-/g, '/');
+  const match = normalized.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const y = Number(year);
+  const m = Number(month);
+  const d = Number(day);
+  if (Number.isNaN(y) || Number.isNaN(m) || Number.isNaN(d)) return null;
+  const parsed = new Date(y, m - 1, d);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== y ||
+    parsed.getMonth() !== m - 1 ||
+    parsed.getDate() !== d
+  ) {
+    return null;
+  }
+  return parsed;
 }
 
-function formatDateLabel(year: number, month: number, day: number) {
-  return `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`;
+function formatDateInput(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}/${month}/${day}`;
 }
 
 type WheelPickerProps<T extends string | number> = {
@@ -105,16 +126,12 @@ export default function PlansListScreen() {
   const [plans, setPlans] = useState<TripResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [peopleFilter, setPeopleFilter] = useState<number | null>(null);
   const [startDateFilter, setStartDateFilter] = useState('');
   const [endDateFilter, setEndDateFilter] = useState('');
   const [sortOrder, setSortOrder] = useState<TripSortOrder>('newest');
   const [activePicker, setActivePicker] = useState<PickerType>(null);
-  const [activeDatePart, setActiveDatePart] = useState<DatePart>('year');
-  const [draftPeople, setDraftPeople] = useState(1);
-  const [draftYear, setDraftYear] = useState(2025);
-  const [draftMonth, setDraftMonth] = useState(1);
-  const [draftDay, setDraftDay] = useState(1);
 
   const loadTrips = useCallback(async () => {
     try {
@@ -135,54 +152,79 @@ export default function PlansListScreen() {
     }, [loadTrips])
   );
 
-  const dayOptions = useMemo(
-    () => Array.from({ length: getDaysInMonth(draftYear, draftMonth) }, (_, index) => index + 1),
-    [draftMonth, draftYear]
-  );
-
   const planItems = useMemo<TripListItemViewModel[]>(() => plans.map(toTripListItemViewModel), [plans]);
 
   const filteredPlans = useMemo(
-    () =>
-      filterTripListItems(planItems, {
+    () => {
+      const filters = {
         keyword,
+        categories: categoryFilter,
         startDate: startDateFilter,
         endDate: endDateFilter,
         sortOrder,
         participantCount: peopleFilter,
-      }),
-    [endDateFilter, keyword, peopleFilter, planItems, sortOrder, startDateFilter]
+      };
+
+      return filterTripListItems(planItems, filters);
+    },
+    [categoryFilter, endDateFilter, keyword, peopleFilter, planItems, sortOrder, startDateFilter]
   );
 
   const openPeoplePicker = useCallback(() => {
-    setDraftPeople(peopleFilter ?? 1);
     setActivePicker('people');
-  }, [peopleFilter]);
+  }, []);
+
+  const applyDateFilter = useCallback((type: 'start' | 'end', date: Date) => {
+    const formatted = formatDateInput(date);
+    if (type === 'start') {
+      setStartDateFilter(formatted);
+      return;
+    }
+    setEndDateFilter(formatted);
+  }, []);
 
   const openDatePicker = useCallback(
     (type: 'start' | 'end') => {
       const source = type === 'start' ? startDateFilter : endDateFilter;
-      const parsed = source ? new Date(source.replace(/\./g, '/').replace(/-/g, '/')) : new Date();
-      const year = parsed.getFullYear();
-      const month = parsed.getMonth() + 1;
-      const day = parsed.getDate();
+      const value = parseDateInput(source) ?? (type === 'end' ? parseDateInput(startDateFilter) : null) ?? new Date();
 
-      setDraftYear(Math.min(Math.max(year, YEAR_OPTIONS[0]), YEAR_OPTIONS[YEAR_OPTIONS.length - 1]));
-      setDraftMonth(month);
-      setDraftDay(day);
-      setActiveDatePart('year');
+      if (Platform.OS === 'android') {
+        DateTimePickerAndroid.open({
+          mode: 'date',
+          display: 'calendar',
+          value,
+          minimumDate: type === 'end' ? parseDateInput(startDateFilter) ?? undefined : undefined,
+          onChange: (event, selectedDate) => {
+            if (event.type !== 'set' || !selectedDate) {
+              return;
+            }
+            applyDateFilter(type, selectedDate);
+          },
+        });
+        return;
+      }
+
       setActivePicker(type);
     },
-    [endDateFilter, startDateFilter]
+    [applyDateFilter, endDateFilter, startDateFilter]
   );
 
   const closePicker = useCallback(() => {
     setActivePicker(null);
   }, []);
 
+  const toggleCategoryFilter = useCallback((category: string) => {
+    setCategoryFilter((current) =>
+      current.includes(category) ? current.filter((item) => item !== category) : [...current, category]
+    );
+  }, []);
+
   const resetPicker = useCallback(() => {
     if (activePicker === 'people') {
       setPeopleFilter(null);
+    }
+    if (activePicker === 'category') {
+      setCategoryFilter([]);
     }
     if (activePicker === 'start') {
       setStartDateFilter('');
@@ -193,24 +235,8 @@ export default function PlansListScreen() {
     setActivePicker(null);
   }, [activePicker]);
 
-  const confirmPicker = useCallback(() => {
-    if (activePicker === 'people') {
-      setPeopleFilter(draftPeople);
-    }
-
-    if (activePicker === 'start' || activePicker === 'end') {
-      const nextDate = formatDateLabel(draftYear, draftMonth, draftDay);
-      if (activePicker === 'start') {
-        setStartDateFilter(nextDate);
-      } else {
-        setEndDateFilter(nextDate);
-      }
-    }
-
-    setActivePicker(null);
-  }, [activePicker, draftDay, draftMonth, draftPeople, draftYear]);
-
   const sortLabel = sortOrder === 'newest' ? '新しい順' : '古い順';
+  const categoryLabel = categoryFilter.length ? `カテゴリ(${categoryFilter.length})` : 'カテゴリ';
   const peopleLabel = peopleFilter ? `${peopleFilter}名` : '人数';
   const startLabel = startDateFilter || '開始日';
   const endLabel = endDateFilter || '終了日';
@@ -238,6 +264,15 @@ export default function PlansListScreen() {
           </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
+            <Pressable
+              style={[styles.filterChip, categoryFilter.length > 0 && styles.filterChipActive]}
+              onPress={() => setActivePicker('category')}
+            >
+              <Text style={[styles.filterChipText, categoryFilter.length > 0 && styles.filterChipTextActive]}>
+                {categoryLabel}
+              </Text>
+              <MaterialIcons name="expand-more" size={18} color={categoryFilter.length > 0 ? '#EC5B13' : '#64748B'} />
+            </Pressable>
             <Pressable style={[styles.filterChip, !!peopleFilter && styles.filterChipActive]} onPress={openPeoplePicker}>
               <Text style={[styles.filterChipText, !!peopleFilter && styles.filterChipTextActive]}>{peopleLabel}</Text>
               <MaterialIcons name="expand-more" size={18} color={peopleFilter ? '#EC5B13' : '#64748B'} />
@@ -329,103 +364,79 @@ export default function PlansListScreen() {
       <Modal visible={activePicker !== null} transparent animationType="slide" onRequestClose={closePicker}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
-            <View style={styles.modalTopSection}>
-              <Text style={styles.modalTitle}>
-                {activePicker === 'people'
-                  ? '人数を選択'
-                  : activePicker === 'start'
-                    ? '開始日を選択'
-                    : '終了日を選択'}
-              </Text>
-
-              <Pressable style={styles.modalCloseButton} onPress={closePicker}>
-                <MaterialIcons name="close" size={22} color="#64748B" />
-              </Pressable>
-
-              {activePicker === 'people' ? null : (
-                <View style={styles.datePartRow}>
-                  <Pressable
-                    style={[styles.datePartButton, activeDatePart === 'year' && styles.datePartButtonActive]}
-                    onPress={() => setActiveDatePart('year')}
-                  >
-                    <Text style={[styles.datePartButtonText, activeDatePart === 'year' && styles.datePartButtonTextActive]}>
-                      年
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.datePartButton, activeDatePart === 'month' && styles.datePartButtonActive]}
-                    onPress={() => setActiveDatePart('month')}
-                  >
-                    <Text style={[styles.datePartButtonText, activeDatePart === 'month' && styles.datePartButtonTextActive]}>
-                      月
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.datePartButton, activeDatePart === 'day' && styles.datePartButtonActive]}
-                    onPress={() => setActiveDatePart('day')}
-                  >
-                    <Text style={[styles.datePartButtonText, activeDatePart === 'day' && styles.datePartButtonTextActive]}>
-                      日
-                    </Text>
-                  </Pressable>
+            {activePicker === 'category' ? (
+              <>
+                <View style={styles.modalTopSection}>
+                  <Text style={styles.modalTitle}>カテゴリを選択</Text>
                 </View>
-              )}
-            </View>
-
-            <View style={styles.modalWheelSection}>
-              {activePicker === 'people' ? (
-                <WheelPicker
-                  values={PEOPLE_OPTIONS}
-                  selectedValue={draftPeople}
-                  onChange={setDraftPeople}
-                  renderLabel={(value) => `${value}名`}
-                />
-              ) : (
-                <WheelPicker
-                  values={
-                    activeDatePart === 'year'
-                      ? YEAR_OPTIONS
-                      : activeDatePart === 'month'
-                        ? MONTH_OPTIONS
-                        : dayOptions
-                  }
-                  selectedValue={
-                    activeDatePart === 'year'
-                      ? draftYear
-                      : activeDatePart === 'month'
-                        ? draftMonth
-                        : Math.min(draftDay, dayOptions.length)
-                  }
-                  onChange={(value) => {
-                    if (activeDatePart === 'year') {
-                      setDraftYear(value);
-                      const maxDay = getDaysInMonth(value, draftMonth);
-                      if (draftDay > maxDay) {
-                        setDraftDay(maxDay);
-                      }
-                    } else if (activeDatePart === 'month') {
-                      setDraftMonth(value);
-                      const maxDay = getDaysInMonth(draftYear, value);
-                      if (draftDay > maxDay) {
-                        setDraftDay(maxDay);
-                      }
-                    } else {
-                      setDraftDay(value);
+                <View style={styles.categoryPickerSection}>
+                  <View style={styles.categoryPickerList}>
+                    {CATEGORY_OPTIONS.map((category) => {
+                      const active = categoryFilter.includes(category);
+                      return (
+                        <Pressable
+                          key={category}
+                          style={[styles.categoryPickerChip, active && styles.categoryPickerChipActive]}
+                          onPress={() => toggleCategoryFilter(category)}
+                        >
+                          <Text style={[styles.categoryPickerChipText, active && styles.categoryPickerChipTextActive]}>
+                            {category}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              </>
+            ) : activePicker === 'people' ? (
+              <>
+                <View style={styles.modalTopSection}>
+                  <Text style={styles.modalTitle}>人数を選択</Text>
+                </View>
+                <View style={styles.modalWheelSection}>
+                  <WheelPicker
+                    values={PEOPLE_OPTIONS}
+                    selectedValue={peopleFilter ?? 1}
+                    onChange={setPeopleFilter}
+                    renderLabel={(value) => `${value}名`}
+                  />
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.modalTopSection}>
+                  <Text style={styles.modalTitle}>{activePicker === 'start' ? '開始日を選択' : '終了日を選択'}</Text>
+                </View>
+                <View style={styles.calendarSection}>
+                  <DateTimePicker
+                    mode="date"
+                    display="inline"
+                    themeVariant="light"
+                    value={
+                      parseDateInput(activePicker === 'start' ? startDateFilter : endDateFilter) ??
+                      (activePicker === 'end' ? parseDateInput(startDateFilter) : null) ??
+                      new Date()
                     }
-                  }}
-                  renderLabel={(value) =>
-                    activeDatePart === 'year' ? `${value}年` : activeDatePart === 'month' ? `${value}月` : `${value}日`
-                  }
-                />
-              )}
-            </View>
+                    minimumDate={activePicker === 'end' ? parseDateInput(startDateFilter) ?? undefined : undefined}
+                    onChange={(event: DateTimePickerEvent, selectedDate?: Date) => {
+                      if (event.type !== 'set' || !selectedDate) {
+                        return;
+                      }
+                      if (activePicker === 'start' || activePicker === 'end') {
+                        applyDateFilter(activePicker, selectedDate);
+                      }
+                    }}
+                  />
+                </View>
+              </>
+            )}
 
             <View style={styles.modalBottomSection}>
               <Pressable style={styles.modalSecondaryButton} onPress={resetPicker}>
                 <Text style={styles.modalSecondaryText}>リセット</Text>
               </Pressable>
-              <Pressable style={styles.modalPrimaryButton} onPress={confirmPicker}>
-                <Text style={styles.modalPrimaryButtonText}>決定</Text>
+              <Pressable style={styles.modalCloseBottomButton} onPress={closePicker}>
+                <Text style={styles.modalCloseBottomText}>閉じる</Text>
               </Pressable>
             </View>
           </View>
@@ -663,8 +674,7 @@ const styles = StyleSheet.create({
     height: '64%',
   },
   modalTopSection: {
-    position: 'relative',
-    gap: 12,
+    gap: 24,
   },
   modalTitle: {
     fontSize: 18,
@@ -672,15 +682,6 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     textAlign: 'center',
     paddingTop: 4,
-  },
-  modalCloseButton: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   datePartRow: {
     flexDirection: 'row',
@@ -713,6 +714,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 8,
+  },
+  calendarSection: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  categoryPickerSection: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  categoryPickerList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'center',
+  },
+  categoryPickerChip: {
+    minWidth: 112,
+    height: 44,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryPickerChipActive: {
+    borderColor: '#F7B28B',
+    backgroundColor: '#FFF1E8',
+  },
+  categoryPickerChipText: {
+    fontSize: 20,
+    fontWeight: '500',
+    color: '#0F172A',
+  },
+  categoryPickerChipTextActive: {
+    color: '#EC5B13',
   },
   wheelWrap: {
     width: '100%',
@@ -763,7 +804,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#475569',
   },
-  modalPrimaryButton: {
+  modalCloseBottomButton: {
     flex: 1,
     height: 48,
     borderRadius: 14,
@@ -771,7 +812,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalPrimaryButtonText: {
+  modalCloseBottomText: {
     fontSize: 15,
     fontWeight: '800',
     color: '#FFFFFF',
