@@ -51,7 +51,7 @@ const formItems = [
 ] as const;
 
 const destinationSuggestions = ['東京', '大阪', '京都', '札幌', '福岡', '那覇', '箱根', '軽井沢'] as const;
-const ATMOSPHERE_OPTIONS = ['のんびり', 'アクティブ', 'グルメ', '映え'] as const;
+const ATMOSPHERE_OPTIONS = ['のんびり', 'アクティブ', '映え'] as const;
 const RECOMMEND_CATEGORY_OPTIONS = ['カフェ', '夜景', 'グルメ', '温泉'] as const;
 type DateFieldKey = 'startDate' | 'endDate';
 const BUDGET_STEP = 10000;

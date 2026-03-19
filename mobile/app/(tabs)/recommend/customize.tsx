@@ -21,7 +21,7 @@ import { travelStyles } from '@/features/travel/styles';
 import { weatherMock } from '@/data/travel';
 import { ApiError } from '@/lib/api/client';
 
-const ATMOSPHERE_OPTIONS: TripAtmosphere[] = ['のんびり', 'アクティブ', 'グルメ', '映え'];
+const ATMOSPHERE_OPTIONS: TripAtmosphere[] = ['のんびり', 'アクティブ', '映え'];
 const RECOMMEND_CATEGORY_OPTIONS = ['カフェ', '夜景', 'グルメ', '温泉'] as const;
 
 function parseSelectedCategories(value?: string | null): string[] {
