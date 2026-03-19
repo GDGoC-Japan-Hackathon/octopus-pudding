@@ -1,5 +1,7 @@
 import asyncio
 import json
+import re
+import time
 from typing import Any, Optional
 from urllib import error, parse, request
 
@@ -8,6 +10,9 @@ from app.shared.config import settings
 
 class GeminiClient:
     """Simple Gemini generateContent API client."""
+
+    MAX_RETRIES = 2
+    RETRY_BUFFER_SECONDS = 1.0
 
     def __init__(
         self,
@@ -33,6 +38,24 @@ class GeminiClient:
         )
 
     def _generate_json_sync(
+        self,
+        prompt: str,
+        temperature: float,
+    ) -> dict[str, Any]:
+        last_error: RuntimeError | None = None
+        for attempt in range(self.MAX_RETRIES + 1):
+            try:
+                return self._generate_json_once(prompt=prompt, temperature=temperature)
+            except RuntimeError as exc:
+                last_error = exc
+                retry_after_seconds = self._extract_retry_after_seconds(str(exc))
+                if retry_after_seconds is None or attempt >= self.MAX_RETRIES:
+                    raise
+                time.sleep(retry_after_seconds + self.RETRY_BUFFER_SECONDS)
+
+        raise last_error or RuntimeError("Gemini API request failed")
+
+    def _generate_json_once(
         self,
         prompt: str,
         temperature: float,
@@ -87,3 +110,14 @@ class GeminiClient:
         if not isinstance(parsed, dict):
             raise RuntimeError("Gemini response JSON must be an object")
         return parsed
+
+    def _extract_retry_after_seconds(self, error_message: str) -> Optional[float]:
+        if "Gemini API error: 429" not in error_message:
+            return None
+        match = re.search(r"retry in\s+(\d+(?:\.\d+)?)s", error_message, flags=re.IGNORECASE)
+        if not match:
+            return None
+        try:
+            return float(match.group(1))
+        except ValueError:
+            return None

@@ -27,6 +27,18 @@ function parseCategories(value: string) {
     .filter(Boolean);
 }
 
+function getAiGenerationFailureMessage(errorMessage?: string | null) {
+  if (!errorMessage) {
+    return 'プランは作成されましたが、AIで日程を生成できませんでした。少し時間をおいて再度お試しください。';
+  }
+
+  if (errorMessage.includes('Gemini API error: 429') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+    return 'プランは作成されましたが、AI生成が混み合っています。少し待ってからもう一度お試しください。';
+  }
+
+  return 'プランは作成されましたが、AIで日程を生成できませんでした。詳細画面から再度お試しください。';
+}
+
 export default function CreateCompanionsScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -121,7 +133,7 @@ export default function CreateCompanionsScreen() {
       if (aiGeneration.status === 'failed') {
         Alert.alert(
           'プラン作成完了',
-          aiGeneration.error_message ?? 'プランは作成されましたが、AIで日程を生成できませんでした。詳細画面から再度お試しください。',
+          getAiGenerationFailureMessage(aiGeneration.error_message),
         );
       } else if (hasMemberError) {
         Alert.alert(
