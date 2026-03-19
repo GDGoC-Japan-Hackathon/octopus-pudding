@@ -66,8 +66,11 @@ function getTripDurationDays(startDate: string, endDate: string) {
   const start = parseDateInput(startDate);
   const end = parseDateInput(endDate);
   if (!start || !end) return null;
+  const startTime = start.getTime();
+  const endTime = end.getTime();
+  if (endTime < startTime) return null;
   const msPerDay = 1000 * 60 * 60 * 24;
-  return Math.floor((end.getTime() - start.getTime()) / msPerDay) + 1;
+  return Math.floor((endTime - startTime) / msPerDay) + 1;
 }
 
 type WheelPickerProps<T extends string | number> = {
