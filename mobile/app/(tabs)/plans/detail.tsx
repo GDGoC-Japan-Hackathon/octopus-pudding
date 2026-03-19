@@ -21,7 +21,6 @@ import {
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
 import { type TripDetailAggregateResponse } from '@/features/trips/types/trip-detail';
 import { AppHeader } from '@/features/travel/components/AppHeader';
-
 const PLAN_IMAGE_URL =
   'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1200&q=80';
 
@@ -129,7 +128,7 @@ export default function PlanDetailScreen() {
       headerTitle="マイプラン詳細"
       weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`}
       headerLeftSlot={headerBackSlot}
-      heroImage={PLAN_IMAGE_URL}
+      heroImage={detailView.heroImage ?? PLAN_IMAGE_URL}
       title={detailView.title}
       comment={detailView.comment}
       createdAtLabel={detailView.createdAtLabel}

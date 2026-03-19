@@ -18,6 +18,7 @@ export type PlanDetailTimelineItem = {
 };
 
 export type PlanDetailViewModel = {
+  heroImage: string | null;
   title: string;
   comment?: string;
   createdAtLabel?: string | null;

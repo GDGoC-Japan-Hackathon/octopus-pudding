@@ -253,6 +253,7 @@ export function toPlanDetailViewModel(
     : [{ key: 'day1', label: 'Day 1' }];
 
   return {
+    heroImage: aggregate.trip.cover_image_url ?? null,
     title: `${aggregate.trip.origin} → ${aggregate.trip.destination}`,
     comment:
       aggregate.trip.recommendation_comment ??

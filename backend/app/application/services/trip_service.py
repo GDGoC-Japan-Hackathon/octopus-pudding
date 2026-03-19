@@ -442,13 +442,20 @@ class TripService:
                 days=days,
                 place_candidates=place_candidates,
             )
-            plan_payload = await self._generate_plan_payload(
-                trip=aggregate.trip,
-                preference=aggregate.preference,
-                days=days,
-                place_candidates=place_candidates,
-                route_options=route_options,
-            )
+            fallback_used = False
+            fallback_reason: str | None = None
+            try:
+                plan_payload = await self._generate_plan_payload(
+                    trip=aggregate.trip,
+                    preference=aggregate.preference,
+                    days=days,
+                    place_candidates=place_candidates,
+                    route_options=route_options,
+                )
+            except Exception as exc:  # noqa: BLE001
+                plan_payload = {}
+                fallback_used = True
+                fallback_reason = str(exc)[:500]
             normalized = self._normalize_plan_payload(
                 plan_payload=plan_payload,
                 days=days,
@@ -472,6 +479,8 @@ class TripService:
                     "candidates": len(place_candidates),
                     "inserted_items": inserted_count,
                     "cover_image_updated": cover_image_updated,
+                    "fallback_used": fallback_used,
+                    "fallback_reason": fallback_reason,
                 },
                 ensure_ascii=False,
             )
@@ -538,7 +547,15 @@ class TripService:
                 merged.append(result)
                 if len(merged) >= max_candidates:
                     return merged
-        return merged
+        if merged:
+            return merged
+        return [
+            PlaceCandidate(
+                name=f"{destination} 散策",
+                address=destination,
+                category="tourist_attraction",
+            )
+        ]
 
     async def _generate_plan_payload(
         self,
