@@ -1,4 +1,5 @@
 import { type TripAtmosphere } from '@/features/trips/types/create-trip';
+import { type TripStatus } from '@/features/trips/types/trip-status';
 
 export type TripDetailResponse = {
   id: number;
@@ -9,7 +10,7 @@ export type TripDetailResponse = {
   end_date: string;
   participant_count: number;
   recommendation_categories?: string[] | null;
-  status: string;
+  status: TripStatus;
   created_at?: string | null;
   updated_at?: string | null;
 };

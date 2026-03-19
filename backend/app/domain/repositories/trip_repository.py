@@ -40,6 +40,11 @@ class TripRepository(ABC):
         pass
 
     @abstractmethod
+    async def activate_trip_for_user(self, trip: Trip) -> Optional[Trip]:
+        """Set a trip to ongoing and reset the user's other ongoing trips in one transaction."""
+        pass
+
+    @abstractmethod
     async def delete_trip(self, trip_id: int) -> bool:
         """Delete a trip."""
         pass

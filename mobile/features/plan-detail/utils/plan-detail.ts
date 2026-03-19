@@ -6,6 +6,7 @@ import {
 import { getApiErrorMessage } from '@/lib/api/client';
 
 import { type PlanDetailDay, type PlanDetailTimelineItem, type PlanDetailViewModel } from '@/features/plan-detail/types';
+import { type TripStatus } from '@/features/trips/types/trip-status';
 
 export function parseTripId(rawTripId?: string): number | null {
   if (!rawTripId) {
@@ -33,6 +34,16 @@ export function getAiGenerationErrorMessage(error: unknown): string {
     fallback: 'AIプラン構築の実行に失敗しました。',
     unauthorized: '認証が切れています。再ログイン後にお試しください。',
     forbidden: 'この計画でAIプランを作成する権限がありません。',
+    notFound: '対象の計画が見つかりませんでした。',
+    defaultWithStatus: true,
+  });
+}
+
+export function getTripStartErrorMessage(error: unknown): string {
+  return getApiErrorMessage(error, {
+    fallback: '旅行開始に失敗しました。',
+    unauthorized: '認証が切れています。再ログイン後にお試しください。',
+    forbidden: 'この計画を開始する権限がありません。',
     notFound: '対象の計画が見つかりませんでした。',
     defaultWithStatus: true,
   });
@@ -94,7 +105,7 @@ export function moveTimeLabel(items: TripDetailItineraryItemResponse[]) {
   return toDurationLabel(first.start_time, last.end_time);
 }
 
-export function statusLabel(status: string) {
+export function statusLabel(status: TripStatus | string) {
   if (status === 'planned') return '保存済み';
   if (status === 'ongoing') return '進行中';
   if (status === 'completed') return '完了';

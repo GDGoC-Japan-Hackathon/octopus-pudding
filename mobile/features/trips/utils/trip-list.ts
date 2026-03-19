@@ -1,5 +1,6 @@
 import { type TripResponse } from '@/features/trips/types/trip-edit';
 import { type TripListFilters, type TripListItemViewModel } from '@/features/trips/types/trip-list';
+import { type TripStatus } from '@/features/trips/types/trip-status';
 
 function parseCategories(value?: string[] | null): string[] {
   return value?.filter(Boolean) ?? [];
@@ -31,7 +32,7 @@ function parseTripCreatedAtValue(value: string): number | null {
   return Number.isNaN(time) ? null : time;
 }
 
-export function formatTripStatusLabel(status: string) {
+export function formatTripStatusLabel(status: TripStatus | string) {
   if (status === 'planned') return '保存済み';
   if (status === 'ongoing') return '進行中';
   if (status === 'completed') return '完了';
@@ -45,8 +46,9 @@ export function toTripListItemViewModel(plan: TripResponse): TripListItemViewMod
   return {
     id: plan.id,
     title: `${plan.origin} → ${plan.destination}`,
+    status: plan.status,
     statusLabel,
-    statusVariant: plan.status === 'planned' ? 'planned' : 'muted',
+    statusVariant: plan.status === 'planned' ? 'planned' : plan.status === 'ongoing' ? 'ongoing' : 'muted',
     dateLabel: `${plan.start_date} - ${plan.end_date}`,
     participantCount: plan.participant_count,
     peopleLabel: `${plan.participant_count}名`,

@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -140,6 +140,44 @@ class TripRepositoryImpl(TripRepository):
         db_trip = result.scalar_one_or_none()
         if db_trip is None:
             return None
+
+        db_trip.origin = trip.origin
+        db_trip.destination = trip.destination
+        db_trip.start_date = trip.start_date
+        db_trip.end_date = trip.end_date
+        db_trip.participant_count = trip.participant_count
+        db_trip.source_trip_id = trip.source_trip_id
+        db_trip.counts_as_saved_recommendation = trip.counts_as_saved_recommendation
+        db_trip.is_public = trip.is_public
+        db_trip.cover_image_url = trip.cover_image_url
+        db_trip.recommendation_categories = trip.recommendation_categories
+        db_trip.save_count = trip.save_count
+        db_trip.status = trip.status
+
+        await self.db.commit()
+        await self.db.refresh(db_trip)
+        return self._to_trip_entity(db_trip)
+
+    async def activate_trip_for_user(self, trip: Trip) -> Optional[Trip]:
+        result = await self.db.execute(
+            select(TripModel).where(
+                TripModel.id == trip.id,
+                TripModel.user_id == trip.user_id,
+            )
+        )
+        db_trip = result.scalar_one_or_none()
+        if db_trip is None:
+            return None
+
+        await self.db.execute(
+            update(TripModel)
+            .where(
+                TripModel.user_id == trip.user_id,
+                TripModel.id != trip.id,
+                TripModel.status == "ongoing",
+            )
+            .values(status="planned", updated_at=func.now())
+        )
 
         db_trip.origin = trip.origin
         db_trip.destination = trip.destination

@@ -1,6 +1,5 @@
 import { type TripAtmosphere } from '@/features/trips/types/create-trip';
-
-export type TripStatus = 'planned' | 'ongoing' | 'completed';
+import { type TripStatus } from '@/features/trips/types/trip-status';
 
 export type TripResponse = {
   id: number;
@@ -13,7 +12,7 @@ export type TripResponse = {
   source_trip_id?: number | null;
   counts_as_saved_recommendation?: boolean;
   recommendation_categories?: string[] | null;
-  status: string;
+  status: TripStatus;
   created_at?: string | null;
   updated_at?: string | null;
 };

@@ -1,3 +1,5 @@
+import { type TripStatus } from '@/features/trips/types/trip-status';
+
 export type TripSortOrder = 'newest' | 'oldest';
 
 export type TripListFilters = {
@@ -12,8 +14,9 @@ export type TripListFilters = {
 export type TripListItemViewModel = {
   id: number;
   title: string;
+  status: TripStatus;
   statusLabel: string;
-  statusVariant: 'planned' | 'muted';
+  statusVariant: 'planned' | 'ongoing' | 'muted';
   dateLabel: string;
   participantCount: number;
   peopleLabel: string;

@@ -34,6 +34,7 @@ class TripService:
     """Trip application service."""
 
     ALLOWED_RECOMMENDATION_CATEGORIES = {"カフェ", "夜景", "グルメ", "温泉"}
+    ALLOWED_TRIP_STATUSES = {"planned", "ongoing", "completed"}
     MAX_PARTICIPANT_COUNT = 10
     MAX_TRIP_DAYS = 3
     MAX_ROUTE_CANDIDATES = 8
@@ -81,6 +82,7 @@ class TripService:
     async def update_my_trip(self, user_id: int, trip_id: int, **kwargs) -> Trip:
         aggregate = await self.get_my_trip_detail(user_id=user_id, trip_id=trip_id)
         trip = aggregate.trip
+        current_status = trip.status
         next_start_date = kwargs.get("start_date") if kwargs.get("start_date") is not None else trip.start_date
         next_end_date = kwargs.get("end_date") if kwargs.get("end_date") is not None else trip.end_date
         next_participant_count = (
@@ -99,6 +101,9 @@ class TripService:
         if "save_count" in kwargs and kwargs["save_count"] is not None:
             if kwargs["save_count"] < 0:
                 raise ValueError("save_count must be greater than or equal to 0")
+        if "status" in kwargs and kwargs["status"] is not None:
+            if kwargs["status"] not in self.ALLOWED_TRIP_STATUSES:
+                raise ValueError("status must be one of planned, ongoing, completed")
         if "recommendation_categories" in kwargs and kwargs["recommendation_categories"] is not None:
             invalid_categories = [
                 category for category in kwargs["recommendation_categories"]
@@ -111,7 +116,14 @@ class TripService:
             if value is not None and hasattr(trip, key):
                 setattr(trip, key, value)
 
-        updated = await self.trip_repository.update_trip(trip)
+        if kwargs.get("status") == "ongoing" and current_status == "ongoing":
+            if set(kwargs.keys()) == {"status"}:
+                return trip
+            updated = await self.trip_repository.update_trip(trip)
+        elif kwargs.get("status") == "ongoing":
+            updated = await self.trip_repository.activate_trip_for_user(trip)
+        else:
+            updated = await self.trip_repository.update_trip(trip)
         if updated is None:
             raise TripNotFoundError(f"Trip with ID {trip_id} not found")
         return updated
