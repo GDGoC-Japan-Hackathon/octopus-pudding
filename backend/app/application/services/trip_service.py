@@ -2,6 +2,7 @@ import asyncio
 import json
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from app.domain.entities.trip import (
     AiPlanGeneration,
@@ -583,7 +584,8 @@ class TripService:
             return []
 
         departure_date = days[0].date if days and days[0].date is not None else trip.start_date
-        departure_time = datetime.combine(departure_date, time(9, 0)).replace(tzinfo=timezone.utc)
+        local_departure_time = datetime.combine(departure_date, time(9, 0)).replace(tzinfo=ZoneInfo("Asia/Tokyo"))
+        departure_time = local_departure_time.astimezone(timezone.utc)
         route_client = RoutesClient()
 
         pair_candidates: list[tuple[PlaceCandidate, PlaceCandidate]] = []
