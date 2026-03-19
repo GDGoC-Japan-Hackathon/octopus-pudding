@@ -13,15 +13,11 @@ import {
 import { weatherMock } from '@/data/travel';
 import { PlanDetailTemplate } from '@/features/plan-detail/components/PlanDetailTemplate';
 import {
-  getAiGenerationErrorMessage,
   getTripDetailErrorMessage,
   groupItineraryByDay,
   parseTripId,
   toPlanDetailViewModel,
 } from '@/features/plan-detail/utils/plan-detail';
-import {
-  createAiPlanGeneration,
-} from '@/features/trips/api/ai-plan-generation';
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
 import { type TripDetailAggregateResponse } from '@/features/trips/types/trip-detail';
 import { AppHeader } from '@/features/travel/components/AppHeader';
@@ -35,7 +31,6 @@ export default function PlanDetailScreen() {
   const tripId = useMemo(() => parseTripId(id), [id]);
   const [aggregate, setAggregate] = useState<TripDetailAggregateResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSavingAgain, setIsSavingAgain] = useState(false);
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [activeDayId, setActiveDayId] = useState<number | null>(null);
   const headerBackSlot = (
@@ -78,22 +73,6 @@ export default function PlanDetailScreen() {
       setActiveDayId(groupedItineraryByDay[0].tripDayId);
     }
   }, [activeDayId, groupedItineraryByDay]);
-
-  const handleSaveToMyPlans = useCallback(async () => {
-    if (!tripId) {
-      return;
-    }
-    try {
-      setIsSavingAgain(true);
-      await createAiPlanGeneration(tripId, { run_async: false });
-      void loadTripDetail();
-      Alert.alert('保存完了', 'マイプランに保存しました。');
-    } catch (error) {
-      Alert.alert('保存失敗', getAiGenerationErrorMessage(error));
-    } finally {
-      setIsSavingAgain(false);
-    }
-  }, [loadTripDetail, tripId]);
 
   const handleCustomizeAndSave = useCallback(async () => {
     if (!tripId) {
@@ -163,18 +142,7 @@ export default function PlanDetailScreen() {
       timeline={detailView.timeline}
       primaryActionLabel=""
       primaryActionSlot={
-        <View style={styles.actionRow}>
-          <Pressable
-            style={[styles.actionButton, isSavingAgain ? styles.actionButtonGray : styles.actionButtonOrange]}
-            onPress={handleSaveToMyPlans}
-            disabled={isSavingAgain}
-          >
-            <MaterialIcons name="bookmark" size={22} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>
-              {isSavingAgain ? 'マイプランに\n保存中...' : 'マイプランに\n保存'}
-            </Text>
-          </Pressable>
-
+        <View style={styles.actionWrap}>
           <Pressable
             style={[styles.actionButton, isCustomizing ? styles.actionButtonGray : styles.actionButtonOrange]}
             onPress={handleCustomizeAndSave}
@@ -182,7 +150,7 @@ export default function PlanDetailScreen() {
           >
             <MaterialIcons name="edit-note" size={22} color="#FFFFFF" />
             <Text style={styles.actionButtonText}>
-              {isCustomizing ? 'カスタマイズへ\n移動中...' : 'カスタマイズして\nマイプランに保存'}
+              {isCustomizing ? 'カスタマイズへ\n移動中...' : 'プランをカスタマイズ'}
             </Text>
           </Pressable>
         </View>
@@ -229,19 +197,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#EC5B13',
   },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 12,
+  actionWrap: {
+    width: '100%',
   },
   actionButton: {
-    flex: 1,
-    minHeight: 88,
+    width: '100%',
+    minHeight: 64,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   actionButtonOrange: {
     backgroundColor: '#EC5B13',
@@ -255,6 +222,5 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '700',
     textAlign: 'center',
-    minHeight: 36,
   },
 });
