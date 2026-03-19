@@ -5,13 +5,11 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   Modal,
-  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -48,17 +46,17 @@ const formItems = [
   },
   {
     key: 'budget',
-    label: '予算（任意）',
-    placeholder: '例: 120000',
+    label: '1人あたりの予算（全日程）',
+    placeholder: '',
   },
 ] as const;
 
 const destinationSuggestions = ['東京', '大阪', '京都', '札幌', '福岡', '那覇', '箱根', '軽井沢'] as const;
 type DateFieldKey = 'startDate' | 'endDate';
-const BUDGET_SLIDER_MIN = 0;
-const BUDGET_SLIDER_STEP = 10000;
+const BUDGET_STEP = 10000;
 const MAX_PARTICIPANT_COUNT = 10;
 const MAX_TRIP_DAYS = 3;
+const MAX_BUDGET_PER_PERSON = 100000;
 
 function parseDateInput(value: string) {
   if (!value) return null;
@@ -94,9 +92,8 @@ function addDays(base: Date, days: number) {
   return next;
 }
 
-function clampBudgetValue(value: number, max: number) {
-  const stepped = Math.round(value / BUDGET_SLIDER_STEP) * BUDGET_SLIDER_STEP;
-  return Math.min(max, Math.max(BUDGET_SLIDER_MIN, stepped));
+function subtractDays(base: Date, days: number) {
+  return addDays(base, -days);
 }
 
 export default function PlanCreateScreen() {
@@ -106,15 +103,13 @@ export default function PlanCreateScreen() {
   const isResolvingCurrentLocationRef = useRef(false);
   const [activeDateField, setActiveDateField] = useState<DateFieldKey>('startDate');
   const [isIosDateModalVisible, setIsIosDateModalVisible] = useState(false);
-  const [budgetSliderWidth, setBudgetSliderWidth] = useState(1);
-  const budgetSliderProgress = useRef(new Animated.Value(0)).current;
   const [fields, setFields] = useState<CreateTripFormValues>({
     origin: '',
     destination: '',
     startDate: '',
     endDate: '',
     participantCount: '1',
-    budget: '',
+    budget: '10000',
   });
 
   const updateField = (key: (typeof formItems)[number]['key'], value: string) => {
@@ -160,14 +155,20 @@ export default function PlanCreateScreen() {
         mode: 'date',
         display: 'calendar',
         value: baseValue,
-        minimumDate: field === 'endDate' ? parseDateInput(fields.startDate) ?? undefined : undefined,
+        minimumDate:
+          field === 'endDate'
+            ? parseDateInput(fields.startDate) ?? undefined
+            : (() => {
+              const end = parseDateInput(fields.endDate);
+              return end ? subtractDays(end, MAX_TRIP_DAYS - 1) : undefined;
+            })(),
         maximumDate:
           field === 'endDate'
             ? (() => {
-                const start = parseDateInput(fields.startDate);
-                return start ? addDays(start, MAX_TRIP_DAYS - 1) : undefined;
-              })()
-            : undefined,
+              const start = parseDateInput(fields.startDate);
+              return start ? addDays(start, MAX_TRIP_DAYS - 1) : undefined;
+            })()
+            : parseDateInput(fields.endDate) ?? undefined,
         onChange: (event, selectedDate) => {
           if (event.type !== 'set' || !selectedDate) {
             return;
@@ -222,70 +223,15 @@ export default function PlanCreateScreen() {
     return parsed;
   }, [fields.participantCount]);
 
-  const budgetSliderMax = useMemo(() => participantCountNumber * 100000, [participantCountNumber]);
+  const budgetSliderMax = MAX_BUDGET_PER_PERSON;
 
   const budgetRawValue = useMemo(() => {
     const parsed = Number(fields.budget);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      return 0;
+    if (!Number.isFinite(parsed) || parsed < BUDGET_STEP) {
+      return BUDGET_STEP;
     }
     return parsed;
   }, [fields.budget]);
-
-  const budgetSliderValue = useMemo(() => Math.min(budgetRawValue, budgetSliderMax), [budgetRawValue, budgetSliderMax]);
-
-  const budgetDisplayLabel = useMemo(() => {
-    if (budgetRawValue <= 0) {
-      return '未設定';
-    }
-    if (budgetRawValue >= budgetSliderMax) {
-      return `${budgetSliderMax.toLocaleString('ja-JP')}円+`;
-    }
-    return `${budgetRawValue.toLocaleString('ja-JP')}円`;
-  }, [budgetRawValue, budgetSliderMax]);
-
-  const updateBudgetFromRatio = useCallback(
-    (ratio: number) => {
-      const normalized = Math.min(1, Math.max(0, ratio));
-      budgetSliderProgress.setValue(normalized);
-      const nextValue = clampBudgetValue(BUDGET_SLIDER_MIN + normalized * budgetSliderMax, budgetSliderMax);
-      updateField('budget', nextValue <= 0 ? '' : String(nextValue));
-    },
-    [budgetSliderMax, budgetSliderProgress, updateField]
-  );
-
-  const budgetSliderPanResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: (event) => {
-          updateBudgetFromRatio(event.nativeEvent.locationX / budgetSliderWidth);
-        },
-        onPanResponderMove: (event) => {
-          updateBudgetFromRatio(event.nativeEvent.locationX / budgetSliderWidth);
-        },
-      }),
-    [budgetSliderWidth, updateBudgetFromRatio]
-  );
-
-  useEffect(() => {
-    budgetSliderProgress.setValue(budgetSliderMax > 0 ? budgetSliderValue / budgetSliderMax : 0);
-  }, [budgetSliderMax, budgetSliderProgress, budgetSliderValue]);
-
-  const budgetFillWidth = useMemo(
-    () => budgetSliderProgress.interpolate({ inputRange: [0, 1], outputRange: [0, budgetSliderWidth] }),
-    [budgetSliderProgress, budgetSliderWidth]
-  );
-
-  const budgetThumbTranslateX = useMemo(
-    () =>
-      budgetSliderProgress.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, Math.max(0, budgetSliderWidth - 24)],
-      }),
-    [budgetSliderProgress, budgetSliderWidth]
-  );
 
   const handleIosDateChange = useCallback(
     (event: DateTimePickerEvent, selectedDate?: Date) => {
@@ -366,18 +312,11 @@ export default function PlanCreateScreen() {
 
   return (
     <ScrollView style={travelStyles.screen} contentContainerStyle={{ paddingBottom: 24 }}>
-      <AppHeader title="新規プラン作成" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
+      <AppHeader title="基本情報の入力" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
 
       <View style={travelStyles.container}>
-        <View style={travelStyles.detailSection}>
-          <Text style={travelStyles.heading}>基本情報を入力</Text>
-          <Text style={travelStyles.sectionBody}>
-            下記を入力すると、バックエンドAPI経由でプランが作成されます。
-          </Text>
-        </View>
-
         {formItems.map((item) => (
-          <View key={item.key}>
+          <View key={item.key} style={styles.fieldBlock}>
             <View style={travelStyles.rowWrap}>
               <Text style={[travelStyles.sectionBody, styles.fieldLabel]}>{item.label}</Text>
               {item.key === 'origin' ? (
@@ -436,43 +375,44 @@ export default function PlanCreateScreen() {
               </View>
             ) : item.key === 'budget' ? (
               <View style={styles.budgetSection}>
-                <View style={styles.budgetHeaderRow}>
-                  <Text style={styles.budgetValueLabel}>{budgetDisplayLabel}</Text>
-                  <Text style={styles.budgetRangeLabel}>{budgetSliderMax.toLocaleString('ja-JP')}円+</Text>
-                </View>
-                <Text style={styles.budgetHintText}>1人あたり上限目安: 100,000円+</Text>
+                <View style={styles.stepperWrap}>
+                  <Pressable
+                    style={[styles.stepperButton, budgetRawValue <= BUDGET_STEP ? styles.stepperButtonDisabled : null]}
+                    onPress={() => {
+                      if (budgetRawValue <= BUDGET_STEP) {
+                        return;
+                      }
+                      updateField('budget', String(Math.max(BUDGET_STEP, budgetRawValue - BUDGET_STEP)));
+                    }}
+                    disabled={budgetRawValue <= BUDGET_STEP}
+                  >
+                    <MaterialIcons
+                      name="remove"
+                      size={20}
+                      color={budgetRawValue <= BUDGET_STEP ? '#94A3B8' : '#334155'}
+                    />
+                  </Pressable>
 
-                <View
-                  style={styles.budgetSliderWrap}
-                  onLayout={(event) => setBudgetSliderWidth(Math.max(1, event.nativeEvent.layout.width))}
-                  {...budgetSliderPanResponder.panHandlers}
-                >
-                  <View style={styles.budgetSliderTrack} />
-                  <Animated.View
-                    style={[
-                      styles.budgetSliderFill,
-                      { width: budgetFillWidth },
-                    ]}
-                  />
-                  <Animated.View
-                    style={[
-                      styles.budgetSliderThumb,
-                      { transform: [{ translateX: budgetThumbTranslateX }] },
-                    ]}
-                  />
-                </View>
+                  <View style={styles.stepperValueWrap}>
+                    <Text style={styles.stepperValueText}>{budgetRawValue.toLocaleString('ja-JP')}</Text>
+                    <Text style={styles.stepperValueUnit}>円 / 1人</Text>
+                  </View>
 
-                <TextInput
-                  style={[travelStyles.input, styles.budgetManualInput]}
-                  value={fields.budget}
-                  onChangeText={(value) => {
-                    const sanitized = value.replace(/[^0-9]/g, '');
-                    updateField('budget', sanitized);
-                  }}
-                  placeholder="例: 120000"
-                  placeholderTextColor="#94A3B8"
-                  keyboardType="numeric"
-                />
+                  <Pressable
+                    style={[styles.stepperButton, budgetRawValue >= budgetSliderMax ? styles.stepperButtonDisabled : null]}
+                    onPress={() => {
+                      const next = Math.min(budgetSliderMax, (budgetRawValue > 0 ? budgetRawValue : 0) + BUDGET_STEP);
+                      updateField('budget', String(next));
+                    }}
+                    disabled={budgetRawValue >= budgetSliderMax}
+                  >
+                    <MaterialIcons
+                      name="add"
+                      size={20}
+                      color={budgetRawValue >= budgetSliderMax ? '#94A3B8' : '#334155'}
+                    />
+                  </Pressable>
+                </View>
               </View>
             ) : (
               <TextInput
@@ -585,14 +525,21 @@ export default function PlanCreateScreen() {
               display="inline"
               themeVariant="light"
               value={iosPickerValue}
-              minimumDate={activeDateField === 'endDate' ? parseDateInput(fields.startDate) ?? undefined : undefined}
+              minimumDate={
+                activeDateField === 'endDate'
+                  ? parseDateInput(fields.startDate) ?? undefined
+                  : (() => {
+                    const end = parseDateInput(fields.endDate);
+                    return end ? subtractDays(end, MAX_TRIP_DAYS - 1) : undefined;
+                  })()
+              }
               maximumDate={
                 activeDateField === 'endDate'
                   ? (() => {
-                      const start = parseDateInput(fields.startDate);
-                      return start ? addDays(start, MAX_TRIP_DAYS - 1) : undefined;
-                    })()
-                  : undefined
+                    const start = parseDateInput(fields.startDate);
+                    return start ? addDays(start, MAX_TRIP_DAYS - 1) : undefined;
+                  })()
+                  : parseDateInput(fields.endDate) ?? undefined
               }
               onChange={handleIosDateChange}
             />
@@ -604,6 +551,20 @@ export default function PlanCreateScreen() {
 }
 
 const styles = StyleSheet.create({
+  fieldBlock: {
+    marginBottom: 18,
+  },
+  headingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  requiredNote: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
   currentLocationButton: {
     minWidth: 112,
     alignItems: 'center',
@@ -624,10 +585,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   scheduleSection: {
-    marginTop: 14,
+    marginTop: 22,
   },
   scheduleInput: {
-    marginTop: 8,
+    marginTop: 10,
     borderWidth: 1,
     borderColor: '#CBD5E1',
     borderRadius: 12,
@@ -693,18 +654,18 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   stepperValueText: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: '#0F172A',
   },
   stepperValueUnit: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     color: '#64748B',
   },
   budgetSection: {
-    marginTop: 10,
-    gap: 10,
+    marginTop: 0,
+    gap: 0,
   },
   budgetHeaderRow: {
     flexDirection: 'row',
@@ -754,9 +715,6 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
-  },
-  budgetManualInput: {
-    marginTop: 0,
   },
   destinationSuggestionWrap: {
     flexDirection: 'row',

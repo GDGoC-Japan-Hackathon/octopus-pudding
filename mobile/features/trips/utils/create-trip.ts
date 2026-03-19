@@ -78,14 +78,20 @@ export function validateAndBuildCreateTripPayload(
 
   let budget: number | undefined;
   if (budgetText) {
-    const parsedBudget = Number(budgetText);
-    if (!Number.isInteger(parsedBudget) || parsedBudget <= 0) {
+    const parsedBudgetPerPerson = Number(budgetText);
+    if (!Number.isInteger(parsedBudgetPerPerson) || parsedBudgetPerPerson <= 0) {
       return {
         ok: false,
-        message: '予算は正の整数で入力してください。',
+        message: '予算は1人あたりの正の整数で入力してください。',
       };
     }
-    budget = parsedBudget;
+    if (parsedBudgetPerPerson > 100000) {
+      return {
+        ok: false,
+        message: '予算は1人あたり10万円以下で入力してください。',
+      };
+    }
+    budget = parsedBudgetPerPerson * participantCount;
   }
 
   return {
