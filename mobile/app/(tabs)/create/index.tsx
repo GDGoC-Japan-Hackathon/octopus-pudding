@@ -10,7 +10,7 @@ const actionCards = [
   {
     key: 'new',
     title: '新しく旅を作る',
-    description: '目的地や日程を入力して、新しい旅の計画をここから作成します。',
+    description: '目的地や日程を入力して、新しい旅の計画を作成します。',
     buttonLabel: '作成する',
     icon: 'add-circle',
     imageUri:
@@ -21,7 +21,7 @@ const actionCards = [
   {
     key: 'replan',
     title: 'トラブルで旅程を変更',
-    description: '再計画は作成済みプランから行います。対象のプランを選んで詳細画面から進めてください。',
+    description: '渋滞や天候の悪化など、旅のトラブルに遭遇したときに、旅程の変更を行います。',
     buttonLabel: '変更する',
     icon: 'warning',
     imageUri:
@@ -40,9 +40,6 @@ export default function CreateIndexScreen() {
 
       <View style={travelStyles.container}>
         <View style={styles.heroBlock}>
-          <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeText}>CREATE YOUR TRIP</Text>
-          </View>
           <Text style={styles.heroTitle}>ふた旅へようこそ</Text>
           <Text style={styles.heroDescription}>最高の思い出を一緒に作りましょう</Text>
         </View>
@@ -63,12 +60,7 @@ export default function CreateIndexScreen() {
 
               <Text style={styles.cardDescription}>{card.description}</Text>
 
-              {card.key === 'replan' ? (
-                <View style={styles.noteRow}>
-                  <MaterialIcons name="info-outline" size={16} color="#64748B" />
-                  <Text style={styles.noteText}>作成済みプラン詳細から再計画へ進みます</Text>
-                </View>
-              ) : null}
+
 
               <Pressable
                 style={[
