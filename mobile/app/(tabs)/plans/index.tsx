@@ -39,8 +39,20 @@ function parseDateInput(value: string) {
   const match = normalized.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
   if (!match) return null;
   const [, year, month, day] = match;
-  const parsed = new Date(Number(year), Number(month) - 1, Number(day));
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  const y = Number(year);
+  const m = Number(month);
+  const d = Number(day);
+  if (Number.isNaN(y) || Number.isNaN(m) || Number.isNaN(d)) return null;
+  const parsed = new Date(y, m - 1, d);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== y ||
+    parsed.getMonth() !== m - 1 ||
+    parsed.getDate() !== d
+  ) {
+    return null;
+  }
+  return parsed;
 }
 
 function formatDateInput(date: Date) {
