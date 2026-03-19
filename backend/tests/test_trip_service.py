@@ -264,7 +264,7 @@ async def test_update_trip_cover_image_from_itinerary_uses_matching_place_photo(
             name="Bakery & Table 箱根",
             item_type="place",
             start_time=datetime(2026, 4, 1, 12, 30),
-            end_time=datetime(2026, 4, 1, 13, 50),
+            end_time=datetime(2026, 4, 1, 14, 10),
             latitude=35.2032,
             longitude=139.0246,
         ),
