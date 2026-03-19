@@ -25,7 +25,7 @@ class TripCreate(BaseModel):
     cover_image_url: Optional[str] = None
     recommendation_categories: list[str] = Field(default_factory=list)
     save_count: int = 0
-    status: str = "planned"
+    status: Literal["planned", "ongoing", "completed"] = "planned"
     preference: Optional[TripPreferenceCreate] = None
 
     @model_validator(mode="after")
@@ -49,7 +49,7 @@ class TripUpdate(BaseModel):
     cover_image_url: Optional[str] = None
     recommendation_categories: Optional[list[str]] = None
     save_count: Optional[int] = None
-    status: Optional[str] = None
+    status: Optional[Literal["planned", "ongoing", "completed"]] = None
 
 
 class TripPreferenceUpdate(BaseModel):

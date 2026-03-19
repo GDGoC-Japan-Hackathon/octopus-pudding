@@ -1,3 +1,5 @@
+import { type TripStatus } from '@/features/trips/types/trip-status';
+
 export type TripAtmosphere = 'のんびり' | 'アクティブ' | 'グルメ' | '映え';
 
 export type CreateTripRequest = {
@@ -6,7 +8,7 @@ export type CreateTripRequest = {
   start_date: string;
   end_date: string;
   participant_count: number;
-  status?: 'planned' | 'ongoing' | 'completed';
+  status?: TripStatus;
   preference?: {
     atmosphere: TripAtmosphere;
     companions?: string;
@@ -24,7 +26,7 @@ export type CreateTripResponse = {
     start_date: string;
     end_date: string;
     participant_count: number;
-    status: string;
+    status: TripStatus;
     created_at?: string | null;
     updated_at?: string | null;
   };

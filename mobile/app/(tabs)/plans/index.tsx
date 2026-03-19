@@ -20,9 +20,11 @@ import {
 import { weatherMock } from '@/data/travel';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 import { getTrips } from '@/features/trips/api/get-trips';
+import { startTrip } from '@/features/trips/api/start-trip';
 import { type TripResponse } from '@/features/trips/types/trip-edit';
 import { type TripListItemViewModel, type TripSortOrder } from '@/features/trips/types/trip-list';
 import { filterTripListItems, toTripListItemViewModel } from '@/features/trips/utils/trip-list';
+import { getApiErrorMessage } from '@/lib/api/client';
 
 type PickerType = 'category' | 'people' | 'start' | 'end' | null;
 
@@ -132,6 +134,7 @@ export default function PlansListScreen() {
   const [endDateFilter, setEndDateFilter] = useState('');
   const [sortOrder, setSortOrder] = useState<TripSortOrder>('newest');
   const [activePicker, setActivePicker] = useState<PickerType>(null);
+  const [startingTripId, setStartingTripId] = useState<number | null>(null);
 
   const loadTrips = useCallback(async () => {
     try {
@@ -218,6 +221,35 @@ export default function PlansListScreen() {
       current.includes(category) ? current.filter((item) => item !== category) : [...current, category]
     );
   }, []);
+
+  const handleStartTrip = useCallback(
+    async (tripId: number, status: TripListItemViewModel['status']) => {
+      if (status !== 'planned' || startingTripId !== null) {
+        return;
+      }
+
+      try {
+        setStartingTripId(tripId);
+        await startTrip(tripId);
+        await loadTrips();
+        Alert.alert('旅行開始', '旅行中のプランを更新しました。ホーム画面にも反映されます。');
+      } catch (error) {
+        Alert.alert(
+          '更新失敗',
+          getApiErrorMessage(error, {
+            fallback: '旅行開始に失敗しました。',
+            unauthorized: '認証が切れています。再ログイン後にお試しください。',
+            forbidden: 'この計画を開始する権限がありません。',
+            notFound: '対象の計画が見つかりませんでした。',
+            defaultWithStatus: true,
+          })
+        );
+      } finally {
+        setStartingTripId(null);
+      }
+    },
+    [loadTrips, startingTripId]
+  );
 
   const resetPicker = useCallback(() => {
     if (activePicker === 'people') {
@@ -316,47 +348,85 @@ export default function PlansListScreen() {
 
         <View style={styles.cardList}>
           {filteredPlans.map((plan) => (
-            <Link key={plan.id} href={{ pathname: '/plans/detail', params: { id: String(plan.id) } }} asChild>
-              <Pressable style={styles.card}>
-                <Image source={{ uri: PLAN_IMAGE_URL }} style={styles.cardImage} />
+            <View key={plan.id} style={styles.card}>
+              <Image source={{ uri: PLAN_IMAGE_URL }} style={styles.cardImage} />
 
-                <View style={styles.cardBody}>
-                  <View style={styles.cardHeader}>
-                    <Text style={styles.cardTitle} numberOfLines={2}>
-                      {plan.title}
-                    </Text>
+              <View style={styles.cardBody}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardTitle} numberOfLines={2}>
+                    {plan.title}
+                  </Text>
+                  {plan.status !== 'planned' ? (
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        plan.statusVariant === 'ongoing' ? styles.statusBadgeOngoing : styles.statusBadgeMuted,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.statusBadgeText,
+                          plan.statusVariant === 'ongoing' ? styles.statusBadgeTextOngoing : styles.statusBadgeTextMuted,
+                        ]}
+                      >
+                        {plan.statusLabel}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                <View style={styles.metaStack}>
+                  <View style={styles.metaRow}>
+                    <MaterialIcons name="calendar-today" size={18} color="#64748B" />
+                    <Text style={styles.metaText}>{plan.dateLabel}</Text>
                   </View>
-
-                  <View style={styles.metaStack}>
-                    <View style={styles.metaRow}>
-                      <MaterialIcons name="calendar-today" size={18} color="#64748B" />
-                      <Text style={styles.metaText}>{plan.dateLabel}</Text>
-                    </View>
-                    <View style={styles.metaRow}>
-                      <MaterialIcons name="group" size={18} color="#64748B" />
-                      <Text style={styles.metaText}>{plan.peopleLabel}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.cardFooter}>
-                    <View style={styles.footerMeta}>
-                      {plan.categories.length ? (
-                        <View style={styles.categoryList}>
-                          {plan.categories.map((category) => (
-                            <View key={`${plan.id}-${category}`} style={styles.categoryTag}>
-                              <Text style={styles.categoryTagText}>{category}</Text>
-                            </View>
-                          ))}
-                        </View>
-                      ) : null}
-                    </View>
-                    <View style={styles.detailButton}>
-                      <Text style={styles.detailButtonText}>詳細を表示</Text>
-                    </View>
+                  <View style={styles.metaRow}>
+                    <MaterialIcons name="group" size={18} color="#64748B" />
+                    <Text style={styles.metaText}>{plan.peopleLabel}</Text>
                   </View>
                 </View>
-              </Pressable>
-            </Link>
+
+                <View style={styles.cardFooter}>
+                  <View style={styles.footerMeta}>
+                    {plan.categories.length ? (
+                      <View style={styles.categoryList}>
+                        {plan.categories.map((category) => (
+                          <View key={`${plan.id}-${category}`} style={styles.categoryTag}>
+                            <Text style={styles.categoryTagText}>{category}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <View style={styles.footerActions}>
+                    <Link href={{ pathname: '/plans/detail', params: { id: String(plan.id) } }} asChild>
+                      <Pressable style={[styles.footerButton, styles.detailButton]}>
+                        <Text style={styles.detailButtonText}>詳細を表示</Text>
+                      </Pressable>
+                    </Link>
+
+                    {plan.status !== 'completed' ? (
+                      <Pressable
+                        style={[
+                          styles.footerButton,
+                          styles.startButton,
+                          plan.status === 'planned' && startingTripId !== plan.id
+                            ? styles.startButtonActive
+                            : styles.startButtonDisabled,
+                        ]}
+                        onPress={() => handleStartTrip(plan.id, plan.status)}
+                        disabled={plan.status !== 'planned' || startingTripId !== null}
+                      >
+                        <Text style={styles.startButtonText}>
+                          {startingTripId === plan.id ? '開始中...' : plan.status === 'ongoing' ? '旅行中' : '旅行開始'}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </View>
+              </View>
+            </View>
           ))}
         </View>
       </ScrollView>
@@ -592,6 +662,7 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    justifyContent: 'space-between',
     gap: 10,
     marginBottom: 12,
   },
@@ -601,6 +672,37 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     fontWeight: '800',
     color: '#0F172A',
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  statusBadgePlanned: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FED7AA',
+  },
+  statusBadgeOngoing: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  statusBadgeMuted: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  statusBadgeTextPlanned: {
+    color: '#EA580C',
+  },
+  statusBadgeTextOngoing: {
+    color: '#047857',
+  },
+  statusBadgeTextMuted: {
+    color: '#64748B',
   },
   metaStack: {
     gap: 8,
@@ -629,6 +731,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minWidth: 0,
   },
+  footerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   categoryList: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -647,14 +754,34 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#EC5B13',
   },
-  detailButton: {
-    backgroundColor: '#EC5B13',
-    width: 108,
+  footerButton: {
+    minWidth: 92,
     paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailButton: {
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    backgroundColor: '#FFF7ED',
   },
   detailButtonText: {
+    color: '#EC5B13',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  startButton: {
+    minWidth: 92,
+  },
+  startButtonActive: {
+    backgroundColor: '#EC5B13',
+  },
+  startButtonDisabled: {
+    backgroundColor: '#CBD5E1',
+  },
+  startButtonText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800',

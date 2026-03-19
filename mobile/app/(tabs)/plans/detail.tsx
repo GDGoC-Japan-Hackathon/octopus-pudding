@@ -15,6 +15,7 @@ import { PlanDetailTemplate } from '@/features/plan-detail/components/PlanDetail
 import {
   getAiGenerationErrorMessage,
   getTripDetailErrorMessage,
+  getTripStartErrorMessage,
   groupItineraryByDay,
   parseTripId,
   toPlanDetailViewModel,
@@ -24,6 +25,7 @@ import {
   getAiPlanGeneration,
 } from '@/features/trips/api/ai-plan-generation';
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
+import { startTrip } from '@/features/trips/api/start-trip';
 import { type AiPlanGenerationResponse } from '@/features/trips/types/ai-plan-generation';
 import { type TripDetailAggregateResponse } from '@/features/trips/types/trip-detail';
 import { AppHeader } from '@/features/travel/components/AppHeader';
@@ -38,6 +40,7 @@ export default function PlanDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [generation, setGeneration] = useState<AiPlanGenerationResponse | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isStartingTrip, setIsStartingTrip] = useState(false);
   const [activeDayId, setActiveDayId] = useState<number | null>(null);
   const headerBackSlot = (
     <Link href="/plans" asChild>
@@ -49,13 +52,6 @@ export default function PlanDetailScreen() {
   );
 
   const groupedItineraryByDay = useMemo(() => groupItineraryByDay(aggregate), [aggregate]);
-
-  const activeDay = useMemo(() => {
-    if (!groupedItineraryByDay.length) {
-      return null;
-    }
-    return groupedItineraryByDay.find((group) => group.tripDayId === activeDayId) ?? groupedItineraryByDay[0];
-  }, [activeDayId, groupedItineraryByDay]);
 
   const detailView = useMemo(
     () => (aggregate ? toPlanDetailViewModel(aggregate, activeDayId) : null),
@@ -139,6 +135,23 @@ export default function PlanDetailScreen() {
     }
   }, [loadTripDetail, tripId]);
 
+  const handleStartTrip = useCallback(async () => {
+    if (!tripId || !aggregate || aggregate.trip.status !== 'planned' || isStartingTrip) {
+      return;
+    }
+
+    try {
+      setIsStartingTrip(true);
+      await startTrip(tripId);
+      await loadTripDetail();
+      Alert.alert('旅行開始', '旅行中のプランを更新しました。ホーム画面にも反映されます。');
+    } catch (error) {
+      Alert.alert('更新失敗', getTripStartErrorMessage(error));
+    } finally {
+      setIsStartingTrip(false);
+    }
+  }, [aggregate, isStartingTrip, loadTripDetail, tripId]);
+
   if (!tripId) {
     return (
       <View style={styles.screen}>
@@ -177,6 +190,15 @@ export default function PlanDetailScreen() {
     return null;
   }
 
+  const startButtonLabel = isStartingTrip
+    ? '旅行開始中...'
+    : aggregate.trip.status === 'planned'
+      ? '旅行開始'
+      : aggregate.trip.status === 'ongoing'
+        ? '旅行中'
+        : '完了済み';
+  const startButtonDisabled = isStartingTrip || aggregate.trip.status !== 'planned';
+
   return (
     <PlanDetailTemplate
       headerTitle="計画詳細"
@@ -193,23 +215,35 @@ export default function PlanDetailScreen() {
       activeDayKey={detailView.activeDayKey}
       onSelectDay={(dayKey) => setActiveDayId(Number(dayKey))}
       timeline={detailView.timeline}
+      primaryActionLabel=""
       primaryActionSlot={
-        <View style={styles.actionRow}>
-          <Link href={{ pathname: '/create/edit', params: { tripId: String(tripId) } }} asChild>
-            <Pressable style={[styles.actionButton, styles.actionButtonOrange]}>
-              <MaterialIcons name="edit-note" size={22} color="#FFFFFF" />
-              <Text style={styles.actionButtonText}>マイプランを{'\n'}編集する</Text>
-            </Pressable>
-          </Link>
-
+        <View style={styles.actionStack}>
           <Pressable
-            style={[styles.actionButton, isGenerating ? styles.actionButtonGray : styles.actionButtonOrange]}
-            onPress={handleGenerateAiPlan}
-            disabled={isGenerating}
+            style={[styles.startButton, startButtonDisabled ? styles.actionButtonGray : styles.actionButtonOrange]}
+            onPress={handleStartTrip}
+            disabled={startButtonDisabled}
           >
-            <MaterialIcons name="auto-awesome" size={22} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>{isGenerating ? 'AIで再構築中...' : `AIで再構築\nする`}</Text>
+            <MaterialIcons name="flight-takeoff" size={22} color="#FFFFFF" />
+            <Text style={styles.startButtonText}>{startButtonLabel}</Text>
           </Pressable>
+
+          <View style={styles.actionRow}>
+            <Link href={{ pathname: '/create/edit', params: { tripId: String(tripId) } }} asChild>
+              <Pressable style={[styles.actionButton, styles.actionButtonOrange]}>
+                <MaterialIcons name="edit-note" size={22} color="#FFFFFF" />
+                <Text style={styles.actionButtonText}>マイプランを{'\n'}編集する</Text>
+              </Pressable>
+            </Link>
+
+            <Pressable
+              style={[styles.actionButton, isGenerating ? styles.actionButtonGray : styles.actionButtonOrange]}
+              onPress={handleGenerateAiPlan}
+              disabled={isGenerating}
+            >
+              <MaterialIcons name="auto-awesome" size={22} color="#FFFFFF" />
+              <Text style={styles.actionButtonText}>{isGenerating ? 'AIで再構築中...' : `AIで再構築\nする`}</Text>
+            </Pressable>
+          </View>
         </View>
       }
       footerSlot={
@@ -267,6 +301,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
+  actionStack: {
+    gap: 12,
+  },
   actionButton: {
     flex: 1,
     minHeight: 88,
@@ -282,6 +319,19 @@ const styles = StyleSheet.create({
   },
   actionButtonGray: {
     backgroundColor: '#94A3B8',
+  },
+  startButton: {
+    minHeight: 54,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  startButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
   },
   actionButtonText: {
     color: '#FFFFFF',
