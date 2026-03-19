@@ -330,7 +330,13 @@ class TripRepositoryImpl(TripRepository):
             trip_day_id=item.trip_day_id,
             name=item.name,
             sequence=item.sequence,
+            item_type=item.item_type,
             category=item.category,
+            transport_mode=item.transport_mode,
+            travel_minutes=item.travel_minutes,
+            distance_meters=item.distance_meters,
+            from_name=item.from_name,
+            to_name=item.to_name,
             latitude=item.latitude,
             longitude=item.longitude,
             start_time=item.start_time,
@@ -358,7 +364,13 @@ class TripRepositoryImpl(TripRepository):
 
         db_item.name = item.name
         db_item.sequence = item.sequence
+        db_item.item_type = item.item_type
         db_item.category = item.category
+        db_item.transport_mode = item.transport_mode
+        db_item.travel_minutes = item.travel_minutes
+        db_item.distance_meters = item.distance_meters
+        db_item.from_name = item.from_name
+        db_item.to_name = item.to_name
         db_item.latitude = item.latitude
         db_item.longitude = item.longitude
         db_item.start_time = item.start_time
@@ -474,7 +486,13 @@ class TripRepositoryImpl(TripRepository):
                     trip_day_id=item.trip_day_id,
                     name=item.name,
                     sequence=item.sequence,
+                    item_type=item.item_type,
                     category=item.category,
+                    transport_mode=item.transport_mode,
+                    travel_minutes=item.travel_minutes,
+                    distance_meters=item.distance_meters,
+                    from_name=item.from_name,
+                    to_name=item.to_name,
                     latitude=item.latitude,
                     longitude=item.longitude,
                     start_time=item.start_time,
@@ -628,7 +646,13 @@ class TripRepositoryImpl(TripRepository):
             trip_day_id=db_item.trip_day_id,
             name=db_item.name,
             sequence=db_item.sequence,
+            item_type=db_item.item_type,
             category=db_item.category,
+            transport_mode=db_item.transport_mode,
+            travel_minutes=db_item.travel_minutes,
+            distance_meters=db_item.distance_meters,
+            from_name=db_item.from_name,
+            to_name=db_item.to_name,
             latitude=db_item.latitude,
             longitude=db_item.longitude,
             start_time=db_item.start_time,

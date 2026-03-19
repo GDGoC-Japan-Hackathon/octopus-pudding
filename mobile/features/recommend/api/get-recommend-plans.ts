@@ -15,6 +15,8 @@ type RecommendPlanListItemResponse = {
   participantCount?: number;
   save_count?: number;
   saveCount?: number;
+  created_at?: string | null;
+  createdAt?: string | null;
   is_saved_by_me?: boolean;
   isSavedByMe?: boolean;
   saved_trip_id?: number | string | null;
@@ -39,6 +41,7 @@ export async function getRecommendPlans(): Promise<RecommendPlanListItemWithDate
     participantCount: plan.participantCount ?? plan.participant_count ?? 0,
     peopleLabel: `${plan.participantCount ?? plan.participant_count ?? 0}名`,
     saveCount: plan.saveCount ?? plan.save_count ?? 0,
+    createdAt: plan.createdAt ?? plan.created_at ?? null,
     isSavedByMe: plan.isSavedByMe ?? plan.is_saved_by_me ?? false,
     savedTripId:
       plan.savedTripId !== undefined && plan.savedTripId !== null

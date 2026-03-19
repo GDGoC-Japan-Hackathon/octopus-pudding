@@ -1,7 +1,7 @@
 from datetime import date as dt_date, datetime
-from typing import Optional
+from typing import Optional, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, root_validator
 
 from app.domain.entities.trip import TripAtmosphere
 
@@ -74,24 +74,87 @@ class TripDayUpdate(BaseModel):
 
 class ItineraryItemCreate(BaseModel):
     name: str
+    item_type: Literal["place", "transport"] = "place"
     category: Optional[str] = None
+    transport_mode: Optional[
+        Literal["car", "train", "bus", "walk", "bicycle", "plane", "ship", "taxi", "other"]
+    ] = None
+    travel_minutes: Optional[int] = None
+    distance_meters: Optional[int] = None
+    from_name: Optional[str] = None
+    to_name: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     estimated_cost: Optional[int] = None
     notes: Optional[str] = None
+
+    @root_validator
+    def validate_transport_fields(cls, values: dict) -> dict:
+        item_type = values.get("item_type")
+        if item_type == "transport":
+            transport_mode = values.get("transport_mode")
+            from_name = values.get("from_name")
+            to_name = values.get("to_name")
+            missing = [
+                field_name
+                for field_name, field_value in (
+                    ("transport_mode", transport_mode),
+                    ("from_name", from_name),
+                    ("to_name", to_name),
+                )
+                if field_value is None
+            ]
+            if missing:
+                raise ValueError(
+                    "When item_type is 'transport', the following fields are required "
+                    "and must be non-null: " + ", ".join(missing)
+                )
+        return values
 
 
 class ItineraryItemUpdate(BaseModel):
     name: Optional[str] = None
+    item_type: Optional[Literal["place", "transport"]] = None
     category: Optional[str] = None
+    transport_mode: Optional[
+        Literal["car", "train", "bus", "walk", "bicycle", "plane", "ship", "taxi", "other"]
+    ] = None
+    travel_minutes: Optional[int] = None
+    distance_meters: Optional[int] = None
+    from_name: Optional[str] = None
+    to_name: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     estimated_cost: Optional[int] = None
     notes: Optional[str] = None
+
+    @root_validator
+    def validate_transport_fields_on_update(cls, values: dict) -> dict:
+        item_type = values.get("item_type")
+        # Only enforce when the update explicitly sets item_type to "transport"
+        if item_type == "transport":
+            transport_mode = values.get("transport_mode")
+            from_name = values.get("from_name")
+            to_name = values.get("to_name")
+            missing = [
+                field_name
+                for field_name, field_value in (
+                    ("transport_mode", transport_mode),
+                    ("from_name", from_name),
+                    ("to_name", to_name),
+                )
+                if field_value is None
+            ]
+            if missing:
+                raise ValueError(
+                    "When item_type is updated to 'transport', the following fields "
+                    "must also be provided and non-null: " + ", ".join(missing)
+                )
+        return values
 
 
 class IncidentCreate(BaseModel):
@@ -237,7 +300,13 @@ class ItineraryItemResponse(BaseModel):
     id: int
     trip_day_id: int
     name: str
+    item_type: str = "place"
     category: Optional[str] = None
+    transport_mode: Optional[str] = None
+    travel_minutes: Optional[int] = None
+    distance_meters: Optional[int] = None
+    from_name: Optional[str] = None
+    to_name: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     start_time: Optional[datetime] = None

@@ -1,3 +1,4 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import {
   type TripDetailAggregateResponse,
   type TripDetailItineraryItemResponse,
@@ -78,6 +79,13 @@ export function moveTimeLabel(items: TripDetailItineraryItemResponse[]) {
   if (!items.length) {
     return '未設定';
   }
+  const travelMinutes = items.reduce((sum, item) => sum + (item.travel_minutes ?? 0), 0);
+  if (travelMinutes > 0) {
+    const hour = Math.floor(travelMinutes / 60);
+    const minute = travelMinutes % 60;
+    if (hour === 0) return `${minute}m`;
+    return `${hour}h ${minute}m`;
+  }
   const first = items[0];
   const last = items[items.length - 1];
   if (!first.start_time || !last.end_time) {
@@ -141,15 +149,50 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
     id: item.id,
     start: toTimeLabel(item.start_time),
     end: toTimeLabel(item.end_time),
-    title: item.name,
-    body: item.notes || item.category || '詳細メモは未設定です。',
+    title: item.item_type === 'transport' ? item.name || transportModeLabel(item.transport_mode) : item.name,
+    body:
+      item.item_type === 'transport'
+        ? item.from_name && item.to_name
+          ? `${item.from_name} → ${item.to_name}`
+          : item.notes || '移動'
+        : item.notes || item.category || '詳細メモは未設定です。',
+    itemType: item.item_type === 'transport' ? 'transport' : 'place',
+    metaLabel:
+      item.item_type === 'transport'
+        ? buildTransportMetaLabel(item.travel_minutes, item.distance_meters)
+        : undefined,
     icon:
-      item.category === 'food'
+      item.item_type === 'transport'
+        ? transportModeIcon(item.transport_mode)
+        : item.category === 'food'
         ? 'restaurant'
         : item.category === 'transport'
           ? 'train'
           : 'place',
   }));
+}
+
+function transportModeLabel(mode?: string | null) {
+  if (mode === 'WALK') return '徒歩で移動';
+  if (mode === 'BUS') return 'バスで移動';
+  return '電車で移動';
+}
+
+function transportModeIcon(mode?: string | null): keyof typeof MaterialIcons.glyphMap {
+  if (mode === 'WALK') return 'directions-walk';
+  if (mode === 'BUS') return 'directions-bus';
+  return 'train';
+}
+
+function buildTransportMetaLabel(travelMinutes?: number | null, distanceMeters?: number | null) {
+  const parts: string[] = [];
+  if (typeof travelMinutes === 'number') {
+    parts.push(`${travelMinutes}分`);
+  }
+  if (typeof distanceMeters === 'number') {
+    parts.push(distanceMeters >= 1000 ? `${(distanceMeters / 1000).toFixed(1)}km` : `${distanceMeters}m`);
+  }
+  return parts.join(' / ') || undefined;
 }
 
 export function toPlanDetailViewModel(

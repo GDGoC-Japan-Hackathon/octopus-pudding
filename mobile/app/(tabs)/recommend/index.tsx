@@ -1,5 +1,4 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import DateTimePicker, { DateTimePickerAndroid, type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
 import { Link } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -8,7 +7,6 @@ import {
   Alert,
   Image,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -21,17 +19,14 @@ import { weatherMock } from '@/data/travel';
 import { getRecommendPlans, type RecommendPlanListItem } from '@/features/recommend/api/get-recommend-plans';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 
-type PickerType = 'category' | 'people' | 'start' | 'end' | null;
-type RecommendSortOrder = 'newest' | 'oldest';
-type RecommendPlanWithDates = RecommendPlanListItem & {
-  startDate: string;
-  endDate: string;
-};
+type PickerType = 'category' | 'people' | 'duration' | null;
+type RecommendSortOrder = 'newest' | 'oldest' | 'popular';
 
 const CATEGORY_OPTIONS = ['カフェ', '夜景', 'グルメ', '温泉'] as const;
 const WHEEL_ITEM_HEIGHT = 44;
 const WHEEL_VISIBLE_ROWS = 5;
 const PEOPLE_OPTIONS = Array.from({ length: 10 }, (_, index) => index + 1);
+const DURATION_OPTIONS = Array.from({ length: 10 }, (_, index) => index + 1);
 
 type RecommendPlanItem = Awaited<ReturnType<typeof getRecommendPlans>>[number];
 
@@ -56,16 +51,21 @@ function parseDateInput(value: string) {
   return parsed;
 }
 
-function parseDateValue(value: string): number | null {
-  const parsed = parseDateInput(value);
-  return parsed ? parsed.getTime() : null;
+function parseTimestampValue(value?: string | null): number | null {
+  if (!value) return null;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
-function formatDateInput(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}/${month}/${day}`;
+function getTripDurationDays(startDate: string, endDate: string) {
+  const start = parseDateInput(startDate);
+  const end = parseDateInput(endDate);
+  if (!start || !end) return null;
+  const startTime = start.getTime();
+  const endTime = end.getTime();
+  if (endTime < startTime) return null;
+  const msPerDay = 1000 * 60 * 60 * 24;
+  return Math.floor((endTime - startTime) / msPerDay) + 1;
 }
 
 type WheelPickerProps<T extends string | number> = {
@@ -134,8 +134,7 @@ export default function RecommendationListScreen() {
   const [keyword, setKeyword] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [peopleFilter, setPeopleFilter] = useState<number | null>(null);
-  const [startDateFilter, setStartDateFilter] = useState('');
-  const [endDateFilter, setEndDateFilter] = useState('');
+  const [durationFilter, setDurationFilter] = useState<number | null>(null);
   const [sortOrder, setSortOrder] = useState<RecommendSortOrder>('newest');
   const [activePicker, setActivePicker] = useState<PickerType>(null);
 
@@ -162,41 +161,6 @@ export default function RecommendationListScreen() {
     setActivePicker('people');
   }, []);
 
-  const applyDateFilter = useCallback((type: 'start' | 'end', date: Date) => {
-    const formatted = formatDateInput(date);
-    if (type === 'start') {
-      setStartDateFilter(formatted);
-      return;
-    }
-    setEndDateFilter(formatted);
-  }, []);
-
-  const openDatePicker = useCallback(
-    (type: 'start' | 'end') => {
-      const source = type === 'start' ? startDateFilter : endDateFilter;
-      const value = parseDateInput(source) ?? (type === 'end' ? parseDateInput(startDateFilter) : null) ?? new Date();
-
-      if (Platform.OS === 'android') {
-        DateTimePickerAndroid.open({
-          mode: 'date',
-          display: 'calendar',
-          value,
-          minimumDate: type === 'end' ? parseDateInput(startDateFilter) ?? undefined : undefined,
-          onChange: (event, selectedDate) => {
-            if (event.type !== 'set' || !selectedDate) {
-              return;
-            }
-            applyDateFilter(type, selectedDate);
-          },
-        });
-        return;
-      }
-
-      setActivePicker(type);
-    },
-    [applyDateFilter, endDateFilter, startDateFilter]
-  );
-
   const closePicker = useCallback(() => {
     setActivePicker(null);
   }, []);
@@ -214,47 +178,41 @@ export default function RecommendationListScreen() {
     if (activePicker === 'people') {
       setPeopleFilter(null);
     }
-    if (activePicker === 'start') {
-      setStartDateFilter('');
-    }
-    if (activePicker === 'end') {
-      setEndDateFilter('');
+    if (activePicker === 'duration') {
+      setDurationFilter(null);
     }
     setActivePicker(null);
   }, [activePicker]);
 
   const filteredPlans = useMemo(() => {
-    const plansWithDates = recommendPlans as RecommendPlanWithDates[];
     const query = keyword.trim().toLowerCase();
-    const startFilterValue = startDateFilter ? parseDateValue(startDateFilter) : null;
-    const endFilterValue = endDateFilter ? parseDateValue(endDateFilter) : null;
 
-    const filtered = plansWithDates.filter((plan) => {
+    const filtered = recommendPlans.filter((plan) => {
       const searchableText = [plan.title, plan.peopleLabel, ...plan.categories].join(' ').toLowerCase();
       const matchesKeyword = query.length === 0 || searchableText.includes(query);
       const matchesPeople = !peopleFilter || plan.participantCount === peopleFilter;
       const matchesCategories =
         categoryFilter.length === 0 || categoryFilter.every((category) => plan.categories.includes(category));
-      const startDateValue = parseDateValue(plan.startDate);
-      const endDateValue = parseDateValue(plan.endDate);
-      const matchesStart = startFilterValue === null || (startDateValue !== null && startDateValue >= startFilterValue);
-      const matchesEnd = endFilterValue === null || (endDateValue !== null && endDateValue <= endFilterValue);
+      const durationDays = getTripDurationDays(plan.startDate, plan.endDate);
+      const matchesDuration = durationFilter === null || durationDays === durationFilter;
 
-      return matchesKeyword && matchesPeople && matchesCategories && matchesStart && matchesEnd;
+      return matchesKeyword && matchesPeople && matchesCategories && matchesDuration;
     });
 
     return filtered.sort((a, b) => {
-      const aDate = parseDateValue(a.startDate) ?? 0;
-      const bDate = parseDateValue(b.startDate) ?? 0;
+      if (sortOrder === 'popular') {
+        return b.saveCount - a.saveCount;
+      }
+      const aDate = parseTimestampValue(a.createdAt) ?? 0;
+      const bDate = parseTimestampValue(b.createdAt) ?? 0;
       return sortOrder === 'newest' ? bDate - aDate : aDate - bDate;
     });
-  }, [categoryFilter, endDateFilter, keyword, peopleFilter, recommendPlans, sortOrder, startDateFilter]);
+  }, [categoryFilter, durationFilter, keyword, peopleFilter, recommendPlans, sortOrder]);
 
-  const sortLabel = sortOrder === 'newest' ? '新しい順' : '古い順';
+  const sortLabel = sortOrder === 'newest' ? '新しい順' : sortOrder === 'oldest' ? '古い順' : '人気順';
   const categoryLabel = categoryFilter.length ? `カテゴリ(${categoryFilter.length})` : 'カテゴリ';
   const peopleLabel = peopleFilter ? `${peopleFilter}名` : '人数';
-  const startLabel = startDateFilter || '開始日';
-  const endLabel = endDateFilter || '終了日';
+  const durationLabel = durationFilter ? `${durationFilter}日` : '日数';
 
   return (
     <View style={styles.screen}>
@@ -292,22 +250,22 @@ export default function RecommendationListScreen() {
             <MaterialIcons name="expand-more" size={18} color={peopleFilter ? '#EC5B13' : '#64748B'} />
           </Pressable>
           <Pressable
-            style={[styles.filterChip, !!startDateFilter && styles.filterChipActive]}
-            onPress={() => openDatePicker('start')}
+            style={[styles.filterChip, !!durationFilter && styles.filterChipActive]}
+            onPress={() => setActivePicker('duration')}
           >
-            <Text style={[styles.filterChipText, !!startDateFilter && styles.filterChipTextActive]}>{startLabel}</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.filterChip, !!endDateFilter && styles.filterChipActive]}
-            onPress={() => openDatePicker('end')}
-          >
-            <Text style={[styles.filterChipText, !!endDateFilter && styles.filterChipTextActive]}>{endLabel}</Text>
+            <Text style={[styles.filterChipText, !!durationFilter && styles.filterChipTextActive]}>{durationLabel}</Text>
+            <MaterialIcons name="expand-more" size={18} color={durationFilter ? '#EC5B13' : '#64748B'} />
           </Pressable>
         </ScrollView>
 
         <View style={styles.resultRow}>
           <Text style={styles.resultText}>{filteredPlans.length}件のおすすめ旅が見つかりました</Text>
-          <Pressable style={styles.sortButton} onPress={() => setSortOrder((prev) => (prev === 'newest' ? 'oldest' : 'newest'))}>
+          <Pressable
+            style={styles.sortButton}
+            onPress={() =>
+              setSortOrder((prev) => (prev === 'newest' ? 'oldest' : prev === 'oldest' ? 'popular' : 'newest'))
+            }
+          >
             <MaterialIcons name="sort" size={18} color="#EC5B13" />
             <Text style={styles.sortButtonText}>{sortLabel}</Text>
           </Pressable>
@@ -418,37 +376,22 @@ export default function RecommendationListScreen() {
                   />
                 </View>
               </>
-            ) : (
+            ) : activePicker === 'duration' ? (
               <>
                 <View style={styles.modalTopSection}>
-                  <Text style={styles.modalTitle}>{activePicker === 'start' ? '開始日を選択' : '終了日を選択'}</Text>
+                  <Text style={styles.modalTitle}>日数を選択</Text>
                 </View>
-                <View style={styles.calendarSection}>
-                  <DateTimePicker
-                    mode="date"
-                    display="inline"
-                    themeVariant="light"
-                    value={
-                      parseDateInput(activePicker === 'start' ? startDateFilter : endDateFilter) ??
-                      (activePicker === 'end' ? parseDateInput(startDateFilter) : null) ??
-                      new Date()
-                    }
-                    minimumDate={activePicker === 'end' ? parseDateInput(startDateFilter) ?? undefined : undefined}
-                    onChange={(event: DateTimePickerEvent, selectedDate?: Date) => {
-                      if (
-                        event.type !== 'set' ||
-                        !selectedDate ||
-                        activePicker === null ||
-                        activePicker === 'people' ||
-                        activePicker === 'category'
-                      ) {
-                        return;
-                      }
-                      applyDateFilter(activePicker, selectedDate);
-                    }}
+                <View style={styles.modalWheelSection}>
+                  <WheelPicker
+                    values={DURATION_OPTIONS}
+                    selectedValue={durationFilter ?? 1}
+                    onChange={setDurationFilter}
+                    renderLabel={(value) => `${value}日`}
                   />
                 </View>
               </>
+            ) : (
+              <View />
             )}
 
             <View style={styles.modalBottomSection}>
@@ -704,11 +647,6 @@ const styles = StyleSheet.create({
   modalWheelSection: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-  },
-  calendarSection: {
-    flex: 1,
     justifyContent: 'center',
     paddingVertical: 8,
   },

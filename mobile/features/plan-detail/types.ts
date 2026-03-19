@@ -11,6 +11,8 @@ export type PlanDetailTimelineItem = {
   end: string;
   title: string;
   body: string;
+  itemType?: 'place' | 'transport';
+  metaLabel?: string;
   icon?: keyof typeof MaterialIcons.glyphMap;
 };
 

@@ -57,6 +57,41 @@ def _timeline_icon_from_category(category: str | None) -> str:
     return "place"
 
 
+def _timeline_icon_from_transport_mode(mode: str | None) -> str:
+    if mode == "WALK":
+        return "directions-walk"
+    if mode == "BUS":
+        return "directions-bus"
+    return "train"
+
+
+def _format_transport_meta(duration_minutes: int | None, distance_meters: int | None) -> str | None:
+    parts: list[str] = []
+    if duration_minutes is not None:
+        parts.append(f"{duration_minutes}分")
+    if distance_meters is not None:
+        parts.append(f"{distance_meters / 1000:.1f}km" if distance_meters >= 1000 else f"{distance_meters}m")
+    return " / ".join(parts) if parts else None
+
+
+def _to_timeline_item_response(item: ItineraryItemModel) -> RecommendationTimelineItemResponse:
+    is_transport = item.item_type == "transport"
+    return RecommendationTimelineItemResponse(
+        id=item.id,
+        start=item.start_time.strftime("%H:%M") if item.start_time else "--:--",
+        end=item.end_time.strftime("%H:%M") if item.end_time else "--:--",
+        title=item.name,
+        body=(
+            f"{item.from_name} → {item.to_name}"
+            if is_transport and item.from_name and item.to_name
+            else item.notes or item.category or "詳細メモは未設定です。"
+        ),
+        item_type=item.item_type or "place",
+        meta_label=_format_transport_meta(item.travel_minutes, item.distance_meters) if is_transport else None,
+        icon=_timeline_icon_from_transport_mode(item.transport_mode) if is_transport else _timeline_icon_from_category(item.category),
+    )
+
+
 @router.post(
     "/{recommendation_id}/clone",
     response_model=RecommendationCloneResponse,
@@ -237,6 +272,8 @@ async def list_recommendations(
         RecommendationListResponse(
             id=trip.id,
             title=f"{trip.origin} → {trip.destination}",
+            start_date=trip.start_date.isoformat(),
+            end_date=trip.end_date.isoformat(),
             date_label=_build_trip_duration_label(trip.start_date, trip.end_date),
             participant_count=trip.participant_count,
             save_count=trip.save_count,
@@ -244,6 +281,7 @@ async def list_recommendations(
             saved_trip_id=saved_trip_map.get(trip.id),
             categories=trip.recommendation_categories or ["その他"],
             image=trip.cover_image_url or "",
+            created_at=trip.created_at,
         )
         for trip, user in rows
     ]
@@ -287,16 +325,7 @@ async def get_recommendation_detail(
         )
         items = item_result.scalars().all()
         for item in items:
-            items_by_day_id[item.trip_day_id].append(
-                RecommendationTimelineItemResponse(
-                    id=item.id,
-                    start=item.start_time.strftime("%H:%M") if item.start_time else "--:--",
-                    end=item.end_time.strftime("%H:%M") if item.end_time else "--:--",
-                    title=item.name,
-                    body=item.notes or item.category or "詳細メモは未設定です。",
-                    icon=_timeline_icon_from_category(item.category),
-                )
-            )
+            items_by_day_id[item.trip_day_id].append(_to_timeline_item_response(item))
 
     preference_result = await db.execute(
         select(TripPreferenceModel).where(TripPreferenceModel.trip_id == recommendation_id)

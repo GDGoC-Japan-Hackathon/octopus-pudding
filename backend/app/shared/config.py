@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     google_places_endpoint: str = "https://places.googleapis.com/v1/places:searchText"
     google_places_language_code: str = "ja"
     google_places_region_code: str = "JP"
+    google_routes_api_key: str = ""
+    google_routes_endpoint: str = "https://routes.googleapis.com/directions/v2:computeRoutes"
 
     # Gemini API
     gemini_api_key: str = ""

@@ -46,7 +46,13 @@ export type TripDetailItineraryItemResponse = {
   id: number;
   trip_day_id: number;
   name: string;
+  item_type?: string;
   category?: string | null;
+  transport_mode?: string | null;
+  travel_minutes?: number | null;
+  distance_meters?: number | null;
+  from_name?: string | null;
+  to_name?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   start_time?: string | null;

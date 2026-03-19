@@ -104,7 +104,7 @@ export function PlanDetailTemplate({
 
         <View style={styles.timelineSection}>
           {timeline.length ? (
-            timeline.map((item, index) => (
+            timeline.map((item) => (
               <View key={String(item.id)}>
                 <View style={styles.timelineRow}>
                   <View style={styles.timeColumn}>
@@ -113,34 +113,46 @@ export function PlanDetailTemplate({
                   </View>
 
                   <View style={styles.cardColumn}>
-                    <View style={styles.timelineCard}>
+                    <View
+                      style={[
+                        styles.timelineCard,
+                        item.itemType === 'transport' && styles.timelineCardTransport,
+                      ]}
+                    >
                       <View style={styles.timelineCardHeader}>
                         <View style={styles.timelineCardTitleRow}>
-                          <View style={styles.timelineIconWrap}>
+                          <View
+                            style={[
+                              styles.timelineIconWrap,
+                              item.itemType === 'transport' && styles.timelineIconWrapTransport,
+                            ]}
+                          >
                             <MaterialIcons name={item.icon ?? 'place'} size={16} color="#EC5B13" />
                           </View>
                           <Text style={styles.timelineCardTitle}>{item.title}</Text>
                         </View>
                       </View>
-                      <View style={styles.durationBadge}>
-                        <Text style={styles.durationBadgeText}>滞在: {item.start} - {item.end}</Text>
+                      <View
+                        style={[
+                          styles.durationBadge,
+                          item.itemType === 'transport' && styles.durationBadgeTransport,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.durationBadgeText,
+                            item.itemType === 'transport' && styles.durationBadgeTextTransport,
+                          ]}
+                        >
+                          {item.itemType === 'transport'
+                            ? item.metaLabel ?? '移動'
+                            : `滞在: ${item.start} - ${item.end}`}
+                        </Text>
                       </View>
                       <Text style={styles.timelineCardBody}>{item.body}</Text>
                     </View>
                   </View>
                 </View>
-
-                {index !== timeline.length - 1 ? (
-                  <View style={styles.connectorRow}>
-                    <View style={styles.connectorTimeColumn} />
-                    <View style={styles.connectorContent}>
-                      <View style={styles.connectorPill}>
-                        <MaterialIcons name="directions-walk" size={16} color="#3B82F6" />
-                        <Text style={styles.connectorPillText}>移動</Text>
-                      </View>
-                    </View>
-                  </View>
-                ) : null}
               </View>
             ))
           ) : (
@@ -378,6 +390,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
+  timelineCardTransport: {
+    backgroundColor: '#F8FBFF',
+    borderColor: '#BFDBFE',
+  },
   timelineCardHeader: {
     marginBottom: 10,
   },
@@ -393,6 +409,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF1E8',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  timelineIconWrapTransport: {
+    backgroundColor: '#DBEAFE',
   },
   timelineCardTitle: {
     flex: 1,
@@ -410,44 +429,22 @@ const styles = StyleSheet.create({
     borderColor: '#FED7AA',
     marginBottom: 10,
   },
+  durationBadgeTransport: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
   durationBadgeText: {
     fontSize: 10,
     fontWeight: '700',
     color: '#EC5B13',
   },
+  durationBadgeTextTransport: {
+    color: '#2563EB',
+  },
   timelineCardBody: {
     fontSize: 13,
     lineHeight: 20,
     color: '#475569',
-  },
-  connectorRow: {
-    flexDirection: 'row',
-    gap: 14,
-    height: 68,
-  },
-  connectorTimeColumn: {
-    width: 52,
-  },
-  connectorContent: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  connectorPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  connectorPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#334155',
   },
   emptyTimelineCard: {
     backgroundColor: '#FFFFFF',

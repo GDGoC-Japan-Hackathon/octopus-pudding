@@ -292,5 +292,25 @@ ALTER TABLE trips DROP COLUMN recommendation_category;
 
 UPDATE alembic_version SET version_num='b2f4d6e8a102' WHERE alembic_version.version_num = 'a1c3d5e7f901';
 
+-- Running upgrade b2f4d6e8a102 -> c4d6e8f0a113
+
+ALTER TABLE itinerary_items ADD COLUMN item_type VARCHAR(50);
+
+ALTER TABLE itinerary_items ADD COLUMN transport_mode VARCHAR(50);
+
+ALTER TABLE itinerary_items ADD COLUMN travel_minutes INTEGER;
+
+ALTER TABLE itinerary_items ADD COLUMN distance_meters INTEGER;
+
+ALTER TABLE itinerary_items ADD COLUMN from_name VARCHAR(255);
+
+ALTER TABLE itinerary_items ADD COLUMN to_name VARCHAR(255);
+
+UPDATE itinerary_items SET item_type = 'place' WHERE item_type IS NULL;
+
+ALTER TABLE itinerary_items ALTER COLUMN item_type SET NOT NULL;
+
+UPDATE alembic_version SET version_num='c4d6e8f0a113' WHERE alembic_version.version_num = 'b2f4d6e8a102';
+
 COMMIT;
 
