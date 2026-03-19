@@ -6,6 +6,10 @@ import { getFriends } from '@/features/friends/api/get-friends';
 import { confirmRecommendTripSave } from '@/features/recommend/api/confirm-recommend-trip-save';
 import { type FriendResponse } from '@/features/friends/types/friend-request';
 import { AppHeader } from '@/features/travel/components/AppHeader';
+import {
+  ParticipantCountField,
+  ScheduleField,
+} from '@/features/trips/components/TripBasicInfoFields';
 import { deleteTrip } from '@/features/trips/api/delete-trip';
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
 import { addTripMember, removeTripMember } from '@/features/trips/api/trip-members';
@@ -272,9 +276,18 @@ export default function RecommendCustomizeScreen() {
           <Text style={travelStyles.sectionTitleText}>基本情報</Text>
           <TextInput style={travelStyles.input} value={origin} onChangeText={setOrigin} placeholder="出発地" />
           <TextInput style={travelStyles.input} value={destination} onChangeText={setDestination} placeholder="目的地" />
-          <TextInput style={travelStyles.input} value={startDate} onChangeText={setStartDate} placeholder="開始日 (YYYY-MM-DD)" />
-          <TextInput style={travelStyles.input} value={endDate} onChangeText={setEndDate} placeholder="終了日 (YYYY-MM-DD)" />
-          <TextInput style={travelStyles.input} value={participantCount} onChangeText={setParticipantCount} placeholder="人数" keyboardType="number-pad" />
+          <ScheduleField
+            startDate={startDate}
+            endDate={endDate}
+            onChangeStartDate={setStartDate}
+            onChangeEndDate={setEndDate}
+            required
+          />
+          <ParticipantCountField
+            participantCount={participantCount}
+            onChangeParticipantCount={setParticipantCount}
+            required
+          />
           <Text style={travelStyles.sectionBody}>カテゴリ</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {RECOMMEND_CATEGORY_OPTIONS.map((option) => {

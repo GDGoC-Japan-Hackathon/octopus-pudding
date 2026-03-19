@@ -1,17 +1,11 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import DateTimePicker, {
-  DateTimePickerAndroid,
-  type DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,6 +17,10 @@ import {
 import { weatherMock } from '@/data/travel';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 import { travelStyles } from '@/features/travel/styles';
+import {
+  ParticipantCountField,
+  ScheduleField,
+} from '@/features/trips/components/TripBasicInfoFields';
 import {
   type CreateTripFormValues,
   validateAndBuildCreateTripPayload,
@@ -59,50 +57,12 @@ const formItems = [
 const destinationSuggestions = ['東京', '大阪', '京都', '札幌', '福岡', '那覇', '箱根', '軽井沢'] as const;
 const ATMOSPHERE_OPTIONS = ['のんびり', 'アクティブ', '映え'] as const;
 const RECOMMEND_CATEGORY_OPTIONS = ['カフェ', '夜景', 'グルメ', '温泉'] as const;
-type DateFieldKey = 'startDate' | 'endDate';
 const BUDGET_STEP = 10000;
 const MAX_PARTICIPANT_COUNT = 10;
 const MAX_TRIP_DAYS = 3;
 const MAX_BUDGET_PER_PERSON = 100000;
 const REQUIRED_FIELD_KEYS = new Set(['origin', 'destination', 'participantCount', 'budget'] as const);
-
-function parseDateInput(value: string) {
-  if (!value) return null;
-  const [yearText, monthText, dayText] = value.split('-');
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-
-  if (!year || !month || !day) {
-    return null;
-  }
-
-  const parsed = new Date(year, month - 1, day);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function formatDateInput(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function formatDateDisplay(value: string) {
-  const parsed = parseDateInput(value);
-  if (!parsed) return value;
-  return `${parsed.getFullYear()}/${String(parsed.getMonth() + 1).padStart(2, '0')}/${String(parsed.getDate()).padStart(2, '0')}`;
-}
-
-function addDays(base: Date, days: number) {
-  const next = new Date(base);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function subtractDays(base: Date, days: number) {
-  return addDays(base, -days);
-}
+type EditableFieldKey = 'origin' | 'destination' | 'participantCount' | 'budget' | 'startDate' | 'endDate';
 
 function FieldLabel({ label, required = false }: { label: string; required?: boolean }) {
   return (
@@ -117,8 +77,6 @@ export default function PlanCreateScreen() {
   const router = useRouter();
   const [isResolvingCurrentLocation, setIsResolvingCurrentLocation] = useState(false);
   const isResolvingCurrentLocationRef = useRef(false);
-  const [activeDateField, setActiveDateField] = useState<DateFieldKey>('startDate');
-  const [isIosDateModalVisible, setIsIosDateModalVisible] = useState(false);
   const [fields, setFields] = useState<CreateTripFormValues>(() => getCreateTripDraft().formValues);
   const [selectedCompanionUserIds, setSelectedCompanionUserIds] = useState<number[]>(
     () => getCreateTripDraft().selectedCompanionUserIds
@@ -136,7 +94,7 @@ export default function PlanCreateScreen() {
     </Pressable>
   );
 
-  const updateField = (key: (typeof formItems)[number]['key'], value: string) => {
+  const updateField = (key: EditableFieldKey, value: string) => {
     setFields((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -157,113 +115,6 @@ export default function PlanCreateScreen() {
     }));
   }, []);
 
-  const applyDateField = useCallback((field: DateFieldKey, date: Date) => {
-    const formatted = formatDateInput(date);
-
-    setFields((prev) => {
-      const next = { ...prev, [field]: formatted };
-      const start = parseDateInput(field === 'startDate' ? formatted : prev.startDate);
-      let end = parseDateInput(field === 'endDate' ? formatted : prev.endDate);
-
-      if (start && end) {
-        if (end.getTime() < start.getTime()) {
-          if (field === 'startDate') {
-            next.endDate = formatted;
-            end = start;
-          } else {
-            next.startDate = formatted;
-          }
-        }
-
-        const maxEnd = addDays(start, MAX_TRIP_DAYS - 1);
-        if (end.getTime() > maxEnd.getTime()) {
-          next.endDate = formatDateInput(maxEnd);
-        }
-      }
-
-      return next;
-    });
-  }, []);
-
-  const openAndroidDatePicker = useCallback(
-    (field: DateFieldKey) => {
-      const baseValue =
-        parseDateInput(fields[field]) ??
-        (field === 'endDate' ? parseDateInput(fields.startDate) : null) ??
-        new Date();
-
-      DateTimePickerAndroid.open({
-        mode: 'date',
-        display: 'calendar',
-        value: baseValue,
-        minimumDate:
-          field === 'endDate'
-            ? parseDateInput(fields.startDate) ?? undefined
-            : (() => {
-              const end = parseDateInput(fields.endDate);
-              return end ? subtractDays(end, MAX_TRIP_DAYS - 1) : undefined;
-            })(),
-        maximumDate:
-          field === 'endDate'
-            ? (() => {
-              const start = parseDateInput(fields.startDate);
-              return start ? addDays(start, MAX_TRIP_DAYS - 1) : undefined;
-            })()
-            : parseDateInput(fields.endDate) ?? undefined,
-        onChange: (event, selectedDate) => {
-          if (event.type !== 'set' || !selectedDate) {
-            return;
-          }
-
-          applyDateField(field, selectedDate);
-
-          if (field === 'startDate') {
-            setTimeout(() => {
-              openAndroidDatePicker('endDate');
-            }, 0);
-          }
-        },
-      });
-    },
-    [applyDateField, fields.endDate, fields.startDate]
-  );
-
-  const openSchedulePicker = useCallback(() => {
-    if (Platform.OS === 'android') {
-      openAndroidDatePicker('startDate');
-      return;
-    }
-
-    setActiveDateField(fields.endDate ? 'endDate' : 'startDate');
-    setIsIosDateModalVisible(true);
-  }, [fields.endDate, openAndroidDatePicker]);
-
-  const iosPickerValue = useMemo(
-    () =>
-      parseDateInput(fields[activeDateField]) ??
-      (activeDateField === 'endDate' ? parseDateInput(fields.startDate) : null) ??
-      new Date(),
-    [activeDateField, fields.endDate, fields.startDate]
-  );
-
-  const scheduleLabel = useMemo(() => {
-    if (fields.startDate && fields.endDate) {
-      return `${formatDateDisplay(fields.startDate)} 〜 ${formatDateDisplay(fields.endDate)}`;
-    }
-    if (fields.startDate) {
-      return `${formatDateDisplay(fields.startDate)} 〜 終了日を選択`;
-    }
-    return '開始日〜終了日を選択';
-  }, [fields.endDate, fields.startDate]);
-
-  const participantCountNumber = useMemo(() => {
-    const parsed = Number(fields.participantCount);
-    if (!Number.isInteger(parsed) || parsed < 1) {
-      return 1;
-    }
-    return parsed;
-  }, [fields.participantCount]);
-
   const budgetSliderMax = MAX_BUDGET_PER_PERSON;
 
   const budgetRawValue = useMemo(() => {
@@ -273,16 +124,6 @@ export default function PlanCreateScreen() {
     }
     return parsed;
   }, [fields.budget]);
-
-  const handleIosDateChange = useCallback(
-    (event: DateTimePickerEvent, selectedDate?: Date) => {
-      if (event.type === 'dismissed' || !selectedDate) {
-        return;
-      }
-      applyDateField(activeDateField, selectedDate);
-    },
-    [activeDateField, applyDateField]
-  );
 
   const resolveCurrentLocationLabel = useCallback(async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -362,62 +203,35 @@ export default function PlanCreateScreen() {
         <Text style={styles.requiredLegend}>※必須</Text>
         {formItems.map((item) => (
           <View key={item.key} style={styles.fieldBlock}>
-            <View style={travelStyles.rowWrap}>
-              <FieldLabel label={item.label} required={REQUIRED_FIELD_KEYS.has(item.key)} />
-              {item.key === 'origin' ? (
-                <Pressable
-                  style={[
-                    travelStyles.pillButton,
-                    styles.currentLocationButton,
-                    isResolvingCurrentLocation ? styles.currentLocationButtonDisabled : null,
-                  ]}
-                  onPress={handleUseCurrentLocation}
-                  disabled={isResolvingCurrentLocation}
-                >
-                  {isResolvingCurrentLocation ? (
-                    <ActivityIndicator color="#F97316" size="small" />
-                  ) : (
-                    <Text style={[travelStyles.pillText, styles.currentLocationButtonText]}>現在地を入力</Text>
-                  )}
-                </Pressable>
-              ) : null}
-            </View>
-            {item.key === 'participantCount' ? (
-              <View style={styles.stepperWrap}>
-                <Pressable
-                  style={[styles.stepperButton, Number(fields.participantCount) <= 1 ? styles.stepperButtonDisabled : null]}
-                  onPress={() => {
-                    const next = Math.max(1, Number(fields.participantCount || '1') - 1);
-                    updateField('participantCount', String(next));
-                  }}
-                  disabled={Number(fields.participantCount) <= 1}
-                >
-                  <MaterialIcons name="remove" size={20} color={Number(fields.participantCount) <= 1 ? '#94A3B8' : '#334155'} />
-                </Pressable>
-
-                <View style={styles.stepperValueWrap}>
-                  <Text style={styles.stepperValueText}>{fields.participantCount || '1'}</Text>
-                  <Text style={styles.stepperValueUnit}>人</Text>
-                </View>
-
-                <Pressable
-                  style={[
-                    styles.stepperButton,
-                    Number(fields.participantCount) >= MAX_PARTICIPANT_COUNT ? styles.stepperButtonDisabled : null,
-                  ]}
-                  onPress={() => {
-                    const next = Math.min(MAX_PARTICIPANT_COUNT, Math.max(1, Number(fields.participantCount || '1') + 1));
-                    updateField('participantCount', String(next));
-                  }}
-                  disabled={Number(fields.participantCount) >= MAX_PARTICIPANT_COUNT}
-                >
-                  <MaterialIcons
-                    name="add"
-                    size={20}
-                    color={Number(fields.participantCount) >= MAX_PARTICIPANT_COUNT ? '#94A3B8' : '#334155'}
-                  />
-                </Pressable>
+            {item.key !== 'participantCount' ? (
+              <View style={travelStyles.rowWrap}>
+                <FieldLabel label={item.label} required={REQUIRED_FIELD_KEYS.has(item.key)} />
+                {item.key === 'origin' ? (
+                  <Pressable
+                    style={[
+                      travelStyles.pillButton,
+                      styles.currentLocationButton,
+                      isResolvingCurrentLocation ? styles.currentLocationButtonDisabled : null,
+                    ]}
+                    onPress={handleUseCurrentLocation}
+                    disabled={isResolvingCurrentLocation}
+                  >
+                    {isResolvingCurrentLocation ? (
+                      <ActivityIndicator color="#F97316" size="small" />
+                    ) : (
+                      <Text style={[travelStyles.pillText, styles.currentLocationButtonText]}>現在地を入力</Text>
+                    )}
+                  </Pressable>
+                ) : null}
               </View>
+            ) : null}
+            {item.key === 'participantCount' ? (
+              <ParticipantCountField
+                participantCount={fields.participantCount}
+                onChangeParticipantCount={(value) => updateField('participantCount', value)}
+                required
+                maxParticipantCount={MAX_PARTICIPANT_COUNT}
+              />
             ) : item.key === 'budget' ? (
               <View style={styles.budgetSection}>
                 <View style={styles.stepperWrap}>
@@ -495,24 +309,14 @@ export default function PlanCreateScreen() {
                 </View>
 
                 <View style={styles.scheduleSection}>
-                  <FieldLabel label="日程" required />
-                  <Pressable style={styles.scheduleInput} onPress={openSchedulePicker}>
-                    <View style={styles.scheduleInputBody}>
-                      <MaterialIcons name="calendar-month" size={20} color="#F97316" />
-                      <View style={styles.scheduleTextWrap}>
-                        <Text
-                          style={[
-                            styles.scheduleValueText,
-                            !(fields.startDate || fields.endDate) ? styles.schedulePlaceholderText : null,
-                          ]}
-                        >
-                          {scheduleLabel}
-                        </Text>
-                        <Text style={styles.scheduleHelperText}>タップしてカレンダーで選択</Text>
-                      </View>
-                    </View>
-                    <MaterialIcons name="chevron-right" size={20} color="#94A3B8" />
-                  </Pressable>
+                  <ScheduleField
+                    startDate={fields.startDate}
+                    endDate={fields.endDate}
+                    onChangeStartDate={(value) => updateField('startDate', value)}
+                    onChangeEndDate={(value) => updateField('endDate', value)}
+                    required
+                    maxTripDays={MAX_TRIP_DAYS}
+                  />
                 </View>
               </>
             ) : null}
@@ -585,66 +389,6 @@ export default function PlanCreateScreen() {
           <Text style={travelStyles.primaryButtonText}>プランを作成する</Text>
         </Pressable>
       </View>
-
-      <Modal visible={isIosDateModalVisible} transparent animationType="slide" onRequestClose={() => setIsIosDateModalVisible(false)}>
-        <View style={styles.dateModalOverlay}>
-          <View style={styles.dateModalSheet}>
-            <View style={styles.dateModalHeader}>
-              <Text style={styles.dateModalTitle}>日程を選択</Text>
-              <Pressable onPress={() => setIsIosDateModalVisible(false)}>
-                <Text style={styles.dateModalCloseText}>完了</Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.dateFieldTabs}>
-              <Pressable
-                style={[styles.dateFieldTab, activeDateField === 'startDate' ? styles.dateFieldTabActive : null]}
-                onPress={() => setActiveDateField('startDate')}
-              >
-                <Text style={[styles.dateFieldTabText, activeDateField === 'startDate' ? styles.dateFieldTabTextActive : null]}>
-                  開始日
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.dateFieldTab, activeDateField === 'endDate' ? styles.dateFieldTabActive : null]}
-                onPress={() => setActiveDateField('endDate')}
-              >
-                <Text style={[styles.dateFieldTabText, activeDateField === 'endDate' ? styles.dateFieldTabTextActive : null]}>
-                  終了日
-                </Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.datePreviewCard}>
-              <Text style={styles.datePreviewText}>{scheduleLabel}</Text>
-            </View>
-
-            <DateTimePicker
-              mode="date"
-              display="inline"
-              themeVariant="light"
-              value={iosPickerValue}
-              minimumDate={
-                activeDateField === 'endDate'
-                  ? parseDateInput(fields.startDate) ?? undefined
-                  : (() => {
-                    const end = parseDateInput(fields.endDate);
-                    return end ? subtractDays(end, MAX_TRIP_DAYS - 1) : undefined;
-                  })()
-              }
-              maximumDate={
-                activeDateField === 'endDate'
-                  ? (() => {
-                    const start = parseDateInput(fields.startDate);
-                    return start ? addDays(start, MAX_TRIP_DAYS - 1) : undefined;
-                  })()
-                  : parseDateInput(fields.endDate) ?? undefined
-              }
-              onChange={handleIosDateChange}
-            />
-          </View>
-        </View>
-      </Modal>
     </ScrollView>
   );
 }
@@ -780,41 +524,6 @@ const styles = StyleSheet.create({
   scheduleSection: {
     marginTop: 22,
   },
-  scheduleInput: {
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  scheduleInputBody: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  scheduleTextWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  scheduleValueText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  schedulePlaceholderText: {
-    color: '#94A3B8',
-  },
-  scheduleHelperText: {
-    fontSize: 12,
-    color: '#64748B',
-  },
   stepperWrap: {
     marginTop: 10,
     borderWidth: 1,
@@ -885,74 +594,5 @@ const styles = StyleSheet.create({
   },
   destinationSuggestionTextSelected: {
     color: '#EA580C',
-  },
-  dateModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.28)',
-    justifyContent: 'flex-end',
-  },
-  dateModalSheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 32,
-  },
-  dateModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  dateModalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  dateModalCloseText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#F97316',
-  },
-  dateFieldTabs: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
-  },
-  dateFieldTab: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
-  },
-  dateFieldTabActive: {
-    backgroundColor: '#FFF7ED',
-    borderWidth: 1,
-    borderColor: '#FDBA74',
-  },
-  dateFieldTabText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#64748B',
-  },
-  dateFieldTabTextActive: {
-    color: '#EA580C',
-  },
-  datePreviewCard: {
-    borderRadius: 14,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 10,
-  },
-  datePreviewText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#334155',
   },
 });
