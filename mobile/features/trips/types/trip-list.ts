@@ -14,6 +14,7 @@ export type TripListFilters = {
 export type TripListItemViewModel = {
   id: number;
   title: string;
+  coverImageUrl: string | null;
   status: TripStatus;
   statusLabel: string;
   statusVariant: 'planned' | 'ongoing' | 'muted';

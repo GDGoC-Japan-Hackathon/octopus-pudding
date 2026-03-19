@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 import os
 from pathlib import Path
 import sys
@@ -12,7 +12,8 @@ os.environ["FIREBASE_PROJECT_ID"] = "test-project"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.application.services.trip_service import TripService
-from app.domain.entities.trip import Trip, TripAggregate
+from app.domain.entities.trip import ItineraryItem, Trip, TripAggregate, TripDay
+from app.infrastructure.external.google_places_client import PlaceCandidate
 from app.shared.exceptions import TripNotFoundError
 
 
@@ -203,3 +204,96 @@ async def test_update_my_trip_raises_when_trip_is_missing():
 
     with pytest.raises(TripNotFoundError):
         await service.update_my_trip(user_id=1, trip_id=99, status="ongoing")
+
+
+def test_select_representative_place_item_uses_longest_place_stay():
+    service = TripService(FakeTripRepository([]))
+    day = TripDay(id=1, trip_id=1, day_number=1, date=date(2026, 4, 1))
+    items = [
+        ItineraryItem(
+            id=1,
+            trip_day_id=day.id,
+            name="東京駅",
+            item_type="place",
+            start_time=datetime(2026, 4, 1, 10, 0),
+            end_time=datetime(2026, 4, 1, 11, 0),
+        ),
+        ItineraryItem(
+            id=2,
+            trip_day_id=day.id,
+            name="徒歩で移動",
+            item_type="transport",
+            start_time=datetime(2026, 4, 1, 11, 0),
+            end_time=datetime(2026, 4, 1, 11, 20),
+        ),
+        ItineraryItem(
+            id=3,
+            trip_day_id=day.id,
+            name="浅草寺",
+            item_type="place",
+            start_time=datetime(2026, 4, 1, 11, 30),
+            end_time=datetime(2026, 4, 1, 14, 0),
+        ),
+    ]
+
+    representative = service._select_representative_place_item(items)
+
+    assert representative is not None
+    assert representative.name == "浅草寺"
+
+
+@pytest.mark.asyncio
+async def test_update_trip_cover_image_from_itinerary_uses_matching_place_photo(monkeypatch):
+    trip = make_trip(1, destination="箱根")
+    repository = FakeTripRepository([trip])
+    service = TripService(repository)
+    itinerary_items = [
+        ItineraryItem(
+            id=1,
+            trip_day_id=1,
+            name="箱根湯本駅",
+            item_type="place",
+            start_time=datetime(2026, 4, 1, 10, 30),
+            end_time=datetime(2026, 4, 1, 12, 5),
+            latitude=35.2329,
+            longitude=139.1068,
+        ),
+        ItineraryItem(
+            id=2,
+            trip_day_id=1,
+            name="Bakery & Table 箱根",
+            item_type="place",
+            start_time=datetime(2026, 4, 1, 12, 30),
+            end_time=datetime(2026, 4, 1, 13, 50),
+            latitude=35.2032,
+            longitude=139.0246,
+        ),
+    ]
+    fallback_candidates = [
+        PlaceCandidate(
+            name="Bakery & Table 箱根",
+            latitude=35.2032,
+            longitude=139.0246,
+            photo_name="places/example/photos/photo-1",
+        )
+    ]
+
+    class FakeGooglePlacesClient:
+        async def search_text(self, query: str, max_results: int = 10, language_code=None, region_code=None):
+            return []
+
+        async def get_photo_media(self, photo_name: str, *, max_width_px: int = 1200, max_height_px: int = 900):
+            assert photo_name == "places/example/photos/photo-1"
+            return "https://places.googleapis.com/v1/photo-media/example"
+
+    monkeypatch.setattr("app.application.services.trip_service.GooglePlacesClient", FakeGooglePlacesClient)
+
+    updated = await service._update_trip_cover_image_from_itinerary(
+        trip=trip,
+        itinerary_items=itinerary_items,
+        fallback_candidates=fallback_candidates,
+    )
+
+    assert updated is True
+    assert trip.cover_image_url == "https://places.googleapis.com/v1/photo-media/example"
+    assert repository.update_calls == [1]

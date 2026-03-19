@@ -442,22 +442,32 @@ class TripService:
                 days=days,
                 place_candidates=place_candidates,
             )
-            plan_payload = await self._generate_plan_payload(
-                trip=aggregate.trip,
-                preference=aggregate.preference,
-                days=days,
-                place_candidates=place_candidates,
-                route_options=route_options,
-            )
+            fallback_used = False
+            fallback_reason: str | None = None
+            try:
+                plan_payload = await self._generate_plan_payload(
+                    trip=aggregate.trip,
+                    preference=aggregate.preference,
+                    days=days,
+                    place_candidates=place_candidates,
+                    route_options=route_options,
+                )
+            except Exception as exc:  # noqa: BLE001
+                plan_payload = {}
+                fallback_used = True
+                fallback_reason = str(exc)[:500]
             normalized = self._normalize_plan_payload(
                 plan_payload=plan_payload,
                 days=days,
                 fallback_candidates=place_candidates,
                 route_options=route_options,
             )
-            inserted_count = await self._replace_itinerary_items(
-                days=days,
-                normalized_plan=normalized,
+            generated_items = self._build_generated_itinerary_items(days=days, normalized_plan=normalized)
+            inserted_count = await self.trip_repository.replace_items_by_trip(aggregate.trip.id, generated_items)
+            cover_image_updated = await self._update_trip_cover_image_from_itinerary(
+                trip=aggregate.trip,
+                itinerary_items=generated_items,
+                fallback_candidates=place_candidates,
             )
             generation.status = "succeeded"
             generation.finished_at = datetime.now(timezone.utc)
@@ -468,6 +478,9 @@ class TripService:
                     "days": len(days),
                     "candidates": len(place_candidates),
                     "inserted_items": inserted_count,
+                    "cover_image_updated": cover_image_updated,
+                    "fallback_used": fallback_used,
+                    "fallback_reason": fallback_reason,
                 },
                 ensure_ascii=False,
             )
@@ -534,7 +547,15 @@ class TripService:
                 merged.append(result)
                 if len(merged) >= max_candidates:
                     return merged
-        return merged
+        if merged:
+            return merged
+        return [
+            PlaceCandidate(
+                name=f"{destination} 散策",
+                address=destination,
+                category="tourist_attraction",
+            )
+        ]
 
     async def _generate_plan_payload(
         self,
@@ -786,14 +807,11 @@ class TripService:
             for day_number, items in by_day.items()
         }
 
-    async def _replace_itinerary_items(
+    def _build_generated_itinerary_items(
         self,
         days: list[TripDay],
         normalized_plan: dict[int, list[dict]],
-    ) -> int:
-        if not days:
-            return 0
-
+    ) -> list[ItineraryItem]:
         items_to_insert: list[ItineraryItem] = []
         for day in sorted(days, key=lambda x: x.day_number):
             if day.id is None:
@@ -822,7 +840,154 @@ class TripService:
                 if not generated_item.name:
                     continue
                 items_to_insert.append(generated_item)
-        return await self.trip_repository.replace_items_by_trip(days[0].trip_id, items_to_insert)
+        return items_to_insert
+
+    async def _update_trip_cover_image_from_itinerary(
+        self,
+        trip: Trip,
+        itinerary_items: list[ItineraryItem],
+        fallback_candidates: list[PlaceCandidate],
+    ) -> bool:
+        try:
+            cover_image_url = await self._resolve_cover_image_url_for_trip(
+                trip=trip,
+                itinerary_items=itinerary_items,
+                fallback_candidates=fallback_candidates,
+            )
+        except Exception:  # noqa: BLE001
+            return False
+
+        if not cover_image_url or cover_image_url == trip.cover_image_url:
+            return False
+
+        trip.cover_image_url = cover_image_url
+        updated_trip = await self.trip_repository.update_trip(trip)
+        return updated_trip is not None and updated_trip.cover_image_url == cover_image_url
+
+    async def _resolve_cover_image_url_for_trip(
+        self,
+        trip: Trip,
+        itinerary_items: list[ItineraryItem],
+        fallback_candidates: list[PlaceCandidate],
+    ) -> Optional[str]:
+        representative_item = self._select_representative_place_item(itinerary_items)
+        if representative_item is None:
+            return None
+
+        place_client = GooglePlacesClient()
+
+        candidate = self._find_matching_place_candidate(representative_item, fallback_candidates)
+        if candidate is None or not candidate.photo_name:
+            query = f"{representative_item.name} {trip.destination}".strip()
+            search_results = await place_client.search_text(query=query, max_results=5)
+            candidate = self._find_matching_place_candidate(representative_item, search_results)
+
+        if candidate is None or not candidate.photo_name:
+            return None
+
+        return await place_client.get_photo_media(candidate.photo_name)
+
+    def _select_representative_place_item(
+        self,
+        itinerary_items: list[ItineraryItem],
+    ) -> Optional[ItineraryItem]:
+        place_items = [
+            item
+            for item in itinerary_items
+            if item.item_type == "place" and item.name
+        ]
+        if not place_items:
+            return None
+
+        return max(
+            place_items,
+            key=lambda item: (
+                self._stay_duration_minutes(item),
+                -self._sortable_datetime_value(item.start_time),
+                -(item.sequence or 0),
+            ),
+        )
+
+    def _find_matching_place_candidate(
+        self,
+        item: ItineraryItem,
+        candidates: list[PlaceCandidate],
+    ) -> Optional[PlaceCandidate]:
+        if not candidates:
+            return None
+
+        normalized_item_name = self._normalize_place_name(item.name)
+        photo_candidates = [candidate for candidate in candidates if candidate.photo_name]
+        search_pool = photo_candidates or candidates
+
+        exact_matches = [
+            candidate for candidate in search_pool
+            if self._normalize_place_name(candidate.name) == normalized_item_name
+        ]
+        if exact_matches:
+            return self._pick_best_place_candidate(item, exact_matches)
+
+        partial_matches = [
+            candidate for candidate in search_pool
+            if normalized_item_name in self._normalize_place_name(candidate.name)
+            or self._normalize_place_name(candidate.name) in normalized_item_name
+        ]
+        if partial_matches:
+            return self._pick_best_place_candidate(item, partial_matches)
+
+        return None
+
+    def _pick_best_place_candidate(
+        self,
+        item: ItineraryItem,
+        candidates: list[PlaceCandidate],
+    ) -> PlaceCandidate:
+        if item.latitude is None or item.longitude is None:
+            return candidates[0]
+
+        return min(
+            candidates,
+            key=lambda candidate: self._estimate_distance_to_coordinates(
+                item.latitude,
+                item.longitude,
+                candidate.latitude,
+                candidate.longitude,
+            ),
+        )
+
+    def _stay_duration_minutes(self, item: ItineraryItem) -> int:
+        if item.start_time is None or item.end_time is None:
+            return 0
+        delta_minutes = int((item.end_time - item.start_time).total_seconds() // 60)
+        return max(delta_minutes, 0)
+
+    def _sortable_datetime_value(self, value: Optional[datetime]) -> float:
+        if value is None:
+            return float("inf")
+        return value.timestamp()
+
+    def _normalize_place_name(self, value: str) -> str:
+        return "".join(value.lower().split())
+
+    def _estimate_distance_to_coordinates(
+        self,
+        origin_latitude: Optional[float],
+        origin_longitude: Optional[float],
+        destination_latitude: Optional[float],
+        destination_longitude: Optional[float],
+    ) -> float:
+        if (
+            origin_latitude is None
+            or origin_longitude is None
+            or destination_latitude is None
+            or destination_longitude is None
+        ):
+            return float("inf")
+        lat_scale = 111_000
+        lon_scale = 91_000
+        lat_delta = (origin_latitude - destination_latitude) * lat_scale
+        lon_delta = (origin_longitude - destination_longitude) * lon_scale
+        return (lat_delta ** 2 + lon_delta ** 2) ** 0.5
 
     def _build_datetime(self, day_date: Optional[date], value: Optional[str]) -> Optional[datetime]:
         if day_date is None or value is None:
@@ -880,9 +1045,17 @@ class TripService:
             if not current_name or not next_name:
                 continue
             option = self._pick_best_route_option(route_map.get((str(current_name), str(next_name)), []))
-            if option is None:
+            if option is not None:
+                injected.append(self._route_option_to_item_payload(option, item.get("end_time"), next_item.get("start_time")))
                 continue
-            injected.append(self._route_option_to_item_payload(option, item.get("end_time"), next_item.get("start_time")))
+            injected.append(
+                self._build_fallback_transport_item_payload(
+                    from_name=str(current_name),
+                    to_name=str(next_name),
+                    previous_end_time=item.get("end_time"),
+                    next_start_time=next_item.get("start_time"),
+                )
+            )
         return injected
 
     def _pick_best_route_option(self, options: list[RouteOption]) -> Optional[RouteOption]:
@@ -927,6 +1100,51 @@ class TripService:
             "end_time": end_time,
             "notes": option.summary,
         }
+
+    def _build_fallback_transport_item_payload(
+        self,
+        *,
+        from_name: str,
+        to_name: str,
+        previous_end_time: Optional[str],
+        next_start_time: Optional[str],
+    ) -> dict:
+        travel_minutes = self._infer_fallback_travel_minutes(previous_end_time, next_start_time)
+        start_time, end_time = self._build_transport_time_window(
+            previous_end_time=previous_end_time,
+            next_start_time=next_start_time,
+            travel_minutes=travel_minutes,
+        )
+        summary = f"{from_name} → {to_name}"
+        return {
+            "item_type": "transport",
+            "name": "移動",
+            "category": "transport",
+            "transport_mode": None,
+            "travel_minutes": travel_minutes,
+            "distance_meters": None,
+            "from_name": from_name,
+            "to_name": to_name,
+            "start_time": start_time,
+            "end_time": end_time,
+            "notes": summary,
+        }
+
+    def _infer_fallback_travel_minutes(
+        self,
+        previous_end_time: Optional[str],
+        next_start_time: Optional[str],
+    ) -> int:
+        if previous_end_time and next_start_time:
+            try:
+                start = datetime.strptime(previous_end_time, "%H:%M")
+                end = datetime.strptime(next_start_time, "%H:%M")
+                delta_minutes = int((end - start).total_seconds() // 60)
+                if delta_minutes > 0:
+                    return delta_minutes
+            except ValueError:
+                pass
+        return 30
 
     def _build_transport_time_window(
         self,

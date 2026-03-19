@@ -13,10 +13,12 @@ export type PlanDetailTimelineItem = {
   body: string;
   itemType?: 'place' | 'transport';
   metaLabel?: string;
+  durationLabel?: string;
   icon?: keyof typeof MaterialIcons.glyphMap;
 };
 
 export type PlanDetailViewModel = {
+  heroImage: string | null;
   title: string;
   comment?: string;
   createdAtLabel?: string | null;

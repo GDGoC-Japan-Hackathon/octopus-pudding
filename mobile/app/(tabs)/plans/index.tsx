@@ -349,7 +349,7 @@ export default function PlansListScreen() {
         <View style={styles.cardList}>
           {filteredPlans.map((plan) => (
             <View key={plan.id} style={styles.card}>
-              <Image source={{ uri: PLAN_IMAGE_URL }} style={styles.cardImage} />
+              <Image source={{ uri: plan.coverImageUrl ?? PLAN_IMAGE_URL }} style={styles.cardImage} />
 
               <View style={styles.cardBody}>
                 <View style={styles.cardHeader}>
@@ -386,9 +386,17 @@ export default function PlansListScreen() {
                       <Text style={styles.metaText}>{plan.createdLabel}</Text>
                     </View>
                   ) : null}
-                  <View style={styles.metaRow}>
-                    <MaterialIcons name="group" size={18} color="#64748B" />
-                    <Text style={styles.metaText}>{plan.peopleLabel}</Text>
+                  <View style={styles.metaActionRow}>
+                    <View style={[styles.metaRow, styles.metaRowCompact]}>
+                      <MaterialIcons name="group" size={18} color="#64748B" />
+                      <Text style={styles.metaText}>{plan.peopleLabel}</Text>
+                    </View>
+
+                    <Link href={{ pathname: '/plans/detail', params: { id: String(plan.id) } }} asChild>
+                      <Pressable style={[styles.footerButton, styles.detailButton]}>
+                        <Text style={styles.detailButtonText}>詳細を表示</Text>
+                      </Pressable>
+                    </Link>
                   </View>
                 </View>
 
@@ -405,31 +413,23 @@ export default function PlansListScreen() {
                     ) : null}
                   </View>
 
-                  <View style={styles.footerActions}>
-                    <Link href={{ pathname: '/plans/detail', params: { id: String(plan.id) } }} asChild>
-                      <Pressable style={[styles.footerButton, styles.detailButton]}>
-                        <Text style={styles.detailButtonText}>詳細を表示</Text>
-                      </Pressable>
-                    </Link>
-
-                    {plan.status !== 'completed' ? (
-                      <Pressable
-                        style={[
-                          styles.footerButton,
-                          styles.startButton,
-                          plan.status === 'planned' && startingTripId !== plan.id
-                            ? styles.startButtonActive
-                            : styles.startButtonDisabled,
-                        ]}
-                        onPress={() => handleStartTrip(plan.id, plan.status)}
-                        disabled={plan.status !== 'planned' || startingTripId !== null}
-                      >
-                        <Text style={styles.startButtonText}>
-                          {startingTripId === plan.id ? '開始中...' : plan.status === 'ongoing' ? '旅行中' : '旅行開始'}
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
+                  {plan.status !== 'completed' ? (
+                    <Pressable
+                      style={[
+                        styles.footerButton,
+                        styles.startButton,
+                        plan.status === 'planned' && startingTripId !== plan.id
+                          ? styles.startButtonActive
+                          : styles.startButtonDisabled,
+                      ]}
+                      onPress={() => handleStartTrip(plan.id, plan.status)}
+                      disabled={plan.status !== 'planned' || startingTripId !== null}
+                    >
+                      <Text style={styles.startButtonText}>
+                        {startingTripId === plan.id ? '開始中...' : plan.status === 'ongoing' ? '旅行中' : '旅行開始'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </View>
             </View>
@@ -719,6 +719,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  metaActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  metaRowCompact: {
+    flex: 1,
+    minWidth: 0,
+  },
   metaText: {
     fontSize: 14,
     color: '#64748B',
@@ -727,20 +737,10 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 12,
   },
   footerMeta: {
-    flex: 1,
-    justifyContent: 'center',
     minWidth: 0,
-  },
-  footerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
   },
   categoryList: {
     flexDirection: 'row',
@@ -769,6 +769,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   detailButton: {
+    alignSelf: 'flex-start',
     borderWidth: 1,
     borderColor: '#FED7AA',
     backgroundColor: '#FFF7ED',
@@ -779,7 +780,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   startButton: {
-    minWidth: 92,
+    width: '100%',
   },
   startButtonActive: {
     backgroundColor: '#EC5B13',

@@ -56,6 +56,7 @@ export function toTripListItemViewModel(plan: TripResponse): TripListItemViewMod
   return {
     id: plan.id,
     title: `${plan.origin} → ${plan.destination}`,
+    coverImageUrl: plan.cover_image_url ?? null,
     status: plan.status,
     statusLabel,
     statusVariant: plan.status === 'planned' ? 'planned' : plan.status === 'ongoing' ? 'ongoing' : 'muted',

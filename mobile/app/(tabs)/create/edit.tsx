@@ -1,13 +1,17 @@
-import { useLocalSearchParams } from 'expo-router';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { BackButton } from '@/components/back-button';
 import { weatherMock } from '@/data/travel';
 import { getFriends } from '@/features/friends/api/get-friends';
 import { type FriendResponse } from '@/features/friends/types/friend-request';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 import { travelStyles } from '@/features/travel/styles';
+import {
+  ParticipantCountField,
+  ScheduleField,
+} from '@/features/trips/components/TripBasicInfoFields';
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
 import { addTripMember, removeTripMember } from '@/features/trips/api/trip-members';
 import { updateTrip } from '@/features/trips/api/update-trip';
@@ -50,8 +54,27 @@ function parseTripId(raw: string | string[] | undefined): number | null {
 }
 
 export default function TripEditScreen() {
+  const router = useRouter();
   const { tripId: rawTripId } = useLocalSearchParams<EditParams>();
   const tripId = useMemo(() => parseTripId(rawTripId), [rawTripId]);
+  const headerBackSlot = (
+    <Pressable
+      style={styles.headerBackButton}
+      onPress={() => {
+        if (!tripId) {
+          router.push('/plans');
+          return;
+        }
+        router.replace({
+          pathname: '/plans/detail',
+          params: { id: String(tripId) },
+        });
+      }}
+    >
+      <MaterialIcons name="arrow-back" size={16} color="#EC5B13" />
+      <Text style={styles.headerBackButtonText}>戻る</Text>
+    </Pressable>
+  );
 
   const [isLoading, setIsLoading] = useState(true);
   const [origin, setOrigin] = useState('');
@@ -264,10 +287,12 @@ export default function TripEditScreen() {
 
   return (
     <View style={travelStyles.screen}>
-      <AppHeader title="プラン編集" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
+      <AppHeader
+        title="プラン編集"
+        weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`}
+        leftSlot={headerBackSlot}
+      />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ ...travelStyles.container, paddingBottom: 24 }}>
-        <BackButton />
-
         {isLoading ? (
           <View style={travelStyles.detailSection}>
             <ActivityIndicator color="#F97316" />
@@ -279,9 +304,18 @@ export default function TripEditScreen() {
           <Text style={travelStyles.sectionTitleText}>基本情報</Text>
           <TextInput style={travelStyles.input} value={origin} onChangeText={setOrigin} placeholder="出発地" />
           <TextInput style={travelStyles.input} value={destination} onChangeText={setDestination} placeholder="目的地" />
-          <TextInput style={travelStyles.input} value={startDate} onChangeText={setStartDate} placeholder="開始日 (YYYY-MM-DD)" />
-          <TextInput style={travelStyles.input} value={endDate} onChangeText={setEndDate} placeholder="終了日 (YYYY-MM-DD)" />
-          <TextInput style={travelStyles.input} value={participantCount} onChangeText={setParticipantCount} placeholder="人数" keyboardType="number-pad" />
+          <ScheduleField
+            startDate={startDate}
+            endDate={endDate}
+            onChangeStartDate={setStartDate}
+            onChangeEndDate={setEndDate}
+            required
+          />
+          <ParticipantCountField
+            participantCount={participantCount}
+            onChangeParticipantCount={setParticipantCount}
+            required
+          />
           <Text style={travelStyles.sectionBody}>カテゴリ</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {RECOMMEND_CATEGORY_OPTIONS.map((option) => {
@@ -377,3 +411,23 @@ export default function TripEditScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  headerBackButton: {
+    minHeight: 32,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    backgroundColor: '#FFF7ED',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  headerBackButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#EC5B13',
+  },
+});

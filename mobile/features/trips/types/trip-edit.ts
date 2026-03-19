@@ -11,6 +11,7 @@ export type TripResponse = {
   participant_count: number;
   source_trip_id?: number | null;
   counts_as_saved_recommendation?: boolean;
+  cover_image_url?: string | null;
   recommendation_comment?: string | null;
   recommendation_categories?: string[] | null;
   status: TripStatus;
