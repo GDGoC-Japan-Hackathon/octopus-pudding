@@ -603,7 +603,20 @@ class TripService:
     def _parse_selected_transport_types(self, raw_value: Optional[str]) -> list[str]:
         if raw_value is None:
             return []
-        return [item.strip() for item in raw_value.split(",") if item.strip()]
+
+        # Normalize case and keep only supported transport types.
+        # If all tokens are invalid, return an empty list to indicate
+        # "no filtering" to _filter_route_options_by_preference.
+        allowed_types = {"train", "bus", "walk"}
+        normalized_tokens: list[str] = []
+        for item in raw_value.split(","):
+            token = item.strip().lower()
+            if not token:
+                continue
+            if token in allowed_types:
+                normalized_tokens.append(token)
+
+        return normalized_tokens if normalized_tokens else []
 
     def _filter_route_options_by_preference(
         self,
