@@ -7,7 +7,10 @@ function parseCategories(value?: string[] | null): string[] {
 
 export function parseTripDateValue(value: string): number | null {
   const normalized = value.replace(/\./g, '/').replace(/-/g, '/');
-  const parsed = new Date(normalized).getTime();
+  const match = normalized.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const parsed = new Date(Number(year), Number(month) - 1, Number(day)).getTime();
   return Number.isNaN(parsed) ? null : parsed;
 }
 
@@ -35,6 +38,8 @@ export function toTripListItemViewModel(plan: TripResponse): TripListItemViewMod
       .join(' ')
       .toLowerCase(),
     startDateValue: parseTripDateValue(plan.start_date),
+    endDateValue: parseTripDateValue(plan.end_date),
+    createdAtValue: plan.created_at ? new Date(plan.created_at).getTime() : null,
   };
 }
 
@@ -42,23 +47,26 @@ export function filterTripListItems(items: TripListItemViewModel[], filters: Tri
   const query = filters.keyword.trim().toLowerCase();
   const startFilterValue = filters.startDate ? parseTripDateValue(filters.startDate) : null;
   const endFilterValue = filters.endDate ? parseTripDateValue(filters.endDate) : null;
+  const selectedCategories = filters.categories ?? [];
 
   const filtered = items.filter((item) => {
     const matchesKeyword = query.length === 0 || item.searchableText.includes(query);
     const matchesStart =
       startFilterValue === null || (item.startDateValue !== null && item.startDateValue >= startFilterValue);
     const matchesEnd =
-      endFilterValue === null || (item.startDateValue !== null && item.startDateValue <= endFilterValue);
+      endFilterValue === null || (item.endDateValue !== null && item.endDateValue <= endFilterValue);
     const matchesPeople =
       !(filters as TripListFilters & { participantCount?: number | null }).participantCount ||
       item.participantCount === (filters as TripListFilters & { participantCount?: number | null }).participantCount;
+    const matchesCategories =
+      selectedCategories.length === 0 || selectedCategories.every((category) => item.categories.includes(category));
 
-    return matchesKeyword && matchesStart && matchesEnd && matchesPeople;
+    return matchesKeyword && matchesStart && matchesEnd && matchesPeople && matchesCategories;
   });
 
   return filtered.sort((a, b) => {
-    const aDate = a.startDateValue ?? 0;
-    const bDate = b.startDateValue ?? 0;
+    const aDate = a.createdAtValue ?? 0;
+    const bDate = b.createdAtValue ?? 0;
     return filters.sortOrder === 'newest' ? bDate - aDate : aDate - bDate;
   });
 }

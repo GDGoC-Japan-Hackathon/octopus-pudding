@@ -237,6 +237,8 @@ async def list_recommendations(
         RecommendationListResponse(
             id=trip.id,
             title=f"{trip.origin} → {trip.destination}",
+            start_date=trip.start_date.isoformat(),
+            end_date=trip.end_date.isoformat(),
             date_label=_build_trip_duration_label(trip.start_date, trip.end_date),
             participant_count=trip.participant_count,
             save_count=trip.save_count,
@@ -244,6 +246,7 @@ async def list_recommendations(
             saved_trip_id=saved_trip_map.get(trip.id),
             categories=trip.recommendation_categories or ["その他"],
             image=trip.cover_image_url or "",
+            created_at=trip.created_at,
         )
         for trip, user in rows
     ]

@@ -6,6 +6,7 @@ export type TripListFilters = {
   endDate: string;
   sortOrder: TripSortOrder;
   participantCount?: number | null;
+  categories?: string[];
 };
 
 export type TripListItemViewModel = {
@@ -19,4 +20,6 @@ export type TripListItemViewModel = {
   categories: string[];
   searchableText: string;
   startDateValue: number | null;
+  endDateValue: number | null;
+  createdAtValue: number | null;
 };

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel
@@ -6,6 +7,8 @@ from pydantic import BaseModel
 class RecommendationListResponse(BaseModel):
     id: int
     title: str
+    start_date: str
+    end_date: str
     date_label: str
     participant_count: int
     save_count: int
@@ -13,6 +16,7 @@ class RecommendationListResponse(BaseModel):
     saved_trip_id: Optional[int] = None
     categories: list[str]
     image: str
+    created_at: Optional[datetime] = None
 
 
 class RecommendationTimelineItemResponse(BaseModel):

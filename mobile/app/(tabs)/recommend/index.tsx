@@ -20,11 +20,7 @@ import { getRecommendPlans, type RecommendPlanListItem } from '@/features/recomm
 import { AppHeader } from '@/features/travel/components/AppHeader';
 
 type PickerType = 'category' | 'people' | 'duration' | null;
-type RecommendSortOrder = 'newest' | 'oldest';
-type RecommendPlanWithDates = RecommendPlanListItem & {
-  startDate: string;
-  endDate: string;
-};
+type RecommendSortOrder = 'newest' | 'oldest' | 'popular';
 
 const CATEGORY_OPTIONS = ['カフェ', '夜景', 'グルメ', '温泉'] as const;
 const WHEEL_ITEM_HEIGHT = 44;
@@ -58,6 +54,12 @@ function parseDateInput(value: string) {
 function parseDateValue(value: string): number | null {
   const parsed = parseDateInput(value);
   return parsed ? parsed.getTime() : null;
+}
+
+function parseTimestampValue(value?: string | null): number | null {
+  if (!value) return null;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
 function getTripDurationDays(startDate: string, endDate: string) {
@@ -185,10 +187,9 @@ export default function RecommendationListScreen() {
   }, [activePicker]);
 
   const filteredPlans = useMemo(() => {
-    const plansWithDates = recommendPlans as RecommendPlanWithDates[];
     const query = keyword.trim().toLowerCase();
 
-    const filtered = plansWithDates.filter((plan) => {
+    const filtered = recommendPlans.filter((plan) => {
       const searchableText = [plan.title, plan.peopleLabel, ...plan.categories].join(' ').toLowerCase();
       const matchesKeyword = query.length === 0 || searchableText.includes(query);
       const matchesPeople = !peopleFilter || plan.participantCount === peopleFilter;
@@ -201,13 +202,16 @@ export default function RecommendationListScreen() {
     });
 
     return filtered.sort((a, b) => {
-      const aDate = parseDateValue(a.startDate) ?? 0;
-      const bDate = parseDateValue(b.startDate) ?? 0;
+      if (sortOrder === 'popular') {
+        return b.saveCount - a.saveCount;
+      }
+      const aDate = parseTimestampValue(a.createdAt) ?? 0;
+      const bDate = parseTimestampValue(b.createdAt) ?? 0;
       return sortOrder === 'newest' ? bDate - aDate : aDate - bDate;
     });
   }, [categoryFilter, durationFilter, keyword, peopleFilter, recommendPlans, sortOrder]);
 
-  const sortLabel = sortOrder === 'newest' ? '新しい順' : '古い順';
+  const sortLabel = sortOrder === 'newest' ? '新しい順' : sortOrder === 'oldest' ? '古い順' : '人気順';
   const categoryLabel = categoryFilter.length ? `カテゴリ(${categoryFilter.length})` : 'カテゴリ';
   const peopleLabel = peopleFilter ? `${peopleFilter}名` : '人数';
   const durationLabel = durationFilter ? `${durationFilter}日` : '日数';
@@ -258,7 +262,12 @@ export default function RecommendationListScreen() {
 
         <View style={styles.resultRow}>
           <Text style={styles.resultText}>{filteredPlans.length}件のおすすめ旅が見つかりました</Text>
-          <Pressable style={styles.sortButton} onPress={() => setSortOrder((prev) => (prev === 'newest' ? 'oldest' : 'newest'))}>
+          <Pressable
+            style={styles.sortButton}
+            onPress={() =>
+              setSortOrder((prev) => (prev === 'newest' ? 'oldest' : prev === 'oldest' ? 'popular' : 'newest'))
+            }
+          >
             <MaterialIcons name="sort" size={18} color="#EC5B13" />
             <Text style={styles.sortButtonText}>{sortLabel}</Text>
           </Pressable>
