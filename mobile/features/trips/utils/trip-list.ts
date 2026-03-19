@@ -26,6 +26,11 @@ export function parseTripDateValue(value: string): number | null {
   return time;
 }
 
+function parseTripCreatedAtValue(value: string): number | null {
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
 export function formatTripStatusLabel(status: string) {
   if (status === 'planned') return '保存済み';
   if (status === 'ongoing') return '進行中';
@@ -51,7 +56,7 @@ export function toTripListItemViewModel(plan: TripResponse): TripListItemViewMod
       .toLowerCase(),
     startDateValue: parseTripDateValue(plan.start_date),
     endDateValue: parseTripDateValue(plan.end_date),
-    createdAtValue: plan.created_at ? new Date(plan.created_at).getTime() : null,
+    createdAtValue: plan.created_at ? parseTripCreatedAtValue(plan.created_at) : null,
   };
 }
 
