@@ -534,7 +534,9 @@ class TripService:
             for d in days
         ]
         candidates_payload = [candidate.to_dict() for candidate in place_candidates]
-        route_options_payload = [route_option.to_dict() for route_option in route_options]
+        route_options_payload = [
+            self._normalize_route_option_dict(route_option.to_dict()) for route_option in route_options
+        ]
         preference_payload = (
             {
                 "atmosphere": preference.atmosphere.value,
@@ -571,6 +573,31 @@ class TripService:
             "- transport_mode は WALK / TRAIN / BUS のみ使う\n"
             "- route_options に候補が無い場合のみ WALK を使う\n"
         )
+
+    def _normalize_route_option_dict(self, option: dict) -> dict:
+        """
+        Normalize a RouteOption dictionary so that it always exposes a `transport_mode`
+        field with one of WALK/TRAIN/BUS, matching the prompt specification.
+        """
+        normalized = dict(option) if option is not None else {}
+        travel_mode = normalized.get("travel_mode")
+        transit_subtype = normalized.get("transit_subtype")
+
+        if travel_mode == "WALK":
+            transport_mode = "WALK"
+        elif travel_mode == "TRANSIT":
+            subtype = (transit_subtype or "").upper()
+            if subtype == "BUS":
+                transport_mode = "BUS"
+            else:
+                # Treat all non-bus transit (e.g. trains, subways) as TRAIN.
+                transport_mode = "TRAIN"
+        else:
+            # Fallback when no explicit mode is provided.
+            transport_mode = "WALK"
+
+        normalized["transport_mode"] = transport_mode
+        return normalized
 
     async def _collect_route_options(
         self,
