@@ -11,10 +11,10 @@ type PlanDetailTemplateProps = {
   headerLeftSlot?: ReactNode;
   headerRightSlot?: ReactNode;
   heroImage: string;
-  heroBadge: string;
   title: string;
-  subtitle: string;
-  intro?: string;
+  comment?: string;
+  createdAtLabel?: string | null;
+  travelDateLabel?: string | null;
   budgetLabel: string;
   moveTimeLabel: string;
   days: PlanDetailDay[];
@@ -38,10 +38,10 @@ export function PlanDetailTemplate({
   headerLeftSlot,
   headerRightSlot,
   heroImage,
-  heroBadge,
   title,
-  subtitle,
-  intro,
+  comment,
+  createdAtLabel,
+  travelDateLabel,
   budgetLabel,
   moveTimeLabel,
   days,
@@ -65,17 +65,21 @@ export function PlanDetailTemplate({
       <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
         <View style={styles.heroWrap}>
           <Image source={{ uri: heroImage }} style={styles.heroImage} />
-          <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeText}>{heroBadge}</Text>
-          </View>
         </View>
 
         <View style={styles.titleBlock}>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
+          {comment ? (
+            <View style={styles.commentRow}>
+              <MaterialIcons name="lightbulb" size={16} color="#EC5B13" />
+              <Text style={styles.comment}>{comment}</Text>
+            </View>
+          ) : null}
+          <View style={styles.metaColumn}>
+            {createdAtLabel ? <Text style={styles.metaText}>{createdAtLabel}</Text> : null}
+            {travelDateLabel ? <Text style={styles.metaText}>{travelDateLabel}</Text> : null}
+          </View>
         </View>
-
-        {intro ? <Text style={styles.intro}>{intro}</Text> : null}
 
         <View style={styles.statRow}>
           <View style={[styles.statCard, styles.statCardOrange]}>
@@ -226,22 +230,6 @@ const styles = StyleSheet.create({
     aspectRatio: 16 / 10,
     backgroundColor: '#E2E8F0',
   },
-  heroBadge: {
-    position: 'absolute',
-    right: 14,
-    bottom: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderWidth: 1,
-    borderColor: 'rgba(236,91,19,0.15)',
-  },
-  heroBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#EC5B13',
-  },
   titleBlock: {
     paddingHorizontal: 20,
     paddingTop: 20,
@@ -253,17 +241,27 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     marginBottom: 4,
   },
-  subtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#64748B',
+  commentRow: {
+    paddingTop: 8,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
   },
-  intro: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
+  comment: {
+    flex: 1,
     fontSize: 14,
     lineHeight: 22,
     color: '#475569',
+  },
+  metaColumn: {
+    paddingTop: 10,
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#64748B',
+    fontWeight: '600',
   },
   statRow: {
     flexDirection: 'row',
@@ -322,6 +320,7 @@ const styles = StyleSheet.create({
   },
   dayTabs: {
     gap: 6,
+    paddingLeft: 12,
   },
   dayTab: {
     paddingHorizontal: 16,

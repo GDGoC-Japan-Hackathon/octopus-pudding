@@ -29,9 +29,11 @@ export type RecommendPlanDetail = {
   title: string;
   image: string;
   username: string;
-  date: string;
+  createdAt?: string | null;
+  startDate: string;
+  endDate: string;
   area: string;
-  intro: string;
+  comment: string;
   budget: string;
   moveTime: string;
   isSavedByMe: boolean;

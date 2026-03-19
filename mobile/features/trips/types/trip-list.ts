@@ -18,6 +18,7 @@ export type TripListItemViewModel = {
   statusLabel: string;
   statusVariant: 'planned' | 'ongoing' | 'muted';
   dateLabel: string;
+  createdLabel: string | null;
   participantCount: number;
   peopleLabel: string;
   categories: string[];

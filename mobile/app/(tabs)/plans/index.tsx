@@ -380,6 +380,12 @@ export default function PlansListScreen() {
                     <MaterialIcons name="calendar-today" size={18} color="#64748B" />
                     <Text style={styles.metaText}>{plan.dateLabel}</Text>
                   </View>
+                  {plan.createdLabel ? (
+                    <View style={styles.metaRow}>
+                      <MaterialIcons name="schedule" size={18} color="#64748B" />
+                      <Text style={styles.metaText}>{plan.createdLabel}</Text>
+                    </View>
+                  ) : null}
                   <View style={styles.metaRow}>
                     <MaterialIcons name="group" size={18} color="#64748B" />
                     <Text style={styles.metaText}>{plan.peopleLabel}</Text>

@@ -78,6 +78,25 @@ export function toTimeLabel(value?: string | null) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
+function formatDateLabel(prefix: string, value?: string | null) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${prefix} ${year}/${month}/${day}`;
+}
+
+export function formatTravelDateLabel(start?: string | null, end?: string | null) {
+  const startLabel = formatDateLabel('', start)?.trim();
+  const endLabel = formatDateLabel('', end)?.trim();
+  if (!startLabel || !endLabel) {
+    return null;
+  }
+  return `旅行日 ${startLabel} - ${endLabel}`;
+}
+
 export function budgetLabel(aggregate: TripDetailAggregateResponse) {
   const budget = aggregate.preference?.budget;
   if (!budget) {
@@ -223,10 +242,15 @@ export function toPlanDetailViewModel(
 
   return {
     title: `${aggregate.trip.origin} → ${aggregate.trip.destination}`,
-    subtitle: `${aggregate.trip.start_date} - ${aggregate.trip.end_date} ・ ${statusLabel(aggregate.trip.status)}`,
-    intro: `総人数 ${aggregate.trip.participant_count}名`,
+    comment:
+      aggregate.trip.recommendation_comment ??
+      (aggregate.preference
+        ? `${aggregate.preference.atmosphere}な雰囲気で回るマイプランです。`
+        : `${aggregate.trip.destination}を中心に回るマイプランです。`),
+    createdAtLabel: formatDateLabel('作成日', aggregate.trip.created_at),
+    travelDateLabel: formatTravelDateLabel(aggregate.trip.start_date, aggregate.trip.end_date),
     budgetLabel: budgetLabel(aggregate),
-    moveTimeLabel: activeDay ? moveTimeLabel(activeDay.items) : '未設定',
+    moveTimeLabel: moveTimeLabel(aggregate.itinerary_items),
     days,
     activeDayKey: activeDay ? String(activeDay.tripDayId) : 'day1',
     timeline: activeDay ? toTimelineItems(activeDay.items) : [],

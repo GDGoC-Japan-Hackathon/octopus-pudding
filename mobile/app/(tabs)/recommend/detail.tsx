@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'rea
 
 import { weatherMock } from '@/data/travel';
 import { PlanDetailTemplate } from '@/features/plan-detail/components/PlanDetailTemplate';
+import { formatTravelDateLabel } from '@/features/plan-detail/utils/plan-detail';
 import { cloneRecommendTrip } from '@/features/recommend/api/clone-recommend-trip';
 import { getRecommendPlanDetail } from '@/features/recommend/api/get-recommend-plan-detail';
 import { AppHeader } from '@/features/travel/components/AppHeader';
@@ -61,6 +62,17 @@ export default function RecommendationDetailScreen() {
 
     return plan.days.find((day) => day.key === activeDayKey) ?? plan.days[0];
   }, [activeDayKey, plan]);
+
+  const createdAtLabel = useMemo(() => {
+    if (!plan?.createdAt) {
+      return null;
+    }
+    const parsed = new Date(plan.createdAt);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+    return `作成日 ${parsed.getFullYear()}/${String(parsed.getMonth() + 1).padStart(2, '0')}/${String(parsed.getDate()).padStart(2, '0')}`;
+  }, [plan?.createdAt]);
 
   const handlePrimaryAction = async () => {
     if (isSavedToPlans && savedTripId) {
@@ -152,10 +164,10 @@ export default function RecommendationDetailScreen() {
       headerTitle="おすすめ詳細"
       weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`}
       heroImage={plan.image}
-      heroBadge={plan.area}
       title={plan.title}
-      subtitle={`by ${plan.username} ・ ${plan.date}`}
-      intro={plan.intro}
+      comment={plan.comment}
+      createdAtLabel={createdAtLabel}
+      travelDateLabel={formatTravelDateLabel(plan.startDate, plan.endDate)}
       budgetLabel={plan.budget}
       moveTimeLabel={plan.moveTime}
       days={plan.days.map((day) => ({ key: day.key, label: day.label }))}
@@ -169,8 +181,8 @@ export default function RecommendationDetailScreen() {
             style={[styles.actionButton, isSavedToPlans ? styles.actionButtonSaved : styles.actionButtonOrange]}
             onPress={() => void handlePrimaryAction()}
           >
-            <MaterialIcons name={isSavedToPlans ? 'bookmark' : 'bookmark-add'} size={22} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>{isSavedToPlans ? '保存済' : 'マイプランに保存'}</Text>
+            <MaterialIcons name="bookmark" size={22} color="#FFFFFF" />
+            <Text style={styles.actionButtonText}>{isSavedToPlans ? '保存済み' : 'マイプランに\n保存'}</Text>
           </Pressable>
 
           <Pressable style={[styles.actionButton, styles.actionButtonOrange]} onPress={() => void handleCustomize()}>
@@ -210,5 +222,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '700',
     textAlign: 'center',
+    minHeight: 36,
   },
 });

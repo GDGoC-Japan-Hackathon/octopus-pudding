@@ -18,8 +18,9 @@ export type PlanDetailTimelineItem = {
 
 export type PlanDetailViewModel = {
   title: string;
-  subtitle: string;
-  intro?: string;
+  comment?: string;
+  createdAtLabel?: string | null;
+  travelDateLabel?: string | null;
   budgetLabel: string;
   moveTimeLabel: string;
   days: PlanDetailDay[];

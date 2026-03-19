@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -29,6 +29,7 @@ function parseCategories(value: string) {
 
 export default function CreateCompanionsScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const params = useLocalSearchParams();
   const [friends, setFriends] = useState<FriendResponse[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
@@ -73,6 +74,18 @@ export default function CreateCompanionsScreen() {
     void run();
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
+      if (!isSubmitting) {
+        return;
+      }
+      event.preventDefault();
+      Alert.alert('プラン作成中', 'AIでプランを作成中です。完了するまでこの画面から移動できません。');
+    });
+
+    return unsubscribe;
+  }, [isSubmitting, navigation]);
+
   const toggleFriend = (userId: number) => {
     setSelectedUserIds((prev) => {
       const next = new Set(prev);
@@ -115,8 +128,6 @@ export default function CreateCompanionsScreen() {
           'プラン作成完了',
           'プランは作成されましたが、一部の同行者を追加できませんでした。プラン詳細画面から再度追加をお試しください。',
         );
-      } else {
-        Alert.alert('保存完了', '新規プランを作成しました。');
       }
 
       router.replace({
@@ -136,7 +147,7 @@ export default function CreateCompanionsScreen() {
       <AppHeader
         title="同行者の選択"
         weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`}
-        leftSlot={<BackButton />}
+        leftSlot={isSubmitting ? undefined : <BackButton />}
       />
 
       <View style={travelStyles.container}>
@@ -183,6 +194,10 @@ export default function CreateCompanionsScreen() {
             <Text style={travelStyles.primaryButtonText}>プランを作成する</Text>
           )}
         </Pressable>
+
+        {isSubmitting ? (
+          <Text style={styles.submittingHint}>AIでプランを作成中です。完了するまで移動できません。</Text>
+        ) : null}
       </View>
     </ScrollView>
   );
@@ -254,5 +269,12 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6,
+  },
+  submittingHint: {
+    marginTop: 12,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+    textAlign: 'center',
   },
 });

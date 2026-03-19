@@ -32,6 +32,16 @@ function parseTripCreatedAtValue(value: string): number | null {
   return Number.isNaN(time) ? null : time;
 }
 
+function formatCreatedLabel(value?: string | null): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `作成日 ${year}/${month}/${day}`;
+}
+
 export function formatTripStatusLabel(status: TripStatus | string) {
   if (status === 'planned') return '保存済み';
   if (status === 'ongoing') return '進行中';
@@ -49,7 +59,8 @@ export function toTripListItemViewModel(plan: TripResponse): TripListItemViewMod
     status: plan.status,
     statusLabel,
     statusVariant: plan.status === 'planned' ? 'planned' : plan.status === 'ongoing' ? 'ongoing' : 'muted',
-    dateLabel: `${plan.start_date} - ${plan.end_date}`,
+    dateLabel: `旅行日 ${plan.start_date} - ${plan.end_date}`,
+    createdLabel: formatCreatedLabel(plan.created_at),
     participantCount: plan.participant_count,
     peopleLabel: `${plan.participant_count}名`,
     categories,

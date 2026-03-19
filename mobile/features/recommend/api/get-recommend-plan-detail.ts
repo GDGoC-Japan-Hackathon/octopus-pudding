@@ -7,9 +7,14 @@ type RecommendPlanDetailResponse = {
   title: string;
   image: string;
   username: string;
-  date: string;
+  created_at?: string | null;
+  createdAt?: string | null;
+  start_date: string;
+  startDate?: string;
+  end_date: string;
+  endDate?: string;
   area: string;
-  intro: string;
+  comment: string;
   budget: string;
   move_time?: string;
   moveTime?: string;
@@ -27,9 +32,11 @@ export async function getRecommendPlanDetail(id: string): Promise<RecommendPlanD
     title: plan.title,
     image: plan.image,
     username: plan.username,
-    date: plan.date,
+    createdAt: plan.createdAt ?? plan.created_at ?? null,
+    startDate: plan.startDate ?? plan.start_date,
+    endDate: plan.endDate ?? plan.end_date,
     area: plan.area,
-    intro: plan.intro,
+    comment: plan.comment,
     budget: plan.budget,
     moveTime: plan.moveTime ?? plan.move_time ?? '',
     isSavedByMe: plan.isSavedByMe ?? plan.is_saved_by_me ?? false,
