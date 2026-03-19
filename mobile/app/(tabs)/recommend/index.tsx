@@ -231,8 +231,9 @@ export default function RecommendationListScreen() {
       const matchesCategories =
         categoryFilter.length === 0 || categoryFilter.every((category) => plan.categories.includes(category));
       const startDateValue = parseDateValue(plan.startDate);
+      const endDateValue = parseDateValue(plan.endDate);
       const matchesStart = startFilterValue === null || (startDateValue !== null && startDateValue >= startFilterValue);
-      const matchesEnd = endFilterValue === null || (startDateValue !== null && startDateValue <= endFilterValue);
+      const matchesEnd = endFilterValue === null || (endDateValue !== null && endDateValue <= endFilterValue);
 
       return matchesKeyword && matchesPeople && matchesCategories && matchesStart && matchesEnd;
     });
