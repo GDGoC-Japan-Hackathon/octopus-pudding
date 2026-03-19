@@ -5,13 +5,13 @@ export type RecommendCategory = 'すべて' | 'カフェ' | '夜景' | 'グル�
 export type RecommendPlanListItem = {
   id: string;
   title: string;
-  startDate: string;
-  endDate: string;
+  startDate?: string;
+  endDate?: string;
   dateLabel: string;
-  participantCount: number;
-  peopleLabel: string;
+  participantCount?: number;
+  peopleLabel?: string;
   saveCount: number;
-  isSavedByMe: boolean;
+  isSavedByMe?: boolean;
   savedTripId?: string | null;
   categories: string[];
   image: string;
