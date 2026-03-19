@@ -103,6 +103,7 @@ export default function PlanCreateScreen() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResolvingCurrentLocation, setIsResolvingCurrentLocation] = useState(false);
+  const isResolvingCurrentLocationRef = useRef(false);
   const [activeDateField, setActiveDateField] = useState<DateFieldKey>('startDate');
   const [isIosDateModalVisible, setIsIosDateModalVisible] = useState(false);
   const [budgetSliderWidth, setBudgetSliderWidth] = useState(1);
@@ -323,7 +324,12 @@ export default function PlanCreateScreen() {
   }, []);
 
   const handleUseCurrentLocation = useCallback(async () => {
+    if (isResolvingCurrentLocationRef.current) {
+      return;
+    }
+
     try {
+      isResolvingCurrentLocationRef.current = true;
       setIsResolvingCurrentLocation(true);
       const origin = await resolveCurrentLocationLabel();
       updateField('origin', origin);
@@ -332,6 +338,7 @@ export default function PlanCreateScreen() {
       Alert.alert('現在地を取得できませんでした', message);
     } finally {
       setIsResolvingCurrentLocation(false);
+      isResolvingCurrentLocationRef.current = false;
     }
   }, [resolveCurrentLocationLabel, updateField]);
 
