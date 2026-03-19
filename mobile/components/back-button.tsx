@@ -4,13 +4,14 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 
 type BackButtonProps = {
   label?: string;
+  onPress?: () => void;
 };
 
-export function BackButton({ label = '戻る' }: BackButtonProps) {
+export function BackButton({ label = '戻る', onPress }: BackButtonProps) {
   const router = useRouter();
 
   return (
-    <Pressable style={styles.button} onPress={() => router.back()}>
+    <Pressable style={styles.button} onPress={onPress ?? (() => router.back())}>
       <MaterialIcons name="arrow-back-ios-new" size={16} color="#334155" />
       <Text style={styles.label}>{label}</Text>
     </Pressable>

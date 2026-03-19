@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
@@ -50,6 +50,7 @@ function parseTripId(raw: string | string[] | undefined): number | null {
 }
 
 export default function TripEditScreen() {
+  const router = useRouter();
   const { tripId: rawTripId } = useLocalSearchParams<EditParams>();
   const tripId = useMemo(() => parseTripId(rawTripId), [rawTripId]);
 
@@ -266,7 +267,14 @@ export default function TripEditScreen() {
     <View style={travelStyles.screen}>
       <AppHeader title="プラン編集" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ ...travelStyles.container, paddingBottom: 24 }}>
-        <BackButton />
+        <BackButton
+          onPress={() => {
+            router.replace({
+              pathname: '/plans/detail',
+              params: { id: String(tripId) },
+            });
+          }}
+        />
 
         {isLoading ? (
           <View style={travelStyles.detailSection}>

@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { Redirect, Tabs } from 'expo-router';
+import { Redirect, Tabs, useRouter } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,6 +9,7 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 export default function TabLayout() {
   const { isAuthenticated, isLoading } = useAuth();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   if (isLoading) {
     return (
@@ -58,8 +59,15 @@ export default function TabLayout() {
         />
         <Tabs.Screen
           name="create"
+          listeners={{
+            tabPress: (event) => {
+              event.preventDefault();
+              router.replace('/create');
+            },
+          }}
           options={{
             title: '作成',
+            popToTopOnBlur: true,
             tabBarLabel: () => null,
             tabBarIcon: () => (
               <View style={styles.createButtonWrap}>
