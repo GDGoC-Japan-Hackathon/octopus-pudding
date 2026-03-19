@@ -159,7 +159,12 @@ class TripRepositoryImpl(TripRepository):
         return self._to_trip_entity(db_trip)
 
     async def activate_trip_for_user(self, trip: Trip) -> Optional[Trip]:
-        result = await self.db.execute(select(TripModel).where(TripModel.id == trip.id))
+        result = await self.db.execute(
+            select(TripModel).where(
+                TripModel.id == trip.id,
+                TripModel.user_id == trip.user_id,
+            )
+        )
         db_trip = result.scalar_one_or_none()
         if db_trip is None:
             return None
