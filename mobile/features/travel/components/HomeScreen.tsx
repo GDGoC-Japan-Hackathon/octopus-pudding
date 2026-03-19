@@ -9,13 +9,99 @@ import { formatTripStatusLabel } from '@/features/trips/utils/trip-list';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 import { PhotoCard } from '@/features/travel/components/PhotoCard';
 import { travelStyles } from '@/features/travel/styles';
-import { buildHomeOngoingTripView, selectFeaturedOngoingTrip } from '@/features/travel/utils/home-trip';
+import { buildHomeOngoingTripView, selectFeaturedOngoingTrip, type HomeTimelineItem } from '@/features/travel/utils/home-trip';
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
 import { getTrips } from '@/features/trips/api/get-trips';
 import { type TripDetailAggregateResponse } from '@/features/trips/types/trip-detail';
 import { type TripResponse } from '@/features/trips/types/trip-edit';
 
 type DetailState = 'idle' | 'ready' | 'empty' | 'unavailable';
+
+function TimelineItemBlock({
+  label,
+  item,
+}: {
+  label: '現在' | 'まもなく' | 'このあと' | '終了';
+  item: HomeTimelineItem;
+}) {
+  const isUpcoming = label === 'まもなく' || label === 'このあと';
+  const iconName =
+    item.itemType === 'transport'
+      ? item.transportMode === 'WALK'
+        ? 'directions-walk'
+        : item.transportMode === 'BUS'
+          ? 'directions-bus'
+          : 'train'
+      : 'place';
+  const iconColor = item.itemType === 'transport'
+    ? isUpcoming
+      ? '#0369A1'
+      : '#EA580C'
+    : '#0284C7';
+
+  return (
+    <View style={[styles.timelineBlock, isUpcoming ? styles.timelineBlockUpcoming : null]}>
+      <View style={styles.timelineBlockHeader}>
+        <View
+          style={[
+            styles.timelineStateBadge,
+            isUpcoming ? styles.timelineStateBadgeNext : null,
+            label === '終了' ? styles.timelineStateBadgeFinished : null,
+          ]}
+        >
+          <Text
+            style={[
+              styles.timelineStateBadgeText,
+              isUpcoming ? styles.timelineStateBadgeTextUpcoming : null,
+              label === '終了' ? styles.timelineStateBadgeTextFinished : null,
+            ]}
+          >
+            {label}
+          </Text>
+        </View>
+      </View>
+
+      <View style={travelStyles.timelineRow}>
+        <Text
+          style={[
+            travelStyles.timelineTime,
+            isUpcoming ? styles.nextTimelineTime : null,
+            label === '終了' ? styles.finishedTimelineTime : null,
+          ]}
+        >
+          {item.time}
+        </Text>
+
+        <View style={travelStyles.timelineTextBlock}>
+          <View style={styles.timelineTitleRow}>
+            <View
+              style={[
+                styles.timelineIconWrap,
+                item.itemType === 'transport' ? styles.timelineIconWrapTransport : null,
+                isUpcoming && item.itemType === 'transport' ? styles.timelineIconWrapTransportUpcoming : null,
+              ]}
+            >
+              <MaterialIcons
+                name={iconName}
+                size={16}
+                color={iconColor}
+              />
+            </View>
+            <Text style={travelStyles.timelineText}>{item.title}</Text>
+          </View>
+
+          <Text style={[travelStyles.subheading, styles.timelineMemo]}>{item.detail}</Text>
+
+          {item.metaLabel ? (
+            <View style={styles.timelineMetaChip}>
+              <Text style={styles.timelineMetaChipText}>{item.metaLabel}</Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
 
 function OngoingTripSection({
   trip,
@@ -55,33 +141,28 @@ function OngoingTripSection({
       </View>
 
       <View style={travelStyles.timelineCard}>
-        <Text style={travelStyles.subheading}>
-          {timelineView?.dayLabel ? `現在の行程 (${timelineView.dayLabel})` : '現在の行程'}
+        <Text
+          style={[
+            travelStyles.subheading,
+            timelineView?.sectionTitle === '次の予定' ? styles.timelineSectionTitleUpcoming : null,
+          ]}
+        >
+          {timelineView?.dayLabel ? `${timelineView.sectionTitle} (${timelineView.dayLabel})` : timelineView?.sectionTitle ?? '本日の行程'}
         </Text>
 
-        {detailState === 'ready' && timelineView?.hasTimeline && timelineView.currentItem ? (
+        {detailState === 'ready' && timelineView?.hasTimeline && timelineView.primaryItem ? (
           <>
-            <View style={travelStyles.timelineRow}>
-              <Text style={travelStyles.timelineTime}>{timelineView.currentItem.time}</Text>
-              <Text style={travelStyles.timelineText}>{timelineView.currentItem.place}</Text>
-            </View>
-            <Text style={travelStyles.subheading}>{timelineView.currentItem.memo}</Text>
+            <TimelineItemBlock label={timelineView.primaryLabel} item={timelineView.primaryItem} />
 
-            {timelineView.nextItem ? (
+            {timelineView.secondaryItem || timelineView.helperText ? <View style={travelStyles.divider} /> : null}
+
+            {timelineView.secondaryItem ? (
               <>
-                <View style={travelStyles.divider} />
-                <View style={travelStyles.timelineRow}>
-                  <Text style={[travelStyles.timelineTime, styles.nextTimelineTime]}>{timelineView.nextItem.time}</Text>
-                  <Text style={travelStyles.timelineText}>{timelineView.nextItem.place}</Text>
-                </View>
-                <Text style={travelStyles.subheading}>{timelineView.nextItem.memo}</Text>
+                <TimelineItemBlock label={timelineView.secondaryLabel ?? 'このあと'} item={timelineView.secondaryItem} />
               </>
-            ) : (
-              <>
-                <View style={travelStyles.divider} />
-                <Text style={travelStyles.subheading}>次の予定はまだありません。</Text>
-              </>
-            )}
+            ) : null}
+
+            {timelineView.helperText ? <Text style={[travelStyles.subheading, styles.timelineHelperText]}>{timelineView.helperText}</Text> : null}
           </>
         ) : detailState === 'ready' ? (
           <Text style={travelStyles.subheading}>この日の行程はまだありません。</Text>
@@ -232,12 +313,15 @@ const styles = StyleSheet.create({
   },
   summaryTextBlock: {
     flex: 1,
+    minWidth: 0,
     gap: 4,
   },
   summaryTitle: {
     fontSize: 18,
+    lineHeight: 24,
     fontWeight: '700',
     color: '#0F172A',
+    flexShrink: 1,
   },
   summaryMeta: {
     fontSize: 13,
@@ -250,6 +334,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ECFDF5',
     borderWidth: 1,
     borderColor: '#A7F3D0',
+    flexShrink: 0,
+    alignSelf: 'flex-start',
   },
   statusBadgeText: {
     fontSize: 12,
@@ -272,7 +358,97 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#EC5B13',
   },
+  timelineBlock: {
+    gap: 8,
+    borderRadius: 14,
+    padding: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  timelineBlockUpcoming: {
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  timelineBlockHeader: {
+    flexDirection: 'row',
+  },
+  timelineStateBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#DBEAFE',
+    borderWidth: 1,
+    borderColor: '#93C5FD',
+    alignSelf: 'flex-start',
+  },
+  timelineStateBadgeNext: {
+    backgroundColor: '#0284C7',
+    borderColor: '#0284C7',
+  },
+  timelineStateBadgeFinished: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#CBD5E1',
+  },
+  timelineStateBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
+  timelineStateBadgeTextUpcoming: {
+    color: '#FFFFFF',
+  },
+  timelineStateBadgeTextFinished: {
+    color: '#475569',
+  },
+  timelineTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  timelineIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E0F2FE',
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  timelineIconWrapTransport: {
+    backgroundColor: '#FFEDD5',
+  },
+  timelineIconWrapTransportUpcoming: {
+    backgroundColor: '#E0F2FE',
+  },
+  timelineMemo: {
+    lineHeight: 20,
+  },
+  timelineMetaChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  timelineMetaChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#075985',
+  },
+  timelineHelperText: {
+    lineHeight: 20,
+  },
+  timelineSectionTitleUpcoming: {
+    color: '#0369A1',
+    fontWeight: '700',
+  },
   nextTimelineTime: {
-    backgroundColor: '#F97316',
+    backgroundColor: '#0EA5E9',
+  },
+  finishedTimelineTime: {
+    backgroundColor: '#94A3B8',
   },
 });

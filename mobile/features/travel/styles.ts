@@ -47,11 +47,13 @@ export const travelStyles = StyleSheet.create({
   },
   timelineRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 8,
   },
   timelineTime: {
     width: 56,
+    flexShrink: 0,
+    alignSelf: 'flex-start',
     textAlign: 'center',
     color: '#FFFFFF',
     backgroundColor: '#0EA5E9',
@@ -64,6 +66,13 @@ export const travelStyles = StyleSheet.create({
     color: '#0F172A',
     fontSize: 14,
     fontWeight: '600',
+    lineHeight: 20,
+    flexShrink: 1,
+  },
+  timelineTextBlock: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
   },
   divider: {
     height: 1,
