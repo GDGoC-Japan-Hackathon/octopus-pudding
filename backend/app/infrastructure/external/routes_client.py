@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Optional
 from urllib import error, request
+import logging
 
 from app.infrastructure.external.google_places_client import PlaceCandidate
 from app.shared.config import settings
@@ -125,9 +126,26 @@ class RoutesClient:
         try:
             with request.urlopen(req, timeout=20) as resp:
                 raw = resp.read().decode("utf-8")
-        except error.HTTPError:
+        except error.HTTPError as e:
+            error_body: Optional[str]
+            try:
+                error_body = e.read().decode("utf-8")
+            except Exception:
+                error_body = None
+            logger = logging.getLogger(__name__)
+            logger.error(
+                "RoutesClient HTTPError when calling routes API: status=%s, reason=%s, body=%s",
+                getattr(e, "code", None),
+                getattr(e, "reason", None),
+                error_body,
+            )
             return None
-        except error.URLError:
+        except error.URLError as e:
+            logger = logging.getLogger(__name__)
+            logger.error(
+                "RoutesClient URLError when calling routes API: reason=%s",
+                getattr(e, "reason", None),
+            )
             return None
 
         response = json.loads(raw)
