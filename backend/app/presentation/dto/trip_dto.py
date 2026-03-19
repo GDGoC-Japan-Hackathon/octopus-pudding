@@ -90,7 +90,7 @@ class ItineraryItemCreate(BaseModel):
     estimated_cost: Optional[int] = None
     notes: Optional[str] = None
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_transport_fields(cls, values: dict) -> dict:
         item_type = values.get("item_type")
         if item_type == "transport":
@@ -132,7 +132,7 @@ class ItineraryItemUpdate(BaseModel):
     estimated_cost: Optional[int] = None
     notes: Optional[str] = None
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_transport_fields_on_update(cls, values: dict) -> dict:
         item_type = values.get("item_type")
         # Only enforce when the update explicitly sets item_type to "transport"
