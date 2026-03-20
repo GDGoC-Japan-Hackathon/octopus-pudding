@@ -4,10 +4,16 @@ import { Link } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { recommendedPlans, weatherMock } from '@/data/travel';
+import { weatherMock } from '@/data/travel';
+import { getRecommendPlans } from '@/features/recommend/api/get-recommend-plans';
+import { RecommendPlanCard } from '@/features/recommend/components/RecommendPlanCard';
+import { type RecommendPlanListItemViewModel } from '@/features/recommend/types';
+import {
+  pickHomeRecommendPlans,
+  toRecommendPlanListItemViewModels,
+} from '@/features/recommend/utils/recommend-list';
 import { formatTripStatusLabel } from '@/features/trips/utils/trip-list';
 import { AppHeader } from '@/features/travel/components/AppHeader';
-import { PhotoCard } from '@/features/travel/components/PhotoCard';
 import { travelStyles } from '@/features/travel/styles';
 import { buildHomeOngoingTripView, selectFeaturedOngoingTrip, type HomeTimelineItem } from '@/features/travel/utils/home-trip';
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
@@ -16,6 +22,7 @@ import { type TripDetailAggregateResponse } from '@/features/trips/types/trip-de
 import { type TripResponse } from '@/features/trips/types/trip-edit';
 
 type DetailState = 'idle' | 'ready' | 'empty' | 'unavailable';
+type RecommendationState = 'loading' | 'ready' | 'empty' | 'error';
 
 function TimelineItemBlock({
   label,
@@ -188,27 +195,59 @@ function RecommendationsSection({ traveling }: { traveling: boolean }) {
           {traveling ? '旅行中でも使えるおすすめです' : `現在地（${weatherMock.location}）で使えるおすすめです`}
         </Text>
       </View>
+    </>
+  );
+}
 
-      <View style={travelStyles.horizontalSection}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 4 }}>
-          {recommendedPlans.slice(0, 3).map((item) => (
-            <Link key={item.id} href={{ pathname: '/recommend/detail', params: { id: item.id } }} asChild>
-              <Pressable>
-                <PhotoCard
-                  item={{
-                    id: item.id,
-                    title: item.title,
-                    location: item.location,
-                    image: item.image,
-                    author: item.author,
-                    likes: item.likes,
-                  }}
-                />
-              </Pressable>
-            </Link>
-          ))}
-        </ScrollView>
-      </View>
+function HomeRecommendationsSection({
+  traveling,
+  recommendations,
+  recommendationState,
+}: {
+  traveling: boolean;
+  recommendations: RecommendPlanListItemViewModel[];
+  recommendationState: RecommendationState;
+}) {
+  return (
+    <>
+      <RecommendationsSection traveling={traveling} />
+
+      {recommendationState === 'loading' ? (
+        <View style={styles.recommendStatusCard}>
+          <ActivityIndicator color="#EC5B13" />
+          <Text style={travelStyles.subheading}>おすすめを読み込み中...</Text>
+        </View>
+      ) : null}
+
+      {recommendationState === 'error' ? (
+        <View style={styles.recommendStatusCard}>
+          <Text style={travelStyles.subheading}>おすすめの取得に失敗しました。時間をおいて再度お試しください。</Text>
+        </View>
+      ) : null}
+
+      {recommendationState === 'empty' ? (
+        <View style={styles.recommendStatusCard}>
+          <Text style={travelStyles.subheading}>表示できるおすすめ旅がまだありません。</Text>
+        </View>
+      ) : null}
+
+      {recommendationState === 'ready' ? (
+        <View style={travelStyles.horizontalSection}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.recommendationsScrollContent}
+          >
+            {recommendations.map((plan) => (
+              <Link key={plan.id} href={{ pathname: '/recommend/detail', params: { id: plan.id } }} asChild>
+                <Pressable>
+                  <RecommendPlanCard plan={plan} variant="home" />
+                </Pressable>
+              </Link>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
     </>
   );
 }
@@ -218,8 +257,10 @@ export default function HomeScreen() {
   const [ongoingTrip, setOngoingTrip] = useState<TripResponse | null>(null);
   const [ongoingDetail, setOngoingDetail] = useState<TripDetailAggregateResponse | null>(null);
   const [detailState, setDetailState] = useState<DetailState>('idle');
+  const [recommendationState, setRecommendationState] = useState<RecommendationState>('loading');
+  const [recommendations, setRecommendations] = useState<RecommendPlanListItemViewModel[]>([]);
 
-  const loadHome = useCallback(async () => {
+  const loadOngoingTrip = useCallback(async () => {
     try {
       setIsLoading(true);
       const trips = await getTrips();
@@ -251,10 +292,24 @@ export default function HomeScreen() {
     }
   }, []);
 
+  const loadRecommendations = useCallback(async () => {
+    try {
+      setRecommendationState('loading');
+      const plans = await getRecommendPlans();
+      const homePlans = pickHomeRecommendPlans(toRecommendPlanListItemViewModels(plans));
+      setRecommendations(homePlans);
+      setRecommendationState(homePlans.length ? 'ready' : 'empty');
+    } catch {
+      setRecommendations([]);
+      setRecommendationState('error');
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      void loadHome();
-    }, [loadHome])
+      void loadOngoingTrip();
+      void loadRecommendations();
+    }, [loadOngoingTrip, loadRecommendations])
   );
 
   return (
@@ -276,7 +331,11 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <RecommendationsSection traveling={!!ongoingTrip} />
+        <HomeRecommendationsSection
+          traveling={!!ongoingTrip}
+          recommendations={recommendations}
+          recommendationState={recommendationState}
+        />
       </View>
     </ScrollView>
   );
@@ -296,6 +355,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  recommendationsScrollContent: {
+    gap: 12,
+    paddingVertical: 4,
+    paddingRight: 16,
+  },
+  recommendStatusCard: {
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
   },
   summaryCard: {
     borderRadius: 16,
