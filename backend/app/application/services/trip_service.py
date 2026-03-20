@@ -1408,6 +1408,7 @@ class TripService:
     ) -> dict[int, list[dict]]:
         by_day: dict[int, list[dict]] = {day.day_number: [] for day in days}
         candidate_map = {candidate.name: candidate for candidate in fallback_candidates}
+        candidate_list = list(candidate_map.values())
         days_payload = plan_payload.get("days", [])
         if isinstance(days_payload, list):
             for day_node in days_payload:
@@ -1430,7 +1431,16 @@ class TripService:
                             destination_location=destination_location,
                         )
                     ):
-                        by_day[day_number].append(item)
+                        matched_candidate = self._find_matching_place_candidate_for_payload(
+                            item=item,
+                            candidates=candidate_list,
+                        )
+                        by_day[day_number].append(
+                            self._enrich_place_item_payload(
+                                item=item,
+                                candidate=matched_candidate,
+                            )
+                        )
 
         if any(by_day.values()):
             return {
@@ -1473,7 +1483,10 @@ class TripService:
         name = str(item.get("name") or "")
         notes = str(item.get("notes") or "")
         joined = f"{name} {notes}".strip()
-        candidate = candidate_map.get(name)
+        candidate = self._find_matching_place_candidate_for_payload(
+            item=item,
+            candidates=list(candidate_map.values()),
+        )
         candidate_address = candidate.address if candidate is not None else None
 
         if self._contains_non_matching_prefecture(
@@ -1512,6 +1525,80 @@ class TripService:
             return self._is_within_okinawa_bounds(candidate.latitude, candidate.longitude)
 
         return True
+
+    def _enrich_place_item_payload(
+        self,
+        *,
+        item: dict,
+        candidate: Optional[PlaceCandidate],
+    ) -> dict:
+        if self._is_transport_item_payload(item):
+            return item
+
+        enriched = dict(item)
+        if candidate is None:
+            return enriched
+
+        if not enriched.get("category") and candidate.category:
+            enriched["category"] = candidate.category
+        if enriched.get("latitude") is None and candidate.latitude is not None:
+            enriched["latitude"] = candidate.latitude
+        if enriched.get("longitude") is None and candidate.longitude is not None:
+            enriched["longitude"] = candidate.longitude
+        if candidate.address:
+            enriched["notes"] = candidate.address
+        return enriched
+
+    def _find_matching_place_candidate_for_payload(
+        self,
+        *,
+        item: dict,
+        candidates: list[PlaceCandidate],
+    ) -> Optional[PlaceCandidate]:
+        name = str(item.get("name") or "").strip()
+        if not name or not candidates:
+            return None
+
+        normalized_item_name = self._normalize_place_name(name)
+        exact_matches = [
+            candidate
+            for candidate in candidates
+            if self._normalize_place_name(candidate.name) == normalized_item_name
+        ]
+        if exact_matches:
+            return self._pick_best_place_candidate_from_payload(item=item, candidates=exact_matches)
+
+        partial_matches = [
+            candidate
+            for candidate in candidates
+            if normalized_item_name in self._normalize_place_name(candidate.name)
+            or self._normalize_place_name(candidate.name) in normalized_item_name
+        ]
+        if partial_matches:
+            return self._pick_best_place_candidate_from_payload(item=item, candidates=partial_matches)
+
+        return None
+
+    def _pick_best_place_candidate_from_payload(
+        self,
+        *,
+        item: dict,
+        candidates: list[PlaceCandidate],
+    ) -> PlaceCandidate:
+        latitude = item.get("latitude")
+        longitude = item.get("longitude")
+        if not isinstance(latitude, (int, float)) or not isinstance(longitude, (int, float)):
+            return candidates[0]
+
+        return min(
+            candidates,
+            key=lambda candidate: self._estimate_distance_to_coordinates(
+                float(latitude),
+                float(longitude),
+                candidate.latitude,
+                candidate.longitude,
+            ),
+        )
 
     def _is_place_candidate_allowed_for_destination_context(
         self,
