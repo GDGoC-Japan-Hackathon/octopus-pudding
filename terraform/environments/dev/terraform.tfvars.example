@@ -1,2 +1,27 @@
-project_id = "your-dev-project-id"
-region     = "asia-northeast1"
+project_id                   = "your-dev-project-id"
+region                       = "asia-northeast1"
+artifact_registry_repository = "backend"
+cloud_run_service_name       = "gdgoc-backend-dev"
+cloud_run_service_account_id = "gdgoc-backend-dev-run"
+
+cloudbuild_trigger_name = "gdgoc-backend-dev-trigger"
+cloudbuild_filename     = "backend/cloudbuild.yaml"
+cloudbuild_image        = "api"
+
+github_owner        = "your-github-owner"
+github_repo         = "GDGoC-Hackason"
+github_branch_regex = "^main$"
+
+cloud_sql_instance_name    = "gdgoc-backend-dev-sql"
+cloud_sql_tier             = "db-f1-micro"
+cloud_sql_disk_size_gb     = 20
+cloud_sql_authorized_cidr  = "0.0.0.0/0"
+cloud_sql_db_name          = "gdgoc"
+cloud_sql_db_user          = "app_user"
+cloud_sql_db_user_password = "replace-with-strong-password"
+
+secret_debug               = "false"
+secret_firebase_project_id = "your-firebase-project-id"
+secret_gcs_bucket_name     = "your-gcs-bucket-name"
+secret_google_places_api_key = "replace-google-places-api-key"
+secret_gemini_api_key        = "replace-gemini-api-key"

@@ -1,0 +1,59 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - Dockerfile.cloudrun
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:latest
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:latest
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA
+      - --region
+      - ${_REGION}
+      - --platform
+      - managed
+      - --allow-unauthenticated
+      - --set-secrets
+      - DATABASE_URL=${_SECRET_DATABASE_URL}:latest,DEBUG=${_SECRET_DEBUG}:latest,FIREBASE_PROJECT_ID=${_SECRET_FIREBASE_PROJECT_ID}:latest,GCS_BUCKET_NAME=${_SECRET_GCS_BUCKET_NAME}:latest,GOOGLE_PLACES_API_KEY=${_SECRET_GOOGLE_PLACES_API_KEY}:latest,GOOGLE_PLACES_ENDPOINT=${_SECRET_GOOGLE_PLACES_ENDPOINT}:latest,GOOGLE_PLACES_LANGUAGE_CODE=${_SECRET_GOOGLE_PLACES_LANGUAGE_CODE}:latest,GOOGLE_PLACES_REGION_CODE=${_SECRET_GOOGLE_PLACES_REGION_CODE}:latest,GEMINI_API_KEY=${_SECRET_GEMINI_API_KEY}:latest,GEMINI_API_BASE_URL=${_SECRET_GEMINI_API_BASE_URL}:latest,GEMINI_MODEL=${_SECRET_GEMINI_MODEL}:latest
+      - --quiet
+
+substitutions:
+  _REGION: asia-northeast1
+  _REPOSITORY: backend
+  _IMAGE: api
+  _SERVICE: gdgoc-backend-dev
+  _SECRET_DATABASE_URL: backend-database-url
+  _SECRET_DEBUG: backend-debug
+  _SECRET_FIREBASE_PROJECT_ID: backend-firebase-project-id
+  _SECRET_GCS_BUCKET_NAME: backend-gcs-bucket-name
+  _SECRET_GOOGLE_PLACES_API_KEY: backend-google-places-api-key
+  _SECRET_GOOGLE_PLACES_ENDPOINT: backend-google-places-endpoint
+  _SECRET_GOOGLE_PLACES_LANGUAGE_CODE: backend-google-places-language-code
+  _SECRET_GOOGLE_PLACES_REGION_CODE: backend-google-places-region-code
+  _SECRET_GEMINI_API_KEY: backend-gemini-api-key
+  _SECRET_GEMINI_API_BASE_URL: backend-gemini-api-base-url
+  _SECRET_GEMINI_MODEL: backend-gemini-model
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:latest

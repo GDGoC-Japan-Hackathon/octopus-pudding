@@ -1,11 +1,12 @@
 # Terraform backend bootstrap (dev/prod)
 
 このディレクトリは、バックエンド向け Terraform の実行基盤です。
-今回はリソース作成は行わず、`init/validate/plan` が通る最小構成のみを用意しています。
+Cloud Run / Artifact Registry / Cloud Build Trigger / Cloud SQL / Secret Manager を module 構成で管理します。
 
 ## 構成
 
-- `terraform/`: 共通モジュール（provider/variables/outputs）
+- `terraform/`: 共通ルートモジュール（オーケストレーション）
+- `terraform/module/`: サービス別モジュール
 - `terraform/environments/dev`: dev 用 root module
 - `terraform/environments/prod`: prod 用 root module
 
@@ -33,13 +34,8 @@ terraform validate
 terraform plan -var-file=terraform.tfvars
 ```
 
-## backend.hcl について
+## 重要事項
 
-`backend "gcs"` の値はコードに固定せず、環境ごとの `backend.hcl` で注入します。
-
-例:
-
-```hcl
-bucket = "your-terraform-state-bucket"
-prefix = "backend/dev"
-```
+- `backend/cloudbuild.yaml` の `--set-secrets` で参照する Secret 名は、Terraform のデフォルト Secret 名と一致させています。
+- Secret の初期値は `terraform.tfvars` から投入されるため、取り扱いには注意してください。
+- Cloud SQL は現時点で Public IP を使用する最小構成です（dev 向け）。
