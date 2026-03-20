@@ -291,7 +291,7 @@ export function TripPlanForm({
                 placeholderTextColor="#94A3B8"
                 style={[
                   styles.textInput,
-                  styles.originInput,
+                  !lockBasicInfoFields && styles.originInput,
                   lockBasicInfoFields ? styles.textInputLocked : null,
                 ]}
                 editable={!lockBasicInfoFields}
