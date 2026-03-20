@@ -261,72 +261,73 @@ export function TripPlanForm({
   }, [fields, isSubmitting, onSubmit, selectedCompanionUserIds]);
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.contentContainer}>
+    <View style={styles.screen}>
       <AppHeader title={title} leftSlot={<BackButton size={28} onPress={onBack} />} />
 
-      <View style={styles.container}>
-        <Text style={styles.requiredLegend}>※必須</Text>
+      <ScrollView contentContainerStyle={styles.contentContainer}>
+        <View style={styles.container}>
+          <Text style={styles.requiredLegend}>※必須</Text>
 
-        <View style={styles.sectionBlock}>
-          <FieldLabel label="出発地" iconName="location-on" required />
-          <View style={styles.inputShell}>
-            <TextInput
-              value={fields.origin}
-              onChangeText={(value) => updateField('origin', value)}
-              placeholder="例：東京駅"
-              placeholderTextColor="#94A3B8"
-              style={[styles.textInput, styles.originInput]}
-            />
-            <Pressable
-              style={[styles.inlineActionButton, isResolvingCurrentLocation ? styles.inlineActionButtonDisabled : null]}
-              onPress={() => void handleUseCurrentLocation()}
-              disabled={isResolvingCurrentLocation}
-            >
-              {isResolvingCurrentLocation ? (
-                <ActivityIndicator color="#0F172A" size="small" />
-              ) : (
-                <>
-                  <MaterialIcons name="my-location" size={16} color="#0F172A" />
-                  <Text style={styles.inlineActionText}>現在地から入力</Text>
-                </>
-              )}
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={styles.sectionBlock}>
-          <FieldLabel label="目的地" iconName="flag" required />
-          <TextInput
-            value={fields.destination}
-            onChangeText={(value) => updateField('destination', value)}
-            placeholder="例：那覇空港"
-            placeholderTextColor="#94A3B8"
-            style={styles.textInput}
-          />
-          <View style={styles.chipHintRow}>
-            <Text style={styles.chipHintLabel}>人気のスポット</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScrollRow}>
-            {DESTINATION_SUGGESTIONS.map((item) => (
-              <Pressable key={item} style={styles.secondaryChip} onPress={() => updateField('destination', item)}>
-                <Text style={styles.secondaryChipText}>{item}</Text>
+          <View style={styles.sectionBlock}>
+            <FieldLabel label="出発地" iconName="location-on" required />
+            <View style={styles.inputShell}>
+              <TextInput
+                value={fields.origin}
+                onChangeText={(value) => updateField('origin', value)}
+                placeholder="例：東京駅"
+                placeholderTextColor="#94A3B8"
+                style={[styles.textInput, styles.originInput]}
+              />
+              <Pressable
+                style={[styles.inlineActionButton, isResolvingCurrentLocation ? styles.inlineActionButtonDisabled : null]}
+                onPress={() => void handleUseCurrentLocation()}
+                disabled={isResolvingCurrentLocation}
+              >
+                {isResolvingCurrentLocation ? (
+                  <ActivityIndicator color="#0F172A" size="small" />
+                ) : (
+                  <>
+                    <MaterialIcons name="my-location" size={16} color="#0F172A" />
+                    <Text style={styles.inlineActionText}>現在地から入力</Text>
+                  </>
+                )}
               </Pressable>
-            ))}
-          </ScrollView>
-        </View>
+            </View>
+          </View>
 
-        <View style={styles.sectionBlock}>
-          <ScheduleField
-            startDate={fields.startDate}
-            endDate={fields.endDate}
-            onChangeStartDate={(value) => updateField('startDate', value)}
-            onChangeEndDate={(value) => updateField('endDate', value)}
-            label="日程"
-            iconName="calendar-today"
-            required
-            maxTripDays={MAX_TRIP_DAYS}
-          />
-        </View>
+          <View style={styles.sectionBlock}>
+            <FieldLabel label="目的地" iconName="flag" required />
+            <TextInput
+              value={fields.destination}
+              onChangeText={(value) => updateField('destination', value)}
+              placeholder="例：那覇空港"
+              placeholderTextColor="#94A3B8"
+              style={styles.textInput}
+            />
+            <View style={styles.chipHintRow}>
+              <Text style={styles.chipHintLabel}>人気のスポット</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScrollRow}>
+              {DESTINATION_SUGGESTIONS.map((item) => (
+                <Pressable key={item} style={styles.secondaryChip} onPress={() => updateField('destination', item)}>
+                  <Text style={styles.secondaryChipText}>{item}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+
+          <View style={styles.sectionBlock}>
+            <ScheduleField
+              startDate={fields.startDate}
+              endDate={fields.endDate}
+              onChangeStartDate={(value) => updateField('startDate', value)}
+              onChangeEndDate={(value) => updateField('endDate', value)}
+              label="日程"
+              iconName="calendar-today"
+              required
+              maxTripDays={MAX_TRIP_DAYS}
+            />
+          </View>
 
         <View style={styles.gridRow}>
           <View style={styles.gridItem}>
@@ -519,15 +520,16 @@ export function TripPlanForm({
           />
         </View>
 
-        <View style={styles.submitWrap}>
-          <Pressable style={[styles.submitButton, isSubmitting ? styles.submitButtonDisabled : null]} onPress={() => void handleSubmit()} disabled={isSubmitting}>
-            <MaterialIcons name="bolt" size={20} color="#FFFFFF" />
-            <Text style={styles.submitButtonText}>{submitLabel}</Text>
-          </Pressable>
-          <Text style={styles.submitHint}>AIが最適なルート、宿泊先、観光スポットを提案します</Text>
+          <View style={styles.submitWrap}>
+            <Pressable style={[styles.submitButton, isSubmitting ? styles.submitButtonDisabled : null]} onPress={() => void handleSubmit()} disabled={isSubmitting}>
+              <MaterialIcons name="bolt" size={20} color="#FFFFFF" />
+              <Text style={styles.submitButtonText}>{submitLabel}</Text>
+            </Pressable>
+            <Text style={styles.submitHint}>AIが最適なルート、宿泊先、観光スポットを提案します</Text>
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
