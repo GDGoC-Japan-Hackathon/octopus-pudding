@@ -3,6 +3,7 @@ import {
   type TripDetailAggregateResponse,
   type TripDetailItineraryItemResponse,
 } from '@/features/trips/types/trip-detail';
+import { type CreateAiPlanGenerationRequest } from '@/features/trips/types/ai-plan-generation';
 import { getApiErrorMessage } from '@/lib/api/client';
 
 import { type PlanDetailDay, type PlanDetailTimelineItem, type PlanDetailViewModel } from '@/features/plan-detail/types';
@@ -32,12 +33,29 @@ export function getTripDetailErrorMessage(error: unknown): string {
 
 export function getAiGenerationErrorMessage(error: unknown): string {
   return getApiErrorMessage(error, {
-    fallback: 'AIプラン構築の実行に失敗しました。',
+    fallback: 'AIプラン再構築の実行に失敗しました。',
     unauthorized: '認証が切れています。再ログイン後にお試しください。',
     forbidden: 'この計画でAIプランを作成する権限がありません。',
     notFound: '対象の計画が見つかりませんでした。',
     defaultWithStatus: true,
   });
+}
+
+export function buildAiGenerationRequestFromAggregate(
+  aggregate: TripDetailAggregateResponse,
+  overrides: Partial<CreateAiPlanGenerationRequest> = {}
+): CreateAiPlanGenerationRequest {
+  const sortedDays = [...aggregate.days].sort((a, b) => a.day_number - b.day_number);
+  return {
+    run_async: false,
+    must_visit_places: (aggregate.preference?.must_visit_places_text ?? '')
+      .split(/[\n,、]/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+    lodging_notes: sortedDays.map((day) => day.lodging_note?.trim() ?? ''),
+    additional_request_comment: aggregate.preference?.additional_request_comment?.trim() || undefined,
+    ...overrides,
+  };
 }
 
 export function getTripStartErrorMessage(error: unknown): string {

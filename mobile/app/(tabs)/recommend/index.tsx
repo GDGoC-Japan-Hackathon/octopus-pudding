@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 
 import { weatherMock } from '@/data/travel';
-import { getRecommendPlans, type RecommendPlanListItem } from '@/features/recommend/api/get-recommend-plans';
+import { getRecommendPlans } from '@/features/recommend/api/get-recommend-plans';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 
 type PickerType = 'category' | 'people' | 'duration' | null;

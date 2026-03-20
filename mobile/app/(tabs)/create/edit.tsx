@@ -97,6 +97,10 @@ export default function EditTripScreen() {
     }
 
     const payload = validation.payload;
+    if (!payload.preference) {
+      Alert.alert('入力エラー', 'プラン条件を確認してください。');
+      return;
+    }
 
     await updateTrip(tripId, {
       origin: payload.origin,

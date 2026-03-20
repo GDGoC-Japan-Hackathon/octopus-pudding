@@ -11,6 +11,7 @@ export type TripDetailResponse = {
   end_date: string;
   participant_count: number;
   cover_image_url?: string | null;
+  recommendation_comment?: string | null;
   recommendation_categories?: string[] | null;
   status: TripStatus;
   created_at?: string | null;

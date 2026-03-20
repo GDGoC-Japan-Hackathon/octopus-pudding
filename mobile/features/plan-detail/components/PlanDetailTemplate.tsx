@@ -30,6 +30,11 @@ type PlanDetailTemplateProps = {
   secondaryActionDisabled?: boolean;
   secondaryButtonVariant?: 'light' | 'orange' | 'gray';
   footerSlot?: ReactNode;
+  timelinePrimaryActionLabel?: string;
+  onTimelinePrimaryAction?: (item: PlanDetailTimelineItem) => void;
+  timelineSecondaryActionLabel?: string;
+  onTimelineSecondaryAction?: (item: PlanDetailTimelineItem) => void;
+  timelineActionLoadingId?: string | number | null;
 };
 
 export function PlanDetailTemplate({
@@ -57,6 +62,11 @@ export function PlanDetailTemplate({
   secondaryActionDisabled,
   secondaryButtonVariant = 'light',
   footerSlot,
+  timelinePrimaryActionLabel,
+  onTimelinePrimaryAction,
+  timelineSecondaryActionLabel,
+  onTimelineSecondaryAction,
+  timelineActionLoadingId,
 }: PlanDetailTemplateProps) {
   const [selectedTransportItem, setSelectedTransportItem] = useState<PlanDetailTimelineItem | null>(null);
 
@@ -161,6 +171,37 @@ export function PlanDetailTemplate({
                         ) : null}
 
                         <Text style={styles.timelineCardBody}>{item.body}</Text>
+
+                        {timelinePrimaryActionLabel || timelineSecondaryActionLabel ? (
+                          <View style={styles.timelineActionRow}>
+                            {timelinePrimaryActionLabel ? (
+                              <Pressable
+                                style={[
+                                  styles.timelineActionButton,
+                                  styles.timelineActionButtonLight,
+                                  timelineActionLoadingId === item.id && styles.timelineActionButtonDisabled,
+                                ]}
+                                onPress={() => onTimelinePrimaryAction?.(item)}
+                                disabled={timelineActionLoadingId === item.id}
+                              >
+                                <Text style={styles.timelineActionButtonText}>{timelinePrimaryActionLabel}</Text>
+                              </Pressable>
+                            ) : null}
+                            {timelineSecondaryActionLabel ? (
+                              <Pressable
+                                style={[
+                                  styles.timelineActionButton,
+                                  styles.timelineActionButtonOrange,
+                                  timelineActionLoadingId === item.id && styles.timelineActionButtonDisabled,
+                                ]}
+                                onPress={() => onTimelineSecondaryAction?.(item)}
+                                disabled={timelineActionLoadingId === item.id}
+                              >
+                                <Text style={styles.timelineActionButtonTextOrange}>{timelineSecondaryActionLabel}</Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                        ) : null}
                       </View>
                     </View>
                   </View>
@@ -518,6 +559,40 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     color: '#475569',
+  },
+  timelineActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 14,
+  },
+  timelineActionButton: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  timelineActionButtonLight: {
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+  },
+  timelineActionButtonOrange: {
+    backgroundColor: '#EC5B13',
+  },
+  timelineActionButtonDisabled: {
+    opacity: 0.6,
+  },
+  timelineActionButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#C2410C',
+  },
+  timelineActionButtonTextOrange: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   transportRow: {
     flexDirection: 'row',
