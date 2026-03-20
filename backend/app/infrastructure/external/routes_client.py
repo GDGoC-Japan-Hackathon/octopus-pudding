@@ -95,7 +95,7 @@ class RoutesClient:
         api_key: Optional[str] = None,
         endpoint: Optional[str] = None,
     ) -> None:
-        self.api_key = api_key or settings.google_routes_api_key
+        self.api_key = api_key or settings.google_directions_api_key or settings.google_routes_api_key
         self.directions_endpoint = endpoint or settings.google_directions_endpoint
         self.connect_timeout_seconds = settings.google_routes_connect_timeout_seconds
         self.read_timeout_seconds = settings.google_routes_read_timeout_seconds

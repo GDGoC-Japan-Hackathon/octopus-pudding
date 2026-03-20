@@ -1,4 +1,6 @@
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
+
 
 
 class Settings(BaseSettings):
@@ -22,6 +24,7 @@ class Settings(BaseSettings):
     google_places_language_code: str = "ja"
     google_places_region_code: str = "JP"
     google_routes_api_key: str = ""
+    google_directions_api_key: str = ""
     google_routes_endpoint: str = "https://routes.googleapis.com/directions/v2:computeRoutes"
     google_directions_endpoint: str = "https://maps.googleapis.com/maps/api/directions/json"
     google_routes_connect_timeout_seconds: int = 15
