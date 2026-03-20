@@ -1940,12 +1940,23 @@ class TripService:
                 first_item = place_items[0]
                 destination_name = first_item.get("name")
                 if isinstance(destination_name, str) and destination_name.strip():
+                    # Prefer geo-coordinates for routing if origin_location is provided.
+                    # Fallback to the textual origin name to preserve existing behavior.
+                    if (
+                        isinstance(origin_location, dict)
+                        and "lat" in origin_location
+                        and "lng" in origin_location
+                    ):
+                        origin_for_routing = f'{origin_location["lat"]},{origin_location["lng"]}'
+                    else:
+                        origin_for_routing = trip.origin
+
                     departure_time = self._resolve_route_departure_datetime(
                         trip_date=day.date or trip.start_date,
                         previous_end_time=None,
                     )
                     route_steps, diagnostics = await route_client.compute_route_steps_with_diagnostics(
-                        origin=trip.origin,
+                        origin=origin_for_routing,
                         destination=destination_name,
                         departure_time=departure_time,
                     )
