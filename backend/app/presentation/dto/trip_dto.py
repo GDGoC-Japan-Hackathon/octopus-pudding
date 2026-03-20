@@ -336,6 +336,7 @@ class ItineraryItemResponse(BaseModel):
     id: int
     trip_day_id: int
     name: str
+    sequence: Optional[int] = None
     item_type: str = "place"
     category: Optional[str] = None
     transport_mode: Optional[str] = None

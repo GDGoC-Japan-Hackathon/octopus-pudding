@@ -189,7 +189,19 @@ export function groupItineraryByDay(aggregate: TripDetailAggregateResponse | nul
     .sort((a, b) => (a.dayNumber ?? 999) - (b.dayNumber ?? 999))
     .map((group) => ({
       ...group,
-      items: [...group.items].sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? '')),
+      items: [...group.items].sort((a, b) => {
+        const sequenceDiff = (a.sequence ?? 9999) - (b.sequence ?? 9999);
+        if (sequenceDiff !== 0) {
+          return sequenceDiff;
+        }
+
+        const startDiff = (a.start_time ?? '').localeCompare(b.start_time ?? '');
+        if (startDiff !== 0) {
+          return startDiff;
+        }
+
+        return a.id - b.id;
+      }),
     }));
 }
 

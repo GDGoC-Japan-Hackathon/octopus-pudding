@@ -53,6 +53,7 @@ export type TripDetailItineraryItemResponse = {
   id: number;
   trip_day_id: number;
   name: string;
+  sequence?: number | null;
   item_type?: string;
   category?: string | null;
   transport_mode?: string | null;
