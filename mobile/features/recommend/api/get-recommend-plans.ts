@@ -29,6 +29,9 @@ type RecommendPlanListItemResponse = {
 export async function getRecommendPlans(): Promise<RecommendPlanListItem[]> {
   try {
     const plans = await apiFetch<RecommendPlanListItemResponse[]>(endpoints.recommendations.list);
+    if (!plans.length) {
+      return getMockRecommendPlans();
+    }
 
     return plans.map((plan) => ({
       id: String(plan.id),
@@ -50,11 +53,7 @@ export async function getRecommendPlans(): Promise<RecommendPlanListItem[]> {
       categories: plan.categories,
       image: plan.image,
     }));
-  } catch (error: unknown) {
-    if (process.env.NODE_ENV !== 'production') {
-      return getMockRecommendPlans();
-    }
-
-    throw error;
+  } catch {
+    return getMockRecommendPlans();
   }
 }
