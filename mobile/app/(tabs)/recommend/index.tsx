@@ -5,7 +5,6 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -17,65 +16,21 @@ import {
 
 import { weatherMock } from '@/data/travel';
 import { getRecommendPlans } from '@/features/recommend/api/get-recommend-plans';
+import { RecommendPlanCard } from '@/features/recommend/components/RecommendPlanCard';
+import {
+  filterRecommendPlans,
+  toRecommendPlanListItemViewModels,
+} from '@/features/recommend/utils/recommend-list';
+import { type RecommendPlanListItemViewModel, type RecommendSortOrder } from '@/features/recommend/types';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 
 type PickerType = 'category' | 'people' | 'duration' | null;
-type RecommendSortOrder = 'newest' | 'oldest' | 'popular';
 
 const CATEGORY_OPTIONS = ['カフェ', '夜景', 'グルメ', '温泉'] as const;
 const WHEEL_ITEM_HEIGHT = 44;
 const WHEEL_VISIBLE_ROWS = 5;
 const PEOPLE_OPTIONS = Array.from({ length: 10 }, (_, index) => index + 1);
 const DURATION_OPTIONS = Array.from({ length: 10 }, (_, index) => index + 1);
-
-type RecommendPlanItem = Awaited<ReturnType<typeof getRecommendPlans>>[number];
-
-function parseDateInput(value: string) {
-  if (!value) return null;
-  const normalized = value.replace(/\./g, '/').replace(/-/g, '/');
-  const match = normalized.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
-  if (!match) return null;
-  const [, year, month, day] = match;
-  const yearNum = Number(year);
-  const monthNum = Number(month);
-  const dayNum = Number(day);
-  const parsed = new Date(yearNum, monthNum - 1, dayNum);
-  if (Number.isNaN(parsed.getTime())) return null;
-  if (
-    parsed.getFullYear() !== yearNum ||
-    parsed.getMonth() + 1 !== monthNum ||
-    parsed.getDate() !== dayNum
-  ) {
-    return null;
-  }
-  return parsed;
-}
-
-function parseTimestampValue(value?: string | null): number | null {
-  if (!value) return null;
-  const parsed = new Date(value).getTime();
-  return Number.isNaN(parsed) ? null : parsed;
-}
-
-function getTripDurationDays(startDate: string, endDate: string) {
-  const start = parseDateInput(startDate);
-  const end = parseDateInput(endDate);
-  if (!start || !end) return null;
-  const startTime = start.getTime();
-  const endTime = end.getTime();
-  if (endTime < startTime) return null;
-  const msPerDay = 1000 * 60 * 60 * 24;
-  return Math.floor((endTime - startTime) / msPerDay) + 1;
-}
-
-function formatCreatedDateLabel(value?: string | null) {
-  const timestamp = parseTimestampValue(value);
-  if (timestamp === null) {
-    return null;
-  }
-  const parsed = new Date(timestamp);
-  return `作成日 ${parsed.getFullYear()}/${String(parsed.getMonth() + 1).padStart(2, '0')}/${String(parsed.getDate()).padStart(2, '0')}`;
-}
 
 type WheelPickerProps<T extends string | number> = {
   values: T[];
@@ -138,7 +93,7 @@ function WheelPicker<T extends string | number>({
 }
 
 export default function RecommendationListScreen() {
-  const [recommendPlans, setRecommendPlans] = useState<RecommendPlanItem[]>([]);
+  const [recommendPlans, setRecommendPlans] = useState<RecommendPlanListItemViewModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
@@ -151,7 +106,7 @@ export default function RecommendationListScreen() {
     try {
       setIsLoading(true);
       const plans = await getRecommendPlans();
-      setRecommendPlans(plans);
+      setRecommendPlans(toRecommendPlanListItemViewModels(plans));
     } catch {
       Alert.alert('取得失敗', 'おすすめ旅の取得に失敗しました。時間をおいて再度お試しください。');
       setRecommendPlans([]);
@@ -193,30 +148,17 @@ export default function RecommendationListScreen() {
     setActivePicker(null);
   }, [activePicker]);
 
-  const filteredPlans = useMemo(() => {
-    const query = keyword.trim().toLowerCase();
-
-    const filtered = recommendPlans.filter((plan) => {
-      const searchableText = [plan.title, plan.peopleLabel, ...plan.categories].join(' ').toLowerCase();
-      const matchesKeyword = query.length === 0 || searchableText.includes(query);
-      const matchesPeople = !peopleFilter || plan.participantCount === peopleFilter;
-      const matchesCategories =
-        categoryFilter.length === 0 || categoryFilter.every((category) => plan.categories.includes(category));
-      const durationDays = getTripDurationDays(plan.startDate, plan.endDate);
-      const matchesDuration = durationFilter === null || durationDays === durationFilter;
-
-      return matchesKeyword && matchesPeople && matchesCategories && matchesDuration;
-    });
-
-    return filtered.sort((a, b) => {
-      if (sortOrder === 'popular') {
-        return b.saveCount - a.saveCount;
-      }
-      const aDate = parseTimestampValue(a.createdAt) ?? 0;
-      const bDate = parseTimestampValue(b.createdAt) ?? 0;
-      return sortOrder === 'newest' ? bDate - aDate : aDate - bDate;
-    });
-  }, [categoryFilter, durationFilter, keyword, peopleFilter, recommendPlans, sortOrder]);
+  const filteredPlans = useMemo(
+    () =>
+      filterRecommendPlans(recommendPlans, {
+        keyword,
+        categories: categoryFilter,
+        participantCount: peopleFilter,
+        durationDays: durationFilter,
+        sortOrder,
+      }),
+    [categoryFilter, durationFilter, keyword, peopleFilter, recommendPlans, sortOrder]
+  );
 
   const sortLabel = sortOrder === 'newest' ? '新しい順' : sortOrder === 'oldest' ? '古い順' : '人気順';
   const categoryLabel = categoryFilter.length ? `カテゴリ(${categoryFilter.length})` : 'カテゴリ';
@@ -297,54 +239,8 @@ export default function RecommendationListScreen() {
 
         {filteredPlans.map((plan) => (
           <Link key={plan.id} href={{ pathname: '/recommend/detail', params: { id: plan.id } }} asChild>
-            <Pressable style={styles.card}>
-              <Image source={{ uri: plan.image }} style={styles.cardImage} />
-
-              <View style={styles.cardBody}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle} numberOfLines={2}>
-                    {plan.title}
-                  </Text>
-                </View>
-
-                <View style={styles.metaStack}>
-                  <View style={styles.metaRow}>
-                    <MaterialIcons name="calendar-today" size={18} color="#64748B" />
-                    <Text style={styles.metaText}>{plan.dateLabel}</Text>
-                  </View>
-                  {formatCreatedDateLabel(plan.createdAt) ? (
-                    <View style={styles.metaRow}>
-                      <MaterialIcons name="schedule" size={18} color="#64748B" />
-                      <Text style={styles.metaText}>{formatCreatedDateLabel(plan.createdAt)}</Text>
-                    </View>
-                  ) : null}
-                  <View style={styles.metaRow}>
-                    <MaterialIcons name="group" size={18} color="#64748B" />
-                    <Text style={styles.metaText}>{plan.peopleLabel}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.cardFooter}>
-                  <View style={styles.footerMeta}>
-                    <View style={styles.footerMetaRow}>
-                      <MaterialIcons name="bookmark" size={18} color="#EC5B13" />
-                      <Text style={styles.footerMetaText}>保存 {plan.saveCount.toLocaleString()}</Text>
-                    </View>
-                    {plan.categories.length ? (
-                      <View style={styles.categoryList}>
-                        {plan.categories.map((category) => (
-                          <View key={`${plan.id}-${category}`} style={styles.categoryTag}>
-                            <Text style={styles.categoryTagText}>{category}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.detailButton}>
-                    <Text style={styles.detailButtonText}>詳細を表示</Text>
-                  </View>
-                </View>
-              </View>
+            <Pressable>
+              <RecommendPlanCard plan={plan} />
             </Pressable>
           </Link>
         ))}
@@ -510,108 +406,6 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 24,
     gap: 22,
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  cardImage: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    backgroundColor: '#E2E8F0',
-  },
-  cardBody: {
-    padding: 16,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    marginBottom: 12,
-  },
-  cardTitle: {
-    flex: 1,
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  metaStack: {
-    gap: 8,
-    marginBottom: 16,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  metaText: {
-    fontSize: 14,
-    color: '#64748B',
-  },
-  cardFooter: {
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  footerMeta: {
-    gap: 8,
-    flex: 1,
-    justifyContent: 'center',
-    minWidth: 0,
-  },
-  footerMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  footerMetaText: {
-    fontSize: 13,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  categoryList: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignContent: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  categoryTag: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: '#FFF1E8',
-  },
-  categoryTagText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#EC5B13',
-  },
-  detailButton: {
-    width: 108,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: '#EC5B13',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  detailButtonText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
   },
   loadingWrap: {
     paddingVertical: 24,
