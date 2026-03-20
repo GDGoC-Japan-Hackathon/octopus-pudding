@@ -29,9 +29,6 @@ type RecommendPlanListItemResponse = {
 export async function getRecommendPlans(): Promise<RecommendPlanListItem[]> {
   try {
     const plans = await apiFetch<RecommendPlanListItemResponse[]>(endpoints.recommendations.list);
-    if (!plans.length) {
-      return getMockRecommendPlans();
-    }
 
     return plans.map((plan) => ({
       id: String(plan.id),
