@@ -15,6 +15,8 @@ export type CreateTripRequest = {
     companions?: string;
     budget?: number;
     transport_type?: string;
+    must_visit_places_text?: string;
+    additional_request_comment?: string;
   };
 };
 
@@ -38,6 +40,8 @@ export type CreateTripResponse = {
     companions?: string | null;
     budget?: number | null;
     transport_type?: string | null;
+    must_visit_places_text?: string | null;
+    additional_request_comment?: string | null;
     created_at?: string | null;
   } | null;
   members: Array<{
@@ -52,6 +56,7 @@ export type CreateTripResponse = {
     trip_id: number;
     day_number: number;
     date?: string | null;
+    lodging_note?: string | null;
   }>;
   itinerary_items: Array<{
     id: number;

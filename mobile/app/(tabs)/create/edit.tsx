@@ -1,433 +1,194 @@
-import { MaterialIcons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-
-import { weatherMock } from '@/data/travel';
-import { getFriends } from '@/features/friends/api/get-friends';
-import { type FriendResponse } from '@/features/friends/types/friend-request';
+import { BackButton } from '@/components/back-button';
 import { AppHeader } from '@/features/travel/components/AppHeader';
-import { travelStyles } from '@/features/travel/styles';
-import {
-  ParticipantCountField,
-  ScheduleField,
-} from '@/features/trips/components/TripBasicInfoFields';
+import { createAiPlanGeneration } from '@/features/trips/api/ai-plan-generation';
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
 import { addTripMember, removeTripMember } from '@/features/trips/api/trip-members';
 import { updateTrip } from '@/features/trips/api/update-trip';
 import { upsertTripPreference } from '@/features/trips/api/upsert-trip-preference';
-import { type TripAtmosphere } from '@/features/trips/types/create-trip';
-import {
-  getTripEditErrorMessage,
-  parsePreferenceBudget,
-  validateAndBuildTripBasicPayload,
-} from '@/features/trips/utils/edit-trip';
-import { ApiError } from '@/lib/api/client';
+import { TripPlanForm, type TripPlanFormSubmitPayload } from '@/features/trips/components/TripPlanForm';
+import { type TripDetailAggregateResponse } from '@/features/trips/types/trip-detail';
+import { validateAndBuildCreateTripPayload } from '@/features/trips/utils/create-trip';
+import { buildAiGenerationRequestFromForm, buildTripPlanFormValues } from '@/features/trips/utils/trip-plan-form';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 
-const ATMOSPHERE_OPTIONS: TripAtmosphere[] = ['のんびり', 'アクティブ', '映え'];
-const RECOMMEND_CATEGORY_OPTIONS = ['カフェ', '夜景', 'グルメ', '温泉'] as const;
+async function syncTripMembers(tripId: number, currentUserIds: number[], nextUserIds: number[]) {
+  const currentSet = new Set(currentUserIds);
+  const nextSet = new Set(nextUserIds);
 
-function parseSelectedCategories(value?: string | null): string[] {
-  if (!value) {
-    return [];
-  }
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-type EditParams = {
-  tripId?: string | string[];
-};
-
-function parseTripId(raw: string | string[] | undefined): number | null {
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  if (!value) {
-    return null;
-  }
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    return null;
-  }
-  return parsed;
-}
-
-export default function TripEditScreen() {
-  const router = useRouter();
-  const { tripId: rawTripId } = useLocalSearchParams<EditParams>();
-  const tripId = useMemo(() => parseTripId(rawTripId), [rawTripId]);
-  const headerBackSlot = (
-    <Pressable
-      style={styles.headerBackButton}
-      onPress={() => {
-        if (!tripId) {
-          router.push('/plans');
-          return;
-        }
-        router.replace({
-          pathname: '/plans/detail',
-          params: { id: String(tripId) },
-        });
-      }}
-    >
-      <MaterialIcons name="arrow-back" size={16} color="#EC5B13" />
-      <Text style={styles.headerBackButtonText}>戻る</Text>
-    </Pressable>
-  );
-
-  const [isLoading, setIsLoading] = useState(true);
-  const [origin, setOrigin] = useState('');
-  const [destination, setDestination] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [participantCount, setParticipantCount] = useState('1');
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-
-  const [atmosphere, setAtmosphere] = useState<TripAtmosphere>('のんびり');
-  const [budget, setBudget] = useState('');
-  const [transportType, setTransportType] = useState('');
-
-  const [friends, setFriends] = useState<FriendResponse[]>([]);
-  const [isLoadingFriends, setIsLoadingFriends] = useState(true);
-  const [currentMemberUserIds, setCurrentMemberUserIds] = useState<Set<number>>(new Set());
-  const [selectedMemberUserIds, setSelectedMemberUserIds] = useState<Set<number>>(new Set());
-
-  const [isSavingBasic, setIsSavingBasic] = useState(false);
-  const [isSavingPreference, setIsSavingPreference] = useState(false);
-  const [isSavingMembers, setIsSavingMembers] = useState(false);
-
-  const refreshDetail = async (id: number) => {
-    const detail = await getTripDetail(id);
-    setOrigin(detail.trip.origin);
-    setDestination(detail.trip.destination);
-    setStartDate(detail.trip.start_date);
-    setEndDate(detail.trip.end_date);
-    setParticipantCount(String(detail.trip.participant_count ?? 1));
-    setSelectedCategories(detail.trip.recommendation_categories ?? []);
-
-    setAtmosphere(detail.preference?.atmosphere ?? 'のんびり');
-    setBudget(detail.preference?.budget ? String(detail.preference.budget) : '');
-    setTransportType(detail.preference?.transport_type ?? '');
-
-    const memberIds = new Set(detail.members.map((member) => member.user_id));
-    setCurrentMemberUserIds(memberIds);
-    setSelectedMemberUserIds(new Set(memberIds));
-  };
-
-  const refreshFriends = async () => {
-    try {
-      setIsLoadingFriends(true);
-      const list = await getFriends();
-      setFriends(list);
-    } catch (error) {
-      Alert.alert('取得失敗', getTripEditErrorMessage(error, 'フレンド一覧の取得に失敗しました'));
-      setFriends([]);
-    } finally {
-      setIsLoadingFriends(false);
+  for (const userId of nextSet) {
+    if (currentSet.has(userId)) {
+      continue;
     }
-  };
+    try {
+      await addTripMember(tripId, userId);
+    } catch (error) {
+      const maybeApiError = error as { status?: number };
+      if (maybeApiError.status !== 409) {
+        throw error;
+      }
+    }
+  }
+
+  for (const userId of currentSet) {
+    if (nextSet.has(userId)) {
+      continue;
+    }
+    await removeTripMember(tripId, userId);
+  }
+}
+
+export default function EditTripScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ tripId?: string; id?: string }>();
+  const tripId = useMemo(() => Number(params.tripId ?? params.id ?? 0), [params.id, params.tripId]);
+  const [detail, setDetail] = useState<TripDetailAggregateResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const run = async () => {
+    let active = true;
+
+    async function run() {
       if (!tripId) {
-        setIsLoading(false);
+        if (active) {
+          setIsLoading(false);
+        }
         return;
       }
+
       try {
-        setIsLoading(true);
-        await Promise.all([refreshDetail(tripId), refreshFriends()]);
-      } catch (error) {
-        Alert.alert('取得失敗', getTripEditErrorMessage(error, 'プラン詳細の取得に失敗しました'));
+        const response = await getTripDetail(tripId);
+        if (!active) {
+          return;
+        }
+        setDetail(response);
+      } catch {
+        if (!active) {
+          return;
+        }
+        Alert.alert('旅行情報取得に失敗した');
       } finally {
-        setIsLoading(false);
+        if (active) {
+          setIsLoading(false);
+        }
       }
-    };
+    }
 
     void run();
+
+    return () => {
+      active = false;
+    };
   }, [tripId]);
 
-  const handleSaveBasic = async () => {
-    if (!tripId || isSavingBasic) {
+  async function handleSubmit({
+    formValues,
+    selectedCompanionUserIds,
+  }: TripPlanFormSubmitPayload) {
+    if (!detail) {
       return;
     }
-    const result = validateAndBuildTripBasicPayload({
-      origin,
-      destination,
-      startDate,
-      endDate,
-      participantCount,
+
+    const validation = validateAndBuildCreateTripPayload(formValues);
+    if (!validation.ok) {
+      Alert.alert('入力エラー', validation.message);
+      return;
+    }
+
+    const payload = validation.payload;
+
+    await updateTrip(tripId, {
+      origin: payload.origin,
+      destination: payload.destination,
+      start_date: payload.start_date,
+      end_date: payload.end_date,
+      participant_count: payload.participant_count,
+      recommendation_categories: payload.recommendation_categories,
+      status: 'planned',
     });
-    if (!result.ok) {
-      Alert.alert('入力エラー', result.message);
-      return;
-    }
 
-    try {
-      setIsSavingBasic(true);
-      await updateTrip(tripId, {
-        ...result.payload,
-        recommendation_categories: selectedCategories,
-      });
-      await refreshDetail(tripId);
-      Alert.alert('更新完了', '基本情報を更新しました。');
-    } catch (error) {
-      Alert.alert('更新失敗', getTripEditErrorMessage(error, '基本情報の更新に失敗しました'));
-    } finally {
-      setIsSavingBasic(false);
-    }
-  };
+    await upsertTripPreference(tripId, {
+      atmosphere: payload.preference.atmosphere,
+      budget: payload.preference.budget,
+      transport_type: payload.preference.transport_type,
+      must_visit_places_text: formValues.mustVisitPlacesText.trim() || null,
+      additional_request_comment: formValues.additionalRequestComment.trim() || null,
+    });
 
-  const toggleCategory = (category: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(category) ? prev.filter((item) => item !== category) : [...prev, category]
+    const currentMemberUserIds = detail.members
+      .filter((member) => member.role !== 'owner')
+      .map((member) => member.user_id);
+    await syncTripMembers(tripId, currentMemberUserIds, selectedCompanionUserIds);
+
+    const generation = await createAiPlanGeneration(
+      tripId,
+      buildAiGenerationRequestFromForm(formValues)
     );
-  };
 
-  const handleSavePreference = async () => {
-    if (!tripId || isSavingPreference) {
+    if (generation.status === 'failed') {
+      Alert.alert('プラン更新に失敗しました', generation.error_message ?? 'AIプランの再生成に失敗しました。');
       return;
     }
 
-    const result = parsePreferenceBudget({
-      budget,
-      transportType,
+    router.replace({
+      pathname: '/plans/detail',
+      params: { id: String(tripId) },
     });
-    if (!result.ok) {
-      Alert.alert('入力エラー', result.message);
-      return;
-    }
+  }
 
-    try {
-      setIsSavingPreference(true);
-      await upsertTripPreference(tripId, {
-        atmosphere,
-        budget: result.budget,
-        transport_type: result.transportType,
-      });
-      await refreshDetail(tripId);
-      Alert.alert('更新完了', '好みを更新しました。');
-    } catch (error) {
-      Alert.alert('更新失敗', getTripEditErrorMessage(error, '好みの更新に失敗しました'));
-    } finally {
-      setIsSavingPreference(false);
-    }
-  };
-
-  const toggleMember = (userId: number) => {
-    setSelectedMemberUserIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(userId)) {
-        next.delete(userId);
-      } else {
-        next.add(userId);
-      }
-      return next;
-    });
-  };
-
-  const handleSaveMembers = async () => {
-    if (!tripId || isSavingMembers) {
-      return;
-    }
-
-    const toAdd = Array.from(selectedMemberUserIds).filter((userId) => !currentMemberUserIds.has(userId));
-    const toRemove = Array.from(currentMemberUserIds).filter((userId) => !selectedMemberUserIds.has(userId));
-
-    if (!toAdd.length && !toRemove.length) {
-      Alert.alert('変更なし', '同行者の変更はありません。');
-      return;
-    }
-
-    let hasError = false;
-
-    try {
-      setIsSavingMembers(true);
-
-      for (const userId of toAdd) {
-        try {
-          await addTripMember(tripId, userId);
-        } catch (error) {
-          if (error instanceof ApiError && error.status === 409) {
-            continue;
-          }
-          hasError = true;
-        }
-      }
-
-      for (const userId of toRemove) {
-        try {
-          await removeTripMember(tripId, userId);
-        } catch {
-          hasError = true;
-        }
-      }
-
-      await refreshDetail(tripId);
-      if (hasError) {
-        Alert.alert('一部失敗', '一部の同行者更新に失敗しました。最新状態で再表示しています。');
-      } else {
-        Alert.alert('更新完了', '同行者を更新しました。');
-      }
-    } finally {
-      setIsSavingMembers(false);
-    }
-  };
-
-  if (!tripId) {
+  if (isLoading) {
     return (
-      <View style={travelStyles.screen}>
-        <AppHeader title="編集" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
-        <View style={travelStyles.container}>
-          <Text style={travelStyles.heading}>tripId が指定されていません</Text>
+      <View style={styles.screen}>
+        <AppHeader title="プランをカスタマイズ" leftSlot={<BackButton size={28} onPress={() => router.back()} />} />
+        <View style={styles.centerState}>
+          <ActivityIndicator size="small" color="#EC5B13" />
+        </View>
+      </View>
+    );
+  }
+
+  if (!detail || !tripId) {
+    return (
+      <View style={styles.screen}>
+        <AppHeader title="プランをカスタマイズ" leftSlot={<BackButton size={28} onPress={() => router.back()} />} />
+        <View style={styles.centerState}>
+          <Text style={styles.emptyText}>旅行情報が見つかりません。</Text>
         </View>
       </View>
     );
   }
 
   return (
-    <View style={travelStyles.screen}>
-      <AppHeader
-        title="プラン編集"
-        weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`}
-        leftSlot={headerBackSlot}
-      />
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ ...travelStyles.container, paddingBottom: 24 }}>
-        {isLoading ? (
-          <View style={travelStyles.detailSection}>
-            <ActivityIndicator color="#F97316" />
-            <Text style={travelStyles.sectionBody}>読み込み中...</Text>
-          </View>
-        ) : null}
-
-        <View style={travelStyles.detailSection}>
-          <Text style={travelStyles.sectionTitleText}>基本情報</Text>
-          <TextInput style={travelStyles.input} value={origin} onChangeText={setOrigin} placeholder="出発地" />
-          <TextInput style={travelStyles.input} value={destination} onChangeText={setDestination} placeholder="目的地" />
-          <ScheduleField
-            startDate={startDate}
-            endDate={endDate}
-            onChangeStartDate={setStartDate}
-            onChangeEndDate={setEndDate}
-            required
-          />
-          <ParticipantCountField
-            participantCount={participantCount}
-            onChangeParticipantCount={setParticipantCount}
-            required
-          />
-          <Text style={travelStyles.sectionBody}>カテゴリ</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {RECOMMEND_CATEGORY_OPTIONS.map((option) => {
-              const active = selectedCategories.includes(option);
-              return (
-                <Pressable
-                  key={option}
-                  style={[travelStyles.pillButton, active ? { borderColor: '#F97316', backgroundColor: '#FFF7ED' } : null]}
-                  onPress={() => toggleCategory(option)}
-                >
-                  <Text style={[travelStyles.pillText, active ? { color: '#F97316' } : null]}>
-                    {active ? '✓ ' : ''}
-                    {option}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Pressable
-            style={[travelStyles.primaryButton, isSavingBasic ? { opacity: 0.6 } : null]}
-            onPress={handleSaveBasic}
-            disabled={isSavingBasic}
-          >
-            {isSavingBasic ? <ActivityIndicator color="#FFFFFF" /> : <Text style={travelStyles.primaryButtonText}>基本情報を更新</Text>}
-          </Pressable>
-        </View>
-
-        <View style={travelStyles.detailSection}>
-          <Text style={travelStyles.sectionTitleText}>好み</Text>
-          <Text style={travelStyles.sectionBody}>雰囲気</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {ATMOSPHERE_OPTIONS.map((option) => {
-              const active = atmosphere === option;
-              return (
-                <Pressable
-                  key={option}
-                  style={[travelStyles.pillButton, active ? { borderColor: '#F97316', backgroundColor: '#FFF7ED' } : null]}
-                  onPress={() => setAtmosphere(option)}
-                >
-                  <Text style={[travelStyles.pillText, active ? { color: '#F97316' } : null]}>{option}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <TextInput style={travelStyles.input} value={budget} onChangeText={setBudget} placeholder="予算" keyboardType="number-pad" />
-          <TextInput style={travelStyles.input} value={transportType} onChangeText={setTransportType} placeholder="移動手段 (例: train)" />
-          <Pressable
-            style={[travelStyles.primaryButton, isSavingPreference ? { opacity: 0.6 } : null]}
-            onPress={handleSavePreference}
-            disabled={isSavingPreference}
-          >
-            {isSavingPreference ? <ActivityIndicator color="#FFFFFF" /> : <Text style={travelStyles.primaryButtonText}>好みを更新</Text>}
-          </Pressable>
-        </View>
-
-        <View style={travelStyles.detailSection}>
-          <Text style={travelStyles.sectionTitleText}>同行者</Text>
-          <Text style={travelStyles.sectionBody}>
-            フレンド一覧から同行者を選択してください（{selectedMemberUserIds.size}人選択中）
-          </Text>
-          {isLoadingFriends ? (
-            <ActivityIndicator color="#F97316" />
-          ) : friends.length ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {friends.map((friend) => {
-                const active = selectedMemberUserIds.has(friend.user.id);
-                return (
-                  <Pressable
-                    key={friend.user.id}
-                    style={[travelStyles.pillButton, active ? { borderColor: '#F97316', backgroundColor: '#FFF7ED' } : null]}
-                    onPress={() => toggleMember(friend.user.id)}
-                  >
-                    <Text style={[travelStyles.pillText, active ? { color: '#F97316' } : null]}>
-                      {active ? '✓ ' : ''}
-                      {friend.user.username}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : (
-            <Text style={travelStyles.sectionBody}>フレンドがいません。先にフレンドを追加してください。</Text>
-          )}
-          <Pressable
-            style={[travelStyles.primaryButton, isSavingMembers ? { opacity: 0.6 } : null]}
-            onPress={handleSaveMembers}
-            disabled={isSavingMembers}
-          >
-            {isSavingMembers ? <ActivityIndicator color="#FFFFFF" /> : <Text style={travelStyles.primaryButtonText}>同行者を更新</Text>}
-          </Pressable>
-        </View>
-      </ScrollView>
-    </View>
+    <TripPlanForm
+      title="プランをカスタマイズ"
+      submitLabel="プランを更新"
+      initialFormValues={buildTripPlanFormValues(detail)}
+      initialSelectedCompanionUserIds={detail.members.filter((member) => member.role !== 'owner').map((member) => member.user_id)}
+      onBack={() => {
+        router.replace({
+          pathname: '/plans/detail',
+          params: { id: String(tripId) },
+        });
+      }}
+      onSubmit={handleSubmit}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  headerBackButton: {
-    minHeight: 32,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#FED7AA',
-    backgroundColor: '#FFF7ED',
-    flexDirection: 'row',
+  screen: {
+    flex: 1,
+    backgroundColor: '#F8F6F6',
+  },
+  centerState: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    paddingHorizontal: 24,
   },
-  headerBackButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#EC5B13',
+  emptyText: {
+    fontSize: 14,
+    color: '#64748B',
   },
 });

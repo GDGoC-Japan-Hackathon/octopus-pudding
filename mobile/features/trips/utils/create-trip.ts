@@ -10,6 +10,9 @@ export type CreateTripFormValues = {
   atmosphere: string;
   recommendationCategories: string[];
   transportTypes: string[];
+  mustVisitPlacesText: string;
+  accommodationNotesByDay: string[];
+  additionalRequestComment: string;
 };
 
 export type CreateTripValidationResult =
@@ -24,6 +27,28 @@ export type CreateTripValidationResult =
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const FALLBACK_ATMOSPHERE: TripAtmosphere = 'のんびり';
+const LOCATION_SUSPECT_WORDS = new Set(['test', 'testing', 'aaa', 'aaaa', 'abcde', 'qwerty']);
+
+function isLikelyNoiseLocation(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return true;
+  }
+  const normalized = trimmed.toLowerCase();
+  if (LOCATION_SUSPECT_WORDS.has(normalized)) {
+    return true;
+  }
+  if (/^\d+$/.test(normalized)) {
+    return true;
+  }
+  if (/^([a-z0-9])\1{2,}$/i.test(normalized)) {
+    return true;
+  }
+  if (trimmed.length < 2 && !/[駅空港市区町村県都道府]/.test(trimmed)) {
+    return true;
+  }
+  return false;
+}
 
 export function validateAndBuildCreateTripPayload(
   values: CreateTripFormValues
@@ -40,6 +65,18 @@ export function validateAndBuildCreateTripPayload(
     return {
       ok: false,
       message: '必須項目が未入力です',
+    };
+  }
+  if (isLikelyNoiseLocation(origin)) {
+    return {
+      ok: false,
+      message: '出発地の入力を確認してください。',
+    };
+  }
+  if (isLikelyNoiseLocation(destination)) {
+    return {
+      ok: false,
+      message: '目的地の入力を確認してください。',
     };
   }
 
@@ -120,6 +157,8 @@ export function validateAndBuildCreateTripPayload(
         atmosphere: safeAtmosphere,
         budget,
         transport_type: 'train,bus',
+        must_visit_places_text: values.mustVisitPlacesText.trim() || undefined,
+        additional_request_comment: values.additionalRequestComment.trim() || undefined,
       },
     },
   };

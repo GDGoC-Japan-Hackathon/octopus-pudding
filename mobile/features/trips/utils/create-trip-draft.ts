@@ -10,6 +10,9 @@ export const defaultCreateTripFormValues: CreateTripFormValues = {
   atmosphere: 'のんびり',
   recommendationCategories: [],
   transportTypes: [],
+  mustVisitPlacesText: '',
+  accommodationNotesByDay: ['', '', ''],
+  additionalRequestComment: '',
 };
 
 type CreateTripDraft = {
@@ -28,6 +31,7 @@ export function getCreateTripDraft(): CreateTripDraft {
       ...createTripDraft.formValues,
       recommendationCategories: [...createTripDraft.formValues.recommendationCategories],
       transportTypes: [...createTripDraft.formValues.transportTypes],
+      accommodationNotesByDay: [...createTripDraft.formValues.accommodationNotesByDay],
     },
     selectedCompanionUserIds: [...createTripDraft.selectedCompanionUserIds],
   };
@@ -37,10 +41,11 @@ export function setCreateTripDraft(nextDraft: Partial<CreateTripDraft>) {
   createTripDraft = {
     formValues: nextDraft.formValues
       ? {
-          ...nextDraft.formValues,
-          recommendationCategories: [...nextDraft.formValues.recommendationCategories],
-          transportTypes: [...nextDraft.formValues.transportTypes],
-        }
+        ...nextDraft.formValues,
+        recommendationCategories: [...nextDraft.formValues.recommendationCategories],
+        transportTypes: [...nextDraft.formValues.transportTypes],
+        accommodationNotesByDay: [...nextDraft.formValues.accommodationNotesByDay],
+      }
       : createTripDraft.formValues,
     selectedCompanionUserIds: nextDraft.selectedCompanionUserIds
       ? [...nextDraft.selectedCompanionUserIds]

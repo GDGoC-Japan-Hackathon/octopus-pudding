@@ -40,6 +40,8 @@ class TripPreference:
     companions: Optional[str] = None
     budget: Optional[int] = None
     transport_type: Optional[str] = None
+    must_visit_places_text: Optional[str] = None
+    additional_request_comment: Optional[str] = None
     created_at: Optional[datetime] = None
 
 
@@ -60,6 +62,7 @@ class TripDay:
     trip_id: int
     day_number: int
     date: Optional[date] = None
+    lodging_note: Optional[str] = None
     created_at: Optional[datetime] = None
 
 
@@ -82,6 +85,10 @@ class ItineraryItem:
     end_time: Optional[datetime] = None
     estimated_cost: Optional[int] = None
     notes: Optional[str] = None
+    line_name: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    departure_stop_name: Optional[str] = None
+    arrival_stop_name: Optional[str] = None
     created_at: Optional[datetime] = None
 
 

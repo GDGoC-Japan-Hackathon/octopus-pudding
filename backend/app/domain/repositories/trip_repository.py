@@ -164,6 +164,16 @@ class TripRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_member_names_by_trip(
+        self,
+        trip_id: int,
+        *,
+        exclude_user_id: Optional[int] = None,
+    ) -> list[str]:
+        """List member display names by trip."""
+        pass
+
+    @abstractmethod
     async def delete_items_by_trip(self, trip_id: int) -> int:
         """Delete itinerary items under all days in the trip."""
         pass

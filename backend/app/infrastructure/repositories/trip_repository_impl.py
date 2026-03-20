@@ -20,8 +20,8 @@ from app.domain.entities.trip import (
 )
 from app.domain.repositories.trip_repository import TripRepository
 from app.infrastructure.database.models import (
-    IncidentModel,
     AiPlanGenerationModel,
+    IncidentModel,
     ItineraryItemModel,
     ReplanItemModel,
     ReplanSessionModel,
@@ -29,6 +29,7 @@ from app.infrastructure.database.models import (
     TripMemberModel,
     TripModel,
     TripPreferenceModel,
+    UserModel,
 )
 
 
@@ -66,6 +67,8 @@ class TripRepositoryImpl(TripRepository):
                 companions=preference.companions,
                 budget=preference.budget,
                 transport_type=preference.transport_type,
+                must_visit_places_text=preference.must_visit_places_text,
+                additional_request_comment=preference.additional_request_comment,
             )
             self.db.add(db_preference)
 
@@ -90,15 +93,11 @@ class TripRepositoryImpl(TripRepository):
         )
         db_preference = preference_result.scalar_one_or_none()
 
-        members_result = await self.db.execute(
-            select(TripMemberModel).where(TripMemberModel.trip_id == trip_id)
-        )
+        members_result = await self.db.execute(select(TripMemberModel).where(TripMemberModel.trip_id == trip_id))
         db_members = members_result.scalars().all()
 
         days_result = await self.db.execute(
-            select(TripDayModel)
-            .where(TripDayModel.trip_id == trip_id)
-            .order_by(TripDayModel.day_number.asc())
+            select(TripDayModel).where(TripDayModel.trip_id == trip_id).order_by(TripDayModel.day_number.asc())
         )
         db_days = days_result.scalars().all()
         day_ids = [day.id for day in db_days]
@@ -206,9 +205,7 @@ class TripRepositoryImpl(TripRepository):
             return False
 
         if db_trip.source_trip_id is not None and db_trip.counts_as_saved_recommendation:
-            source_trip_result = await self.db.execute(
-                select(TripModel).where(TripModel.id == db_trip.source_trip_id)
-            )
+            source_trip_result = await self.db.execute(select(TripModel).where(TripModel.id == db_trip.source_trip_id))
             source_trip = source_trip_result.scalar_one_or_none()
             if source_trip is not None:
                 source_trip.save_count = max((source_trip.save_count or 0) - 1, 0)
@@ -219,33 +216,19 @@ class TripRepositoryImpl(TripRepository):
         )
         session_ids = list(session_ids_result.scalars().all())
         if session_ids:
-            await self.db.execute(
-                delete(ReplanItemModel).where(
-                    ReplanItemModel.replan_session_id.in_(session_ids)
-                )
-            )
+            await self.db.execute(delete(ReplanItemModel).where(ReplanItemModel.replan_session_id.in_(session_ids)))
 
         # 2. replan_sessions を削除
-        await self.db.execute(
-            delete(ReplanSessionModel).where(ReplanSessionModel.trip_id == trip_id)
-        )
+        await self.db.execute(delete(ReplanSessionModel).where(ReplanSessionModel.trip_id == trip_id))
 
         # 3. incidents を削除
-        await self.db.execute(
-            delete(IncidentModel).where(IncidentModel.trip_id == trip_id)
-        )
+        await self.db.execute(delete(IncidentModel).where(IncidentModel.trip_id == trip_id))
 
         # 4. itinerary_items, trip_days, trip_members, trip_preferences, trips を削除
-        days_result = await self.db.execute(
-            select(TripDayModel.id).where(TripDayModel.trip_id == trip_id)
-        )
+        days_result = await self.db.execute(select(TripDayModel.id).where(TripDayModel.trip_id == trip_id))
         day_ids = list(days_result.scalars().all())
         if day_ids:
-            await self.db.execute(
-                delete(ItineraryItemModel).where(
-                    ItineraryItemModel.trip_day_id.in_(day_ids)
-                )
-            )
+            await self.db.execute(delete(ItineraryItemModel).where(ItineraryItemModel.trip_day_id.in_(day_ids)))
 
         await self.db.execute(delete(TripDayModel).where(TripDayModel.trip_id == trip_id))
         await self.db.execute(delete(TripMemberModel).where(TripMemberModel.trip_id == trip_id))
@@ -324,6 +307,8 @@ class TripRepositoryImpl(TripRepository):
         db_preference.companions = preference.companions
         db_preference.budget = preference.budget
         db_preference.transport_type = preference.transport_type
+        db_preference.must_visit_places_text = preference.must_visit_places_text
+        db_preference.additional_request_comment = preference.additional_request_comment
 
         await self.db.commit()
         await self.db.refresh(db_preference)
@@ -334,6 +319,7 @@ class TripRepositoryImpl(TripRepository):
             trip_id=day.trip_id,
             day_number=day.day_number,
             date=day.date,
+            lodging_note=day.lodging_note,
         )
         self.db.add(db_day)
         await self.db.commit()
@@ -355,6 +341,7 @@ class TripRepositoryImpl(TripRepository):
 
         db_day.day_number = day.day_number
         db_day.date = day.date
+        db_day.lodging_note = day.lodging_note
 
         await self.db.commit()
         await self.db.refresh(db_day)
@@ -384,6 +371,10 @@ class TripRepositoryImpl(TripRepository):
             end_time=item.end_time,
             estimated_cost=item.estimated_cost,
             notes=item.notes,
+            line_name=item.line_name,
+            vehicle_type=item.vehicle_type,
+            departure_stop_name=item.departure_stop_name,
+            arrival_stop_name=item.arrival_stop_name,
         )
         self.db.add(db_item)
         await self.db.commit()
@@ -418,6 +409,10 @@ class TripRepositoryImpl(TripRepository):
         db_item.end_time = item.end_time
         db_item.estimated_cost = item.estimated_cost
         db_item.notes = item.notes
+        db_item.line_name = item.line_name
+        db_item.vehicle_type = item.vehicle_type
+        db_item.departure_stop_name = item.departure_stop_name
+        db_item.arrival_stop_name = item.arrival_stop_name
 
         await self.db.commit()
         await self.db.refresh(db_item)
@@ -430,9 +425,7 @@ class TripRepositoryImpl(TripRepository):
             .where(ReplanItemModel.replacement_for_item_id == item_id)
             .values(replacement_for_item_id=None)
         )
-        result = await self.db.execute(
-            delete(ItineraryItemModel).where(ItineraryItemModel.id == item_id)
-        )
+        result = await self.db.execute(delete(ItineraryItemModel).where(ItineraryItemModel.id == item_id))
         await self.db.commit()
         return result.rowcount > 0
 
@@ -454,22 +447,16 @@ class TripRepositoryImpl(TripRepository):
         return self._to_ai_plan_generation_entity(db_generation)
 
     async def get_ai_plan_generation(self, generation_id: int) -> Optional[AiPlanGeneration]:
-        result = await self.db.execute(
-            select(AiPlanGenerationModel).where(AiPlanGenerationModel.id == generation_id)
-        )
+        result = await self.db.execute(select(AiPlanGenerationModel).where(AiPlanGenerationModel.id == generation_id))
         db_generation = result.scalar_one_or_none()
         if db_generation is None:
             return None
         return self._to_ai_plan_generation_entity(db_generation)
 
-    async def update_ai_plan_generation(
-        self, generation: AiPlanGeneration
-    ) -> Optional[AiPlanGeneration]:
+    async def update_ai_plan_generation(self, generation: AiPlanGeneration) -> Optional[AiPlanGeneration]:
         if generation.id is None:
             return None
-        result = await self.db.execute(
-            select(AiPlanGenerationModel).where(AiPlanGenerationModel.id == generation.id)
-        )
+        result = await self.db.execute(select(AiPlanGenerationModel).where(AiPlanGenerationModel.id == generation.id))
         db_generation = result.scalar_one_or_none()
         if db_generation is None:
             return None
@@ -489,38 +476,47 @@ class TripRepositoryImpl(TripRepository):
 
     async def list_days_by_trip(self, trip_id: int) -> list[TripDay]:
         result = await self.db.execute(
-            select(TripDayModel)
-            .where(TripDayModel.trip_id == trip_id)
-            .order_by(TripDayModel.day_number.asc())
+            select(TripDayModel).where(TripDayModel.trip_id == trip_id).order_by(TripDayModel.day_number.asc())
         )
         db_days = result.scalars().all()
         return [self._to_day_entity(db_day) for db_day in db_days]
 
-    async def delete_items_by_trip(self, trip_id: int) -> int:
-        day_ids_result = await self.db.execute(
-            select(TripDayModel.id).where(TripDayModel.trip_id == trip_id)
+    async def list_member_names_by_trip(
+        self,
+        trip_id: int,
+        *,
+        exclude_user_id: Optional[int] = None,
+    ) -> list[str]:
+        stmt = (
+            select(UserModel.username)
+            .join(TripMemberModel, TripMemberModel.user_id == UserModel.id)
+            .where(TripMemberModel.trip_id == trip_id)
+            .order_by(UserModel.id.asc())
         )
+        if exclude_user_id is not None:
+            stmt = stmt.where(UserModel.id != exclude_user_id)
+
+        result = await self.db.execute(stmt)
+        names = [username for username in result.scalars().all() if username]
+        return names
+
+    async def delete_items_by_trip(self, trip_id: int) -> int:
+        day_ids_result = await self.db.execute(select(TripDayModel.id).where(TripDayModel.trip_id == trip_id))
         day_ids = list(day_ids_result.scalars().all())
         if not day_ids:
             return 0
 
-        result = await self.db.execute(
-            delete(ItineraryItemModel).where(ItineraryItemModel.trip_day_id.in_(day_ids))
-        )
+        result = await self.db.execute(delete(ItineraryItemModel).where(ItineraryItemModel.trip_day_id.in_(day_ids)))
         await self.db.commit()
         return result.rowcount or 0
 
     async def replace_items_by_trip(self, trip_id: int, items: list[ItineraryItem]) -> int:
-        day_ids_result = await self.db.execute(
-            select(TripDayModel.id).where(TripDayModel.trip_id == trip_id)
-        )
+        day_ids_result = await self.db.execute(select(TripDayModel.id).where(TripDayModel.trip_id == trip_id))
         day_ids = list(day_ids_result.scalars().all())
         if not day_ids:
             return 0
 
-        await self.db.execute(
-            delete(ItineraryItemModel).where(ItineraryItemModel.trip_day_id.in_(day_ids))
-        )
+        await self.db.execute(delete(ItineraryItemModel).where(ItineraryItemModel.trip_day_id.in_(day_ids)))
         for item in items:
             self.db.add(
                 ItineraryItemModel(
@@ -540,6 +536,10 @@ class TripRepositoryImpl(TripRepository):
                     end_time=item.end_time,
                     estimated_cost=item.estimated_cost,
                     notes=item.notes,
+                    line_name=item.line_name,
+                    vehicle_type=item.vehicle_type,
+                    departure_stop_name=item.departure_stop_name,
+                    arrival_stop_name=item.arrival_stop_name,
                 )
             )
         await self.db.commit()
@@ -559,9 +559,7 @@ class TripRepositoryImpl(TripRepository):
 
     async def list_incidents(self, trip_id: int) -> list[Incident]:
         result = await self.db.execute(
-            select(IncidentModel)
-            .where(IncidentModel.trip_id == trip_id)
-            .order_by(IncidentModel.created_at.desc())
+            select(IncidentModel).where(IncidentModel.trip_id == trip_id).order_by(IncidentModel.created_at.desc())
         )
         db_incidents = result.scalars().all()
         return [self._to_incident_entity(db_incident) for db_incident in db_incidents]
@@ -612,9 +610,7 @@ class TripRepositoryImpl(TripRepository):
         )
 
     async def get_replan_aggregate(self, session_id: int) -> Optional[ReplanAggregate]:
-        session_result = await self.db.execute(
-            select(ReplanSessionModel).where(ReplanSessionModel.id == session_id)
-        )
+        session_result = await self.db.execute(select(ReplanSessionModel).where(ReplanSessionModel.id == session_id))
         db_session = session_result.scalar_one_or_none()
         if db_session is None:
             return None
@@ -659,6 +655,8 @@ class TripRepositoryImpl(TripRepository):
             companions=db_preference.companions,
             budget=db_preference.budget,
             transport_type=db_preference.transport_type,
+            must_visit_places_text=db_preference.must_visit_places_text,
+            additional_request_comment=db_preference.additional_request_comment,
             created_at=db_preference.created_at,
         )
 
@@ -679,6 +677,7 @@ class TripRepositoryImpl(TripRepository):
             trip_id=db_day.trip_id,
             day_number=db_day.day_number,
             date=db_day.date,
+            lodging_note=db_day.lodging_note,
             created_at=db_day.created_at,
         )
 
@@ -701,6 +700,10 @@ class TripRepositoryImpl(TripRepository):
             end_time=db_item.end_time,
             estimated_cost=db_item.estimated_cost,
             notes=db_item.notes,
+            line_name=db_item.line_name,
+            vehicle_type=db_item.vehicle_type,
+            departure_stop_name=db_item.departure_stop_name,
+            arrival_stop_name=db_item.arrival_stop_name,
             created_at=db_item.created_at,
         )
 
@@ -737,9 +740,7 @@ class TripRepositoryImpl(TripRepository):
             created_at=db_item.created_at,
         )
 
-    def _to_ai_plan_generation_entity(
-        self, db_generation: AiPlanGenerationModel
-    ) -> AiPlanGeneration:
+    def _to_ai_plan_generation_entity(self, db_generation: AiPlanGenerationModel) -> AiPlanGeneration:
         return AiPlanGeneration(
             id=db_generation.id,
             trip_id=db_generation.trip_id,

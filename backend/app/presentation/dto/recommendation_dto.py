@@ -28,6 +28,10 @@ class RecommendationTimelineItemResponse(BaseModel):
     item_type: str = "place"
     meta_label: Optional[str] = None
     icon: Optional[str] = None
+    line_name: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    departure_stop_name: Optional[str] = None
+    arrival_stop_name: Optional[str] = None
 
 
 class RecommendationDayResponse(BaseModel):

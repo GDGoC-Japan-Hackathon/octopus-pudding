@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.trip_service import TripService
-from app.domain.entities.trip import TripPreference
 from app.domain.entities.user import User
 from app.infrastructure.database.base import get_db
 from app.infrastructure.repositories.trip_repository_impl import TripRepositoryImpl
@@ -25,17 +24,18 @@ async def upsert_trip_preference(
     current_user: User = Depends(get_current_user),
     trip_service: TripService = Depends(get_trip_service),
 ):
-    preference = TripPreference(
-        id=None,
-        trip_id=trip_id,
-        atmosphere=payload.atmosphere,
-        companions=payload.companions,
-        budget=payload.budget,
-        transport_type=payload.transport_type,
-    )
-
     try:
-        saved = await trip_service.upsert_my_preference(current_user.id, trip_id, preference)
+        saved = await trip_service.upsert_my_preference(
+            user_id=current_user.id,
+            trip_id=trip_id,
+            atmosphere=payload.atmosphere,
+            companions=payload.companions,
+            budget=payload.budget,
+            transport_type=payload.transport_type,
+            must_visit_places_text=payload.must_visit_places_text,
+            additional_request_comment=payload.additional_request_comment,
+            fields_set=set(payload.model_fields_set),
+        )
         return TripPreferenceResponse.model_validate(saved)
     except TripNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

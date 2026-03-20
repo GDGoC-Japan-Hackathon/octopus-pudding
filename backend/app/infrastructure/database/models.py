@@ -115,6 +115,8 @@ class TripPreferenceModel(Base):
     companions = Column(String(50))  # solo / couple / friends / family
     budget = Column(Integer)
     transport_type = Column(String(50))
+    must_visit_places_text = Column(Text, nullable=True)
+    additional_request_comment = Column(Text, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -154,6 +156,7 @@ class TripDayModel(Base):
     trip_id = Column(Integer, ForeignKey("trips.id"), nullable=False)
     day_number = Column(Integer, nullable=False)
     date = Column(Date)
+    lodging_note = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
@@ -182,6 +185,10 @@ class ItineraryItemModel(Base):
     end_time = Column(DateTime)
     estimated_cost = Column(Integer)
     notes = Column(Text)
+    line_name = Column(String(255))
+    vehicle_type = Column(String(255))
+    departure_stop_name = Column(String(255))
+    arrival_stop_name = Column(String(255))
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     

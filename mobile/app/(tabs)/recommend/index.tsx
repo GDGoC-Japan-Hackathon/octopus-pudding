@@ -68,6 +68,15 @@ function getTripDurationDays(startDate: string, endDate: string) {
   return Math.floor((endTime - startTime) / msPerDay) + 1;
 }
 
+function formatCreatedDateLabel(value?: string | null) {
+  const timestamp = parseTimestampValue(value);
+  if (timestamp === null) {
+    return null;
+  }
+  const parsed = new Date(timestamp);
+  return `作成日 ${parsed.getFullYear()}/${String(parsed.getMonth() + 1).padStart(2, '0')}/${String(parsed.getDate()).padStart(2, '0')}`;
+}
+
 type WheelPickerProps<T extends string | number> = {
   values: T[];
   selectedValue: T;
@@ -303,6 +312,12 @@ export default function RecommendationListScreen() {
                     <MaterialIcons name="calendar-today" size={18} color="#64748B" />
                     <Text style={styles.metaText}>{plan.dateLabel}</Text>
                   </View>
+                  {formatCreatedDateLabel(plan.createdAt) ? (
+                    <View style={styles.metaRow}>
+                      <MaterialIcons name="schedule" size={18} color="#64748B" />
+                      <Text style={styles.metaText}>{formatCreatedDateLabel(plan.createdAt)}</Text>
+                    </View>
+                  ) : null}
                   <View style={styles.metaRow}>
                     <MaterialIcons name="group" size={18} color="#64748B" />
                     <Text style={styles.metaText}>{plan.peopleLabel}</Text>

@@ -266,6 +266,15 @@ export function PlanDetailTemplate({
               <View style={styles.modalDetailSection}>
                 <Text style={styles.modalDetailLabel}>ルート詳細</Text>
                 <Text style={styles.modalDetailBody}>{selectedTransportItem.body}</Text>
+                {selectedTransportItem.lineName ? (
+                  <Text style={styles.modalDetailSubtext}>路線: {selectedTransportItem.lineName}</Text>
+                ) : null}
+                {selectedTransportItem.departureStopName ? (
+                  <Text style={styles.modalDetailSubtext}>出発駅・停留所: {selectedTransportItem.departureStopName}</Text>
+                ) : null}
+                {selectedTransportItem.arrivalStopName ? (
+                  <Text style={styles.modalDetailSubtext}>到着駅・停留所: {selectedTransportItem.arrivalStopName}</Text>
+                ) : null}
               </View>
             ) : null}
           </Pressable>
@@ -693,6 +702,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     color: '#334155',
+  },
+  modalDetailSubtext: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#64748B',
   },
   emptyTimelineCard: {
     backgroundColor: '#FFFFFF',

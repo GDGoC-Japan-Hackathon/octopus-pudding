@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { BackButton } from '@/components/back-button';
 import { weatherMock } from '@/data/travel';
 import { PlanDetailTemplate } from '@/features/plan-detail/components/PlanDetailTemplate';
 import { formatTravelDateLabel } from '@/features/plan-detail/utils/plan-detail';
@@ -17,6 +18,7 @@ export default function RecommendationDetailScreen() {
   const [plan, setPlan] = useState<Awaited<ReturnType<typeof getRecommendPlanDetail>>>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeDayKey, setActiveDayKey] = useState('day1');
+  const headerBackSlot = <BackButton onPress={() => router.push('/recommend')} size={28} />;
 
   useEffect(() => {
     const load = async () => {
@@ -117,6 +119,7 @@ export default function RecommendationDetailScreen() {
     <PlanDetailTemplate
       headerTitle="おすすめ詳細"
       weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`}
+      headerLeftSlot={headerBackSlot}
       heroImage={plan.image}
       title={plan.title}
       comment={plan.comment}

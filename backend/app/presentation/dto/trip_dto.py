@@ -1,5 +1,6 @@
-from datetime import date as dt_date, datetime
-from typing import Optional, Literal
+from datetime import date as dt_date
+from datetime import datetime
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator, root_validator
 
@@ -11,6 +12,8 @@ class TripPreferenceCreate(BaseModel):
     companions: Optional[str] = None
     budget: Optional[int] = None
     transport_type: Optional[str] = None
+    must_visit_places_text: Optional[str] = None
+    additional_request_comment: Optional[str] = None
 
 
 class TripCreate(BaseModel):
@@ -59,6 +62,8 @@ class TripPreferenceUpdate(BaseModel):
     companions: Optional[str] = None
     budget: Optional[int] = None
     transport_type: Optional[str] = None
+    must_visit_places_text: Optional[str] = None
+    additional_request_comment: Optional[str] = None
 
 
 class TripMemberCreate(BaseModel):
@@ -75,20 +80,22 @@ class TripMemberUpdate(BaseModel):
 class TripDayCreate(BaseModel):
     day_number: int
     date: Optional[dt_date] = None
+    lodging_note: Optional[str] = None
 
 
 class TripDayUpdate(BaseModel):
     day_number: Optional[int] = None
     date: Optional[dt_date] = None
+    lodging_note: Optional[str] = None
 
 
 class ItineraryItemCreate(BaseModel):
     name: str
     item_type: Literal["place", "transport"] = "place"
     category: Optional[str] = None
-    transport_mode: Optional[
-        Literal["car", "train", "bus", "walk", "bicycle", "plane", "ship", "taxi", "other"]
-    ] = None
+    transport_mode: Optional[Literal["car", "train", "bus", "walk", "bicycle", "plane", "ship", "taxi", "other"]] = (
+        None
+    )
     travel_minutes: Optional[int] = None
     distance_meters: Optional[int] = None
     from_name: Optional[str] = None
@@ -99,6 +106,10 @@ class ItineraryItemCreate(BaseModel):
     end_time: Optional[datetime] = None
     estimated_cost: Optional[int] = None
     notes: Optional[str] = None
+    line_name: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    departure_stop_name: Optional[str] = None
+    arrival_stop_name: Optional[str] = None
 
     @root_validator(skip_on_failure=True)
     def validate_transport_fields(cls, values: dict) -> dict:
@@ -128,9 +139,9 @@ class ItineraryItemUpdate(BaseModel):
     name: Optional[str] = None
     item_type: Optional[Literal["place", "transport"]] = None
     category: Optional[str] = None
-    transport_mode: Optional[
-        Literal["car", "train", "bus", "walk", "bicycle", "plane", "ship", "taxi", "other"]
-    ] = None
+    transport_mode: Optional[Literal["car", "train", "bus", "walk", "bicycle", "plane", "ship", "taxi", "other"]] = (
+        None
+    )
     travel_minutes: Optional[int] = None
     distance_meters: Optional[int] = None
     from_name: Optional[str] = None
@@ -141,6 +152,10 @@ class ItineraryItemUpdate(BaseModel):
     end_time: Optional[datetime] = None
     estimated_cost: Optional[int] = None
     notes: Optional[str] = None
+    line_name: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    departure_stop_name: Optional[str] = None
+    arrival_stop_name: Optional[str] = None
 
     @root_validator(skip_on_failure=True)
     def validate_transport_fields_on_update(cls, values: dict) -> dict:
@@ -234,6 +249,10 @@ class AiPlanGenerationCreate(BaseModel):
     provider: Optional[str] = None
     prompt_version: Optional[str] = None
     run_async: bool = True
+    must_visit_places: list[str] = Field(default_factory=list)
+    lodging_notes: list[str] = Field(default_factory=list)
+    additional_request_comment: Optional[str] = None
+    selected_companion_names: list[str] = Field(default_factory=list)
 
 
 class AiPlanGenerationResponse(BaseModel):
@@ -280,6 +299,8 @@ class TripPreferenceResponse(BaseModel):
     companions: Optional[str] = None
     budget: Optional[int] = None
     transport_type: Optional[str] = None
+    must_visit_places_text: Optional[str] = None
+    additional_request_comment: Optional[str] = None
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
@@ -302,6 +323,7 @@ class TripDayResponse(BaseModel):
     trip_id: int
     day_number: int
     date: Optional[dt_date] = None
+    lodging_note: Optional[str] = None
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
@@ -324,6 +346,10 @@ class ItineraryItemResponse(BaseModel):
     end_time: Optional[datetime] = None
     estimated_cost: Optional[int] = None
     notes: Optional[str] = None
+    line_name: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    departure_stop_name: Optional[str] = None
+    arrival_stop_name: Optional[str] = None
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

@@ -42,6 +42,22 @@ function formatCreatedLabel(value?: string | null): string | null {
   return `作成日 ${year}/${month}/${day}`;
 }
 
+function formatTravelDateLabel(startDate: string, endDate: string): string {
+  const startValue = parseTripDateValue(startDate);
+  const endValue = parseTripDateValue(endDate);
+
+  if (startValue === null || endValue === null) {
+    return `旅行日 ${startDate} - ${endDate}`;
+  }
+
+  const start = new Date(startValue);
+  const end = new Date(endValue);
+  const format = (date: Date) =>
+    `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+
+  return `旅行日 ${format(start)} - ${format(end)}`;
+}
+
 export function formatTripStatusLabel(status: TripStatus | string) {
   if (status === 'planned') return '保存済み';
   if (status === 'ongoing') return '進行中';
@@ -60,7 +76,7 @@ export function toTripListItemViewModel(plan: TripResponse): TripListItemViewMod
     status: plan.status,
     statusLabel,
     statusVariant: plan.status === 'planned' ? 'planned' : plan.status === 'ongoing' ? 'ongoing' : 'muted',
-    dateLabel: `旅行日 ${plan.start_date} - ${plan.end_date}`,
+    dateLabel: formatTravelDateLabel(plan.start_date, plan.end_date),
     createdLabel: formatCreatedLabel(plan.created_at),
     participantCount: plan.participant_count,
     peopleLabel: `${plan.participant_count}名`,

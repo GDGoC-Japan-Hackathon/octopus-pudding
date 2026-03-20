@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { weatherMock } from '@/data/travel';
 import { AppHeader } from '@/features/travel/components/AppHeader';
@@ -9,8 +9,9 @@ import { travelStyles } from '@/features/travel/styles';
 import { createAiPlanGeneration } from '@/features/trips/api/ai-plan-generation';
 import { createTrip } from '@/features/trips/api/create-trip';
 import { addTripMember } from '@/features/trips/api/trip-members';
-import { clearCreateTripDraft, getCreateTripDraft } from '@/features/trips/utils/create-trip-draft';
 import { validateAndBuildCreateTripPayload } from '@/features/trips/utils/create-trip';
+import { clearCreateTripDraft, getCreateTripDraft } from '@/features/trips/utils/create-trip-draft';
+import { buildAiGenerationRequestFromForm } from '@/features/trips/utils/trip-plan-form';
 
 type GenerationState = 'creating' | 'completed' | 'failed';
 type StepState = 'pending' | 'active' | 'done' | 'failed';
@@ -51,6 +52,172 @@ function StepRow({
     </View>
   );
 }
+function GeometricMorphLoader() {
+  const scale = useRef(new Animated.Value(1)).current;
+  const radius = useRef(new Animated.Value(14)).current;
+  const glow = useRef(new Animated.Value(0.12)).current;
+  const rotate = useRef(new Animated.Value(0)).current;
+  const floatY = useRef(new Animated.Value(0)).current;
+  const rotateInterpolate = rotate.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(scale, {
+            toValue: 0.9,
+            duration: 620,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(radius, {
+            toValue: 36,
+            duration: 620,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(glow, {
+            toValue: 0.18,
+            duration: 620,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(rotate, {
+            toValue: 0.25,
+            duration: 775,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(floatY, {
+            toValue: -4,
+            duration: 620,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(scale, {
+            toValue: 1.1,
+            duration: 420,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(radius, {
+            toValue: 4,
+            duration: 420,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(glow, {
+            toValue: 0.22,
+            duration: 420,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(rotate, {
+            toValue: 0.5,
+            duration: 525,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(floatY, {
+            toValue: 2,
+            duration: 420,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(scale, {
+            toValue: 0.9,
+            duration: 900,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(radius, {
+            toValue: 36,
+            duration: 900,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(glow, {
+            toValue: 0.18,
+            duration: 900,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(rotate, {
+            toValue: 0.3,
+            duration: 1125,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(floatY, {
+            toValue: -4,
+            duration: 900,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(scale, {
+            toValue: 1,
+            duration: 520,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(radius, {
+            toValue: 14,
+            duration: 520,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(glow, {
+            toValue: 0.12,
+            duration: 520,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(rotate, {
+            toValue: 1,
+            duration: 650,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(floatY, {
+            toValue: 0,
+            duration: 520,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+        ]),
+      ])
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [floatY, glow, radius, rotate, scale]);
+
+  return (
+    <View style={styles.morphLoader}>
+      <Animated.View
+        style={[
+          styles.geometricMorph,
+          {
+            borderRadius: radius,
+            transform: [{ translateY: floatY }, { rotate: rotateInterpolate }, { scale }],
+            shadowOpacity: glow,
+          },
+        ]}
+      >
+        <View style={styles.morphSolid} />
+      </Animated.View>
+    </View>
+  );
+}
 
 export default function CreateGeneratingScreen() {
   const router = useRouter();
@@ -58,7 +225,7 @@ export default function CreateGeneratingScreen() {
   const startedRef = useRef(false);
   const [generationState, setGenerationState] = useState<GenerationState>('creating');
   const [tripId, setTripId] = useState<number | null>(null);
-  const [resultMessage, setResultMessage] = useState('旅程を作成しています。しばらくお待ちください。');
+  const [resultMessage, setResultMessage] = useState('しばらくお待ちください');
   const [tripStepState, setTripStepState] = useState<StepState>('active');
   const [memberStepState, setMemberStepState] = useState<StepState>('pending');
   const [aiStepState, setAiStepState] = useState<StepState>('pending');
@@ -102,7 +269,10 @@ export default function CreateGeneratingScreen() {
         setMemberStepState(hasMemberError ? 'failed' : 'done');
 
         setAiStepState('active');
-        const aiGeneration = await createAiPlanGeneration(created.trip.id, { run_async: false });
+        const aiGeneration = await createAiPlanGeneration(
+          created.trip.id,
+          buildAiGenerationRequestFromForm(draft.formValues)
+        );
         setAiStepState(aiGeneration.status === 'failed' ? 'failed' : 'done');
 
         clearCreateTripDraft();
@@ -113,7 +283,7 @@ export default function CreateGeneratingScreen() {
         } else if (hasMemberError) {
           setResultMessage('プランは作成できましたが、一部の同行者追加に失敗しました。詳細画面から再度追加できます。');
         } else {
-          setResultMessage('第一案のプランを作成しました。マイプラン詳細から確認できます。');
+          setResultMessage('マイプランから日程の確認や編集ができます');
         }
       } catch {
         setGenerationState('failed');
@@ -134,7 +304,7 @@ export default function CreateGeneratingScreen() {
       <ScrollView contentContainerStyle={styles.contentContainer}>
         <View style={styles.heroCard}>
           {generationState === 'creating' ? (
-            <ActivityIndicator size="large" color="#F97316" />
+            <GeometricMorphLoader />
           ) : generationState === 'completed' ? (
             <MaterialIcons name="check-circle" size={44} color="#16A34A" />
           ) : (
@@ -148,9 +318,9 @@ export default function CreateGeneratingScreen() {
 
         <View style={styles.stepCard}>
           <Text style={styles.stepCardTitle}>進行状況</Text>
-          <StepRow title="基本情報を保存" description="旅の基本情報を登録しています。" state={tripStepState} />
-          <StepRow title="同行者を反映" description="選択済みの同行者をプランへ追加します。" state={memberStepState} />
-          <StepRow title="旅程の第一案を生成" description="AIでタイムラインの第一案を組み立てています。" state={aiStepState} />
+          <StepRow title="基本情報を保存" description="旅の基本情報を登録しています" state={tripStepState} />
+          <StepRow title="同行者を反映" description="選択済みの同行者をプランに追加します" state={memberStepState} />
+          <StepRow title="プラン作成" description="AIがプランを作成しています" state={aiStepState} />
         </View>
 
         {generationState === 'completed' && tripId !== null ? (
@@ -176,7 +346,6 @@ export default function CreateGeneratingScreen() {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   contentContainer: {
     padding: 16,
@@ -191,6 +360,26 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     gap: 12,
+  },
+  morphLoader: {
+    width: '100%',
+    height: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  geometricMorph: {
+    width: 72,
+    height: 72,
+    overflow: 'hidden',
+    backgroundColor: '#FEC84B',
+    shadowColor: '#FB923C',
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  morphSolid: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#FEC84B',
   },
   heroTitle: {
     fontSize: 22,

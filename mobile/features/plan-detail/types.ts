@@ -15,6 +15,10 @@ export type PlanDetailTimelineItem = {
   metaLabel?: string;
   durationLabel?: string;
   icon?: keyof typeof MaterialIcons.glyphMap;
+  lineName?: string;
+  vehicleType?: string;
+  departureStopName?: string;
+  arrivalStopName?: string;
 };
 
 export type PlanDetailViewModel = {

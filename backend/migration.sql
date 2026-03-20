@@ -318,5 +318,24 @@ ALTER TABLE trips ADD COLUMN recommendation_comment TEXT;
 
 UPDATE alembic_version SET version_num='d5e7f9a1b214' WHERE alembic_version.version_num = 'c4d6e8f0a113';
 
+-- Running upgrade d5e7f9a1b214 -> e7c9a1f2b345
+
+ALTER TABLE itinerary_items ADD COLUMN line_name VARCHAR(255);
+
+ALTER TABLE itinerary_items ADD COLUMN vehicle_type VARCHAR(255);
+
+ALTER TABLE itinerary_items ADD COLUMN departure_stop_name VARCHAR(255);
+
+ALTER TABLE itinerary_items ADD COLUMN arrival_stop_name VARCHAR(255);
+
+UPDATE alembic_version SET version_num='e7c9a1f2b345' WHERE alembic_version.version_num = 'd5e7f9a1b214';
+
+-- Running upgrade e7c9a1f2b345 -> a9d3f1b2c7e4
+
+ALTER TABLE trip_preferences ADD COLUMN example_preference VARCHAR(255);
+
+ALTER TABLE trip_days ADD COLUMN example_day_attribute VARCHAR(255);
+
+UPDATE alembic_version SET version_num='a9d3f1b2c7e4' WHERE alembic_version.version_num = 'e7c9a1f2b345';
 COMMIT;
 

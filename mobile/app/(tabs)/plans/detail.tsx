@@ -11,14 +11,17 @@ import {
 } from 'react-native';
 
 import { weatherMock } from '@/data/travel';
+import { BackButton } from '@/components/back-button';
 import { PlanDetailTemplate } from '@/features/plan-detail/components/PlanDetailTemplate';
 import {
+  getTripStartErrorMessage,
   getTripDetailErrorMessage,
   groupItineraryByDay,
   parseTripId,
   toPlanDetailViewModel,
 } from '@/features/plan-detail/utils/plan-detail';
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
+import { startTrip } from '@/features/trips/api/start-trip';
 import { type TripDetailAggregateResponse } from '@/features/trips/types/trip-detail';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 const PLAN_IMAGE_URL =
@@ -31,13 +34,9 @@ export default function PlanDetailScreen() {
   const [aggregate, setAggregate] = useState<TripDetailAggregateResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCustomizing, setIsCustomizing] = useState(false);
+  const [isStartingTrip, setIsStartingTrip] = useState(false);
   const [activeDayId, setActiveDayId] = useState<number | null>(null);
-  const headerBackSlot = (
-    <Pressable style={styles.headerBackButton} onPress={() => router.push('/plans')}>
-      <MaterialIcons name="arrow-back" size={16} color="#EC5B13" />
-      <Text style={styles.headerBackButtonText}>戻る</Text>
-    </Pressable>
-  );
+  const headerBackSlot = <BackButton onPress={() => router.push('/plans')} size={28} />;
 
   const groupedItineraryByDay = useMemo(() => groupItineraryByDay(aggregate), [aggregate]);
 
@@ -84,6 +83,23 @@ export default function PlanDetailScreen() {
       setIsCustomizing(false);
     }
   }, [router, tripId]);
+
+  const handleStartTrip = useCallback(async () => {
+    if (!tripId || aggregate?.trip.status !== 'planned') {
+      return;
+    }
+
+    try {
+      setIsStartingTrip(true);
+      await startTrip(tripId);
+      await loadTripDetail();
+      Alert.alert('旅行開始', '旅行中のプランを更新しました。ホーム画面にも反映されます。');
+    } catch (error) {
+      Alert.alert('更新失敗', getTripStartErrorMessage(error));
+    } finally {
+      setIsStartingTrip(false);
+    }
+  }, [aggregate?.trip.status, loadTripDetail, tripId]);
 
   if (!tripId) {
     return (
@@ -152,6 +168,33 @@ export default function PlanDetailScreen() {
               {isCustomizing ? 'カスタマイズへ\n移動中...' : 'プランをカスタマイズ'}
             </Text>
           </Pressable>
+
+          {aggregate.trip.status !== 'completed' ? (
+            <Pressable
+              style={[
+                styles.actionButton,
+                aggregate.trip.status === 'planned' && !isStartingTrip
+                  ? styles.actionButtonWhite
+                  : styles.actionButtonGray,
+              ]}
+              onPress={handleStartTrip}
+              disabled={aggregate.trip.status !== 'planned' || isStartingTrip}
+            >
+              <MaterialIcons
+                name="flight-takeoff"
+                size={22}
+                color={aggregate.trip.status === 'planned' && !isStartingTrip ? '#EC5B13' : '#FFFFFF'}
+              />
+              <Text
+                style={[
+                  styles.actionButtonText,
+                  aggregate.trip.status === 'planned' && !isStartingTrip ? styles.actionButtonTextOrange : null,
+                ]}
+              >
+                {isStartingTrip ? '旅行開始中...' : aggregate.trip.status === 'ongoing' ? '旅行中' : '旅行開始'}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       }
     />
@@ -179,25 +222,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
   },
-  headerBackButton: {
-    minHeight: 32,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#FED7AA',
-    backgroundColor: '#FFF7ED',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  headerBackButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#EC5B13',
-  },
   actionWrap: {
     width: '100%',
+    gap: 12,
   },
   actionButton: {
     width: '100%',
@@ -215,11 +242,19 @@ const styles = StyleSheet.create({
   actionButtonGray: {
     backgroundColor: '#94A3B8',
   },
+  actionButtonWhite: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+  },
   actionButtonText: {
     color: '#FFFFFF',
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  actionButtonTextOrange: {
+    color: '#EC5B13',
   },
 });

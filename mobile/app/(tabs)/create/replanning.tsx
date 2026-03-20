@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 
+import { BackButton } from '@/components/back-button';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 import { travelStyles } from '@/features/travel/styles';
 import { weatherMock } from '@/data/travel';
@@ -76,19 +77,14 @@ export default function ReplanningScreen() {
 
   return (
     <View style={travelStyles.screen}>
-      <AppHeader title="再計画" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
+      <AppHeader
+        title="再計画"
+        weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`}
+        leftSlot={<BackButton onPress={() => router.replace('/(tabs)/create')} />}
+      />
 
       <View style={travelStyles.container}>
         <View style={travelStyles.detailSection}>
-          <Pressable
-            style={[travelStyles.pillButton, { alignSelf: 'flex-start' }]}
-            onPress={() => router.replace('/(tabs)/create')}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <MaterialIcons name="arrow-back" size={16} color="#334155" />
-              <Text style={travelStyles.pillText}>戻る</Text>
-            </View>
-          </Pressable>
           <Text style={travelStyles.heading}>トラブル時に再計画</Text>
           <Text style={travelStyles.sectionBody}>該当する原因を選ぶと、修正案を作成します。</Text>
           {!tripId ? (
