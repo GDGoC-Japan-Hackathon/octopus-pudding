@@ -1667,7 +1667,7 @@ class TripService:
             enriched["latitude"] = candidate.latitude
         if enriched.get("longitude") is None and candidate.longitude is not None:
             enriched["longitude"] = candidate.longitude
-        if candidate.address:
+        if candidate.address and not enriched.get("notes"):
             enriched["notes"] = candidate.address
         return enriched
 
