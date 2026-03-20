@@ -121,9 +121,18 @@ export default function EditTripScreen() {
       .map((member) => member.user_id);
     await syncTripMembers(tripId, currentMemberUserIds, selectedCompanionUserIds);
 
+    let generationRequest;
+    try {
+      generationRequest = await buildAiGenerationRequestFromForm(formValues);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '座標の解決に失敗しました。';
+      Alert.alert('入力エラー', message);
+      return;
+    }
+
     const generation = await createAiPlanGeneration(
       tripId,
-      buildAiGenerationRequestFromForm(formValues)
+      generationRequest
     );
 
     if (generation.status === 'failed') {

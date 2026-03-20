@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     google_places_region_code: str = "JP"
     google_routes_api_key: str = ""
     google_routes_endpoint: str = "https://routes.googleapis.com/directions/v2:computeRoutes"
+    google_routes_connect_timeout_seconds: int = 15
+    google_routes_read_timeout_seconds: int = 60
 
     # Gemini API
     gemini_api_key: str = ""

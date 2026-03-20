@@ -183,7 +183,9 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
     title: item.item_type === 'transport' ? transportModeLabel(item.transport_mode) : item.name,
     body:
       item.item_type === 'transport'
-        ? item.departure_stop_name && item.arrival_stop_name
+        ? typeof item.notes === 'string' && item.notes.includes('公共交通機関が取得できませんでした')
+          ? item.notes
+          : item.departure_stop_name && item.arrival_stop_name
           ? `${item.departure_stop_name} → ${item.arrival_stop_name}`
           : item.from_name && item.to_name
           ? `${item.from_name} → ${item.to_name}`
@@ -192,7 +194,7 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
     itemType: item.item_type === 'transport' ? 'transport' : 'place',
     metaLabel:
       item.item_type === 'transport'
-        ? buildTransportMetaLabel(item.line_name, item.travel_minutes, item.distance_meters)
+        ? buildTransportMetaLabel(item.transport_mode, item.line_name, item.travel_minutes, item.distance_meters)
         : undefined,
     durationLabel:
       item.item_type === 'transport'
@@ -229,10 +231,17 @@ function transportModeIcon(mode?: string | null): keyof typeof MaterialIcons.gly
   return 'train';
 }
 
-function buildTransportMetaLabel(lineName?: string | null, travelMinutes?: number | null, distanceMeters?: number | null) {
+function buildTransportMetaLabel(
+  transportMode?: string | null,
+  lineName?: string | null,
+  travelMinutes?: number | null,
+  distanceMeters?: number | null
+) {
   const parts: string[] = [];
   if (lineName) {
     parts.push(lineName);
+  } else if (transportMode === 'BUS' || transportMode === 'TRAIN') {
+    parts.push('公共交通');
   }
   if (typeof distanceMeters === 'number') {
     parts.push(distanceMeters >= 1000 ? `${(distanceMeters / 1000).toFixed(1)}km` : `${distanceMeters}m`);

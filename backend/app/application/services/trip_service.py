@@ -488,6 +488,9 @@ class TripService:
         self,
         owner_user_id: int,
         trip_id: int,
+        origin: Optional[dict] = None,
+        destination: Optional[dict] = None,
+        lodging: Optional[dict] = None,
         provider: Optional[str] = None,
         prompt_version: Optional[str] = None,
         run_async: bool = True,
@@ -501,6 +504,9 @@ class TripService:
             "lodging_notes": [],
             "additional_request_comment": None,
             "selected_companion_names": [],
+            "origin": None,
+            "destination": None,
+            "lodging": None,
         }
 
         aggregate = await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
@@ -565,6 +571,9 @@ class TripService:
                 refreshed_preference.additional_request_comment if refreshed_preference is not None else None
             ),
             "selected_companion_names": persisted_companion_names,
+            "origin": self._normalize_lat_lng(origin, field_name="origin"),
+            "destination": self._normalize_lat_lng(destination, field_name="destination"),
+            "lodging": self._normalize_lat_lng(lodging, field_name="lodging") if lodging else None,
         }
 
         generation = AiPlanGeneration(
@@ -667,11 +676,13 @@ class TripService:
                 route_options=route_options,
                 destination=aggregate.trip.destination,
             )
-            normalized = await self._rebuild_transport_items_from_routes(
+            normalized, route_diagnostics = await self._rebuild_transport_items_from_routes(
                 trip=aggregate.trip,
                 days=days,
                 normalized_plan=normalized,
                 place_candidates=place_candidates,
+                origin_location=(generation_input or {}).get("origin"),
+                destination_location=(generation_input or {}).get("destination"),
             )
             normalized = self._enforce_plan_constraints(
                 trip=aggregate.trip,
@@ -679,7 +690,6 @@ class TripService:
                 normalized_plan=normalized,
             )
             transit_step_count, transit_line_count = self._count_transit_transport_items(normalized)
-            transport_diagnostics = self._count_transport_diagnostics(normalized)
             generated_items = self._build_generated_itinerary_items(days=days, normalized_plan=normalized)
             inserted_count = await self.trip_repository.replace_items_by_trip(aggregate.trip.id, generated_items)
             if not aggregate.trip.recommendation_comment:
@@ -705,9 +715,16 @@ class TripService:
                     "inserted_items": inserted_count,
                     "transit_step_items": transit_step_count,
                     "transit_line_items": transit_line_count,
-                    "transit_attempted_pairs": transport_diagnostics["attempted_pairs"],
-                    "transit_succeeded_pairs": transport_diagnostics["transit_pairs"],
-                    "drive_fallback_pairs": transport_diagnostics["drive_pairs"],
+                    "transit_attempted_pairs": route_diagnostics.get("transit_attempted_pairs", 0),
+                    "transit_succeeded_pairs": route_diagnostics.get("transit_succeeded_pairs", 0),
+                    "transit_empty_pairs": route_diagnostics.get("transit_empty_pairs", 0),
+                    "transit_timeout_pairs": route_diagnostics.get("transit_timeout_pairs", 0),
+                    "transit_exception_pairs": route_diagnostics.get("transit_exception_pairs", 0),
+                    "transit_fallback_info_pairs": route_diagnostics.get("transit_fallback_info_pairs", 0),
+                    "empty_pairs": route_diagnostics.get("transit_empty_pairs", 0),
+                    "timeout_pairs": route_diagnostics.get("transit_timeout_pairs", 0),
+                    "walk_fallback_pairs": route_diagnostics.get("walk_fallback_pairs", 0),
+                    "drive_fallback_pairs": route_diagnostics.get("drive_fallback_pairs", 0),
                     "cover_image_updated": cover_image_updated,
                     "fallback_used": fallback_used,
                     "fallback_reason": fallback_reason,
@@ -1571,7 +1588,7 @@ class TripService:
             next_start_time=next_start_time,
             travel_minutes=travel_minutes,
         )
-        summary = f"{from_name} → {to_name}"
+        summary = f"公共交通機関が取得できませんでした。{from_name} → {to_name}"
         return {
             "item_type": "transport",
             "name": "移動",
@@ -1645,10 +1662,25 @@ class TripService:
         days: list[TripDay],
         normalized_plan: dict[int, list[dict]],
         place_candidates: list[PlaceCandidate],
-    ) -> dict[int, list[dict]]:
+        origin_location: Optional[dict] = None,
+        destination_location: Optional[dict] = None,
+    ) -> tuple[dict[int, list[dict]], dict[str, int]]:
         candidate_map = {candidate.name: candidate for candidate in place_candidates}
         rebuilt: dict[int, list[dict]] = {}
+        route_diagnostics = {
+            "transit_attempted_pairs": 0,
+            "transit_succeeded_pairs": 0,
+            "transit_empty_pairs": 0,
+            "transit_timeout_pairs": 0,
+            "transit_exception_pairs": 0,
+            "transit_fallback_info_pairs": 0,
+            "walk_fallback_pairs": 0,
+            "drive_fallback_pairs": 0,
+        }
         route_client = RoutesClient()
+        sorted_days = sorted(days, key=lambda day: day.day_number)
+        first_day_number = sorted_days[0].day_number if sorted_days else None
+        last_day_number = sorted_days[-1].day_number if sorted_days else None
 
         for day in days:
             items = normalized_plan.get(day.day_number, [])
@@ -1658,6 +1690,49 @@ class TripService:
                 continue
 
             expanded: list[dict] = []
+            if (
+                day.day_number == first_day_number
+                and origin_location
+                and place_items
+            ):
+                first_item = place_items[0]
+                origin_candidate = self._place_candidate_from_lat_lng(
+                    name=trip.origin,
+                    coordinates=origin_location,
+                )
+                destination_candidate = self._place_candidate_from_item(first_item, candidate_map)
+                if origin_candidate is not None and destination_candidate is not None:
+                    departure_time = self._resolve_route_departure_datetime(
+                        trip_date=day.date or trip.start_date,
+                        previous_end_time=None,
+                    )
+                    route_steps, diagnostics = await route_client.compute_route_steps_with_diagnostics(
+                        origin=origin_candidate,
+                        destination=destination_candidate,
+                        departure_time=departure_time,
+                    )
+                    for key in route_diagnostics:
+                        route_diagnostics[key] += diagnostics.get(key, 0)
+                    if route_steps:
+                        expanded.extend(
+                            self._route_steps_to_item_payloads(
+                                route_steps,
+                                previous_end_time=None,
+                                next_start_time=first_item.get("start_time"),
+                                origin_name=trip.origin,
+                                destination_name=str(first_item.get("name")),
+                            )
+                        )
+                    else:
+                        expanded.append(
+                            self._build_fallback_transport_item_payload(
+                                from_name=trip.origin,
+                                to_name=str(first_item.get("name")),
+                                previous_end_time=None,
+                                next_start_time=first_item.get("start_time"),
+                            )
+                        )
+
             for index, item in enumerate(place_items):
                 expanded.append(item)
                 if index == len(place_items) - 1:
@@ -1681,11 +1756,13 @@ class TripService:
                     trip_date=day.date or trip.start_date,
                     previous_end_time=item.get("end_time"),
                 )
-                route_steps = await route_client.compute_route_steps(
+                route_steps, diagnostics = await route_client.compute_route_steps_with_diagnostics(
                     origin=origin,
                     destination=destination,
                     departure_time=departure_time,
                 )
+                for key in route_diagnostics:
+                    route_diagnostics[key] += diagnostics.get(key, 0)
                 if route_steps:
                     logger.info(
                         "TripService route steps found: trip_id=%s day=%s from=%s to=%s steps=%s lines=%s",
@@ -1721,8 +1798,50 @@ class TripService:
                             next_start_time=next_item.get("start_time"),
                         )
                     )
+            if (
+                day.day_number == last_day_number
+                and destination_location
+                and place_items
+            ):
+                last_item = place_items[-1]
+                origin_candidate = self._place_candidate_from_item(last_item, candidate_map)
+                destination_candidate = self._place_candidate_from_lat_lng(
+                    name=trip.origin,
+                    coordinates=destination_location,
+                )
+                if origin_candidate is not None and destination_candidate is not None:
+                    departure_time = self._resolve_route_departure_datetime(
+                        trip_date=day.date or trip.start_date,
+                        previous_end_time=last_item.get("end_time"),
+                    )
+                    route_steps, diagnostics = await route_client.compute_route_steps_with_diagnostics(
+                        origin=origin_candidate,
+                        destination=destination_candidate,
+                        departure_time=departure_time,
+                    )
+                    for key in route_diagnostics:
+                        route_diagnostics[key] += diagnostics.get(key, 0)
+                    if route_steps:
+                        expanded.extend(
+                            self._route_steps_to_item_payloads(
+                                route_steps,
+                                previous_end_time=last_item.get("end_time"),
+                                next_start_time=None,
+                                origin_name=str(last_item.get("name")),
+                                destination_name=trip.origin,
+                            )
+                        )
+                    else:
+                        expanded.append(
+                            self._build_fallback_transport_item_payload(
+                                from_name=str(last_item.get("name")),
+                                to_name=trip.origin,
+                                previous_end_time=last_item.get("end_time"),
+                                next_start_time=None,
+                            )
+                        )
             rebuilt[day.day_number] = expanded
-        return rebuilt
+        return rebuilt, route_diagnostics
 
     def _place_candidate_from_item(
         self,
@@ -1743,6 +1862,24 @@ class TripService:
                 longitude=float(longitude),
             )
         return candidate_map.get(name)
+
+    def _place_candidate_from_lat_lng(
+        self,
+        *,
+        name: str,
+        coordinates: dict,
+    ) -> Optional[PlaceCandidate]:
+        latitude = coordinates.get("latitude") if isinstance(coordinates, dict) else None
+        longitude = coordinates.get("longitude") if isinstance(coordinates, dict) else None
+        if not isinstance(latitude, (int, float)) or not isinstance(longitude, (int, float)):
+            return None
+        return PlaceCandidate(
+            name=name,
+            category="location",
+            address=name,
+            latitude=float(latitude),
+            longitude=float(longitude),
+        )
 
     def _resolve_route_departure_datetime(
         self,
@@ -1855,6 +1992,7 @@ class TripService:
     def _count_transport_diagnostics(self, normalized_plan: dict[int, list[dict]]) -> dict[str, int]:
         attempted_pairs = 0
         transit_pairs = 0
+        walk_pairs = 0
         drive_pairs = 0
         for items in normalized_plan.values():
             for item in items:
@@ -1864,13 +2002,33 @@ class TripService:
                 mode = str(item.get("transport_mode") or "").upper()
                 if mode in {"BUS", "TRAIN"}:
                     transit_pairs += 1
+                elif mode == "WALK":
+                    walk_pairs += 1
                 elif mode == "CAR":
                     drive_pairs += 1
         return {
             "attempted_pairs": attempted_pairs,
             "transit_pairs": transit_pairs,
+            "walk_pairs": walk_pairs,
             "drive_pairs": drive_pairs,
         }
+
+    def _normalize_lat_lng(self, value: Optional[dict], *, field_name: str) -> dict:
+        if not isinstance(value, dict):
+            raise ValueError(f"{field_name} must be an object with latitude/longitude")
+        latitude = value.get("latitude")
+        longitude = value.get("longitude")
+        if isinstance(latitude, bool) or not isinstance(latitude, (int, float)):
+            raise ValueError(f"{field_name}.latitude must be numeric")
+        if isinstance(longitude, bool) or not isinstance(longitude, (int, float)):
+            raise ValueError(f"{field_name}.longitude must be numeric")
+        latitude = float(latitude)
+        longitude = float(longitude)
+        if latitude < -90 or latitude > 90:
+            raise ValueError(f"{field_name}.latitude must be between -90 and 90")
+        if longitude < -180 or longitude > 180:
+            raise ValueError(f"{field_name}.longitude must be between -180 and 180")
+        return {"latitude": latitude, "longitude": longitude}
 
     def _enforce_plan_constraints(
         self,

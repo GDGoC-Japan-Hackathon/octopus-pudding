@@ -269,9 +269,20 @@ export default function CreateGeneratingScreen() {
         setMemberStepState(hasMemberError ? 'failed' : 'done');
 
         setAiStepState('active');
+        let generationRequest;
+        try {
+          generationRequest = await buildAiGenerationRequestFromForm(draft.formValues);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '座標の解決に失敗しました。';
+          setGenerationState('failed');
+          setAiStepState('failed');
+          setResultMessage(message);
+          return;
+        }
+
         const aiGeneration = await createAiPlanGeneration(
           created.trip.id,
-          buildAiGenerationRequestFromForm(draft.formValues)
+          generationRequest
         );
         setAiStepState(aiGeneration.status === 'failed' ? 'failed' : 'done');
 

@@ -1,7 +1,9 @@
 import asyncio
 import json
+import socket
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from time import perf_counter
 from typing import Optional
 from urllib import error, request
 import logging
@@ -10,6 +12,36 @@ from app.infrastructure.external.google_places_client import GooglePlacesClient,
 from app.shared.config import settings
 
 logger = logging.getLogger(__name__)
+
+ROUTES_BASE_FIELD_MASK = ",".join(
+    [
+        "routes.duration",
+        "routes.distanceMeters",
+        "routes.polyline.encodedPolyline",
+        "routes.legs.distanceMeters",
+        "routes.legs.duration",
+        "routes.legs.steps.distanceMeters",
+        "routes.legs.steps.staticDuration",
+        "routes.legs.steps.travelMode",
+        "routes.legs.steps.navigationInstruction.instructions",
+        "routes.legs.steps.polyline.encodedPolyline",
+    ]
+)
+
+ROUTES_TRANSIT_FIELD_MASK = ",".join(
+    [
+        ROUTES_BASE_FIELD_MASK,
+        "routes.legs.steps.transitDetails.stopDetails.departureTime",
+        "routes.legs.steps.transitDetails.stopDetails.arrivalTime",
+        "routes.legs.steps.transitDetails.stopDetails.departureStop.name",
+        "routes.legs.steps.transitDetails.stopDetails.arrivalStop.name",
+        "routes.legs.steps.transitDetails.transitLine.name",
+        "routes.legs.steps.transitDetails.transitLine.nameShort",
+        "routes.legs.steps.transitDetails.transitLine.vehicle.name.text",
+        "routes.legs.steps.transitDetails.transitLine.vehicle.type",
+        "routes.legs.steps.transitDetails.stopCount",
+    ]
+)
 
 
 @dataclass
@@ -60,6 +92,21 @@ class RouteOption:
         return data
 
 
+@dataclass
+class RouteDiagnostics:
+    transit_attempted_pairs: int = 0
+    transit_succeeded_pairs: int = 0
+    transit_empty_pairs: int = 0
+    transit_timeout_pairs: int = 0
+    transit_exception_pairs: int = 0
+    transit_fallback_info_pairs: int = 0
+    walk_fallback_pairs: int = 0
+    drive_fallback_pairs: int = 0
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
 class RoutesClient:
     def __init__(
         self,
@@ -68,10 +115,18 @@ class RoutesClient:
     ) -> None:
         self.api_key = api_key or settings.google_routes_api_key
         self.endpoint = endpoint or settings.google_routes_endpoint
+        self.connect_timeout_seconds = settings.google_routes_connect_timeout_seconds
+        self.read_timeout_seconds = settings.google_routes_read_timeout_seconds
         if not self.api_key and settings.google_places_api_key:
             logger.warning(
                 "RoutesClient: GOOGLE_ROUTES_API_KEY is empty. GOOGLE_PLACES_API_KEY is set but will not be used for routes."
             )
+        logger.info(
+            "RoutesClient timeout settings: connect_timeout=%ss read_timeout=%ss (urllib uses effective=%ss)",
+            self.connect_timeout_seconds,
+            self.read_timeout_seconds,
+            self._effective_timeout_seconds,
+        )
 
     async def compute_route_options(
         self,
@@ -89,8 +144,7 @@ class RoutesClient:
         departure = departure_time or datetime.now(timezone.utc)
         requests = [
             ("WALK", None),
-            ("TRANSIT", "BUS"),
-            ("TRANSIT", "TRAIN"),
+            ("TRANSIT", None),
         ]
         results = await asyncio.gather(
             *[
@@ -119,57 +173,76 @@ class RoutesClient:
         destination: PlaceCandidate,
         departure_time: Optional[datetime] = None,
     ) -> list[RouteStep]:
+        route_steps, _ = await self.compute_route_steps_with_diagnostics(
+            origin=origin,
+            destination=destination,
+            departure_time=departure_time,
+        )
+        return route_steps
+
+    async def compute_route_steps_with_diagnostics(
+        self,
+        origin: PlaceCandidate,
+        destination: PlaceCandidate,
+        departure_time: Optional[datetime] = None,
+    ) -> tuple[list[RouteStep], dict]:
         if not self.api_key:
             raise RuntimeError("Google Routes API key is not configured")
         if origin.latitude is None or origin.longitude is None:
-            return []
+            return [], RouteDiagnostics().to_dict()
         if destination.latitude is None or destination.longitude is None:
-            return []
+            return [], RouteDiagnostics().to_dict()
         departure = departure_time or datetime.now(timezone.utc)
-        primary_steps = await asyncio.to_thread(
-            self._compute_route_steps_sync,
+        diagnostics = RouteDiagnostics()
+        primary_steps, primary_status, primary_fallback_info = await asyncio.to_thread(
+            self._compute_route_steps_sync_with_meta,
             origin,
             destination,
             departure,
             None,
         )
-        if primary_steps:
-            return primary_steps
-
-        bus_steps, train_steps = await asyncio.gather(
-            asyncio.to_thread(
-                self._compute_route_steps_sync,
-                origin,
-                destination,
-                departure,
-                "BUS",
-            ),
-            asyncio.to_thread(
-                self._compute_route_steps_sync,
-                origin,
-                destination,
-                departure,
-                "TRAIN",
-            ),
+        self._update_diagnostics(
+            diagnostics=diagnostics,
+            status=primary_status,
+            has_fallback_info=primary_fallback_info,
+            is_walk_fallback=False,
+            is_drive_fallback=False,
         )
-        candidates = [steps for steps in (bus_steps, train_steps) if steps]
-        if candidates:
-            return min(candidates, key=self._total_step_minutes)
+        if primary_steps:
+            return primary_steps, diagnostics.to_dict()
 
-        anchored_steps = await self._compute_route_steps_via_transit_hubs(
+        anchored_steps, anchored_status, anchored_fallback_info = await self._compute_route_steps_via_transit_hubs(
             origin=origin,
             destination=destination,
             departure_time=departure,
         )
+        self._update_diagnostics(
+            diagnostics=diagnostics,
+            status=anchored_status,
+            has_fallback_info=anchored_fallback_info,
+            is_walk_fallback=False,
+            is_drive_fallback=False,
+        )
         if anchored_steps:
-            return anchored_steps
+            return anchored_steps, diagnostics.to_dict()
+
+        walk_steps = await asyncio.to_thread(
+            self._compute_route_walk_sync,
+            origin,
+            destination,
+        )
+        if walk_steps:
+            diagnostics.walk_fallback_pairs += 1
+            return walk_steps, diagnostics.to_dict()
 
         drive_steps = await asyncio.to_thread(
             self._compute_route_drive_sync,
             origin,
             destination,
         )
-        return drive_steps
+        if drive_steps:
+            diagnostics.drive_fallback_pairs += 1
+        return drive_steps, diagnostics.to_dict()
 
     def _compute_route_sync(
         self,
@@ -202,38 +275,44 @@ class RoutesClient:
             "units": "METRIC",
         }
         if travel_mode == "TRANSIT":
-            payload["departureTime"] = departure_time.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            normalized_departure_time = self._normalize_transit_departure_time(departure_time)
+            payload["departureTime"] = normalized_departure_time.isoformat().replace("+00:00", "Z")
             if transit_subtype == "BUS":
                 payload["transitPreferences"] = {
                     "allowedTravelModes": ["BUS"],
-                    "routingPreference": "LESS_WALKING",
                 }
             elif transit_subtype == "TRAIN":
                 payload["transitPreferences"] = {
                     "allowedTravelModes": ["TRAIN", "RAIL", "SUBWAY", "LIGHT_RAIL"],
-                    "routingPreference": "FEWER_TRANSFERS",
                 }
+            logger.info(
+                "RoutesClient transit option request: origin=%s(%.6f,%.6f) destination=%s(%.6f,%.6f) departure_time=%s subtype=%s approx_distance_meters=%.0f",
+                origin.name,
+                origin.latitude,
+                origin.longitude,
+                destination.name,
+                destination.latitude,
+                destination.longitude,
+                payload["departureTime"],
+                transit_subtype or "ANY",
+                self._coordinate_distance_meters(
+                    float(origin.latitude),
+                    float(origin.longitude),
+                    float(destination.latitude),
+                    float(destination.longitude),
+                ),
+            )
 
         body = json.dumps(payload).encode("utf-8")
         headers = {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": self.api_key,
-            "X-Goog-FieldMask": (
-                "routes.duration,"
-                "routes.distanceMeters,"
-                "routes.legs.steps.travelMode,"
-                "routes.legs.steps.navigationInstruction.instructions,"
-                "routes.legs.steps.transitDetails.stopDetails.departureTime,"
-                "routes.legs.steps.transitDetails.stopDetails.arrivalTime,"
-                "routes.legs.steps.transitDetails.transitLine.name,"
-                "routes.legs.steps.transitDetails.transitLine.nameShort,"
-                "routes.legs.steps.transitDetails.transitLine.vehicle.name.text,"
-                "routes.legs.steps.transitDetails.transitLine.vehicle.type"
-            ),
+            "X-Goog-FieldMask": ROUTES_TRANSIT_FIELD_MASK,
         }
         req = request.Request(self.endpoint, data=body, headers=headers, method="POST")
+        started = perf_counter()
         try:
-            with request.urlopen(req, timeout=20) as resp:
+            with request.urlopen(req, timeout=self._effective_timeout_seconds) as resp:
                 raw = resp.read().decode("utf-8")
         except error.HTTPError as e:
             error_body: Optional[str]
@@ -254,6 +333,16 @@ class RoutesClient:
                 getattr(e, "reason", None),
             )
             return None
+        finally:
+            elapsed_ms = (perf_counter() - started) * 1000
+            logger.info(
+                "RoutesClient route option elapsed: mode=%s subtype=%s origin=%s destination=%s elapsed_ms=%.1f",
+                travel_mode,
+                transit_subtype or "ANY",
+                origin.name,
+                destination.name,
+                elapsed_ms,
+            )
 
         response = json.loads(raw)
         routes = response.get("routes", []) or []
@@ -286,6 +375,21 @@ class RoutesClient:
         departure_time: datetime,
         transit_subtype: Optional[str] = None,
     ) -> list[RouteStep]:
+        steps, _, _ = self._compute_route_steps_sync_with_meta(
+            origin=origin,
+            destination=destination,
+            departure_time=departure_time,
+            transit_subtype=transit_subtype,
+        )
+        return steps
+
+    def _compute_route_steps_sync_with_meta(
+        self,
+        origin: PlaceCandidate,
+        destination: PlaceCandidate,
+        departure_time: datetime,
+        transit_subtype: Optional[str] = None,
+    ) -> tuple[list[RouteStep], str, bool]:
         payload: dict = {
             "origin": {
                 "location": {
@@ -307,51 +411,49 @@ class RoutesClient:
             "languageCode": settings.google_places_language_code,
             "regionCode": settings.google_places_region_code,
             "units": "METRIC",
-            "departureTime": departure_time.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "departureTime": self._normalize_transit_departure_time(departure_time).isoformat().replace(
+                "+00:00", "Z"
+            ),
         }
         if transit_subtype == "BUS":
             payload["transitPreferences"] = {
                 "allowedTravelModes": ["BUS"],
-                "routingPreference": "LESS_WALKING",
             }
         elif transit_subtype == "TRAIN":
             payload["transitPreferences"] = {
                 "allowedTravelModes": ["TRAIN", "RAIL", "SUBWAY", "LIGHT_RAIL"],
-                "routingPreference": "FEWER_TRANSFERS",
             }
 
         body = json.dumps(payload).encode("utf-8")
         headers = {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": self.api_key,
-            "X-Goog-FieldMask": (
-                "routes.duration,"
-                "routes.distanceMeters,"
-                "routes.legs.steps.distanceMeters,"
-                "routes.legs.steps.staticDuration,"
-                "routes.legs.steps.travelMode,"
-                "routes.legs.steps.navigationInstruction.instructions,"
-                "routes.legs.steps.transitDetails.stopDetails.departureTime,"
-                "routes.legs.steps.transitDetails.stopDetails.arrivalTime,"
-                "routes.legs.steps.transitDetails.stopDetails.departureStop.name,"
-                "routes.legs.steps.transitDetails.stopDetails.arrivalStop.name,"
-                "routes.legs.steps.transitDetails.transitLine.name,"
-                "routes.legs.steps.transitDetails.transitLine.nameShort,"
-                "routes.legs.steps.transitDetails.transitLine.vehicle.name.text,"
-                "routes.legs.steps.transitDetails.transitLine.vehicle.type"
-            ),
+            "X-Goog-FieldMask": ROUTES_TRANSIT_FIELD_MASK,
         }
         logger.info(
-            "RoutesClient transit request: origin=%s destination=%s departure_time=%s subtype=%s field_mask=%s",
+            "RoutesClient transit request: origin=%s(%.6f,%.6f) destination=%s(%.6f,%.6f) departure_time=%s subtype=%s approx_distance_meters=%.0f has_intermediates=%s timeout=%ss field_mask=%s",
             origin.name,
+            origin.latitude,
+            origin.longitude,
             destination.name,
+            destination.latitude,
+            destination.longitude,
             payload["departureTime"],
             transit_subtype or "ANY",
+            self._coordinate_distance_meters(
+                float(origin.latitude),
+                float(origin.longitude),
+                float(destination.latitude),
+                float(destination.longitude),
+            ),
+            bool(payload.get("intermediates")),
+            self._effective_timeout_seconds,
             headers["X-Goog-FieldMask"],
         )
         req = request.Request(self.endpoint, data=body, headers=headers, method="POST")
+        started = perf_counter()
         try:
-            with request.urlopen(req, timeout=20) as resp:
+            with request.urlopen(req, timeout=self._effective_timeout_seconds) as resp:
                 raw = resp.read().decode("utf-8")
                 logger.debug(
                     "RoutesClient transit raw response: origin=%s destination=%s subtype=%s body=%s",
@@ -360,14 +462,25 @@ class RoutesClient:
                     transit_subtype or "ANY",
                     raw[:500],
                 )
-        except Exception:
+        except Exception as exc:
+            status = "timeout" if self._is_timeout_exception(exc) else "exception"
             logger.exception(
-                "RoutesClient transit request failed: origin=%s destination=%s subtype=%s",
+                "RoutesClient transit request failed: origin=%s destination=%s subtype=%s status=%s",
                 origin.name,
                 destination.name,
                 transit_subtype or "ANY",
+                status,
             )
-            return []
+            return [], status, False
+        finally:
+            elapsed_ms = (perf_counter() - started) * 1000
+            logger.info(
+                "RoutesClient transit elapsed: origin=%s destination=%s subtype=%s elapsed_ms=%.1f",
+                origin.name,
+                destination.name,
+                transit_subtype or "ANY",
+                elapsed_ms,
+            )
 
         try:
             response = json.loads(raw)
@@ -380,14 +493,16 @@ class RoutesClient:
             )
             return []
         routes = response.get("routes", []) or []
+        has_fallback_info = bool(response.get("fallbackInfo"))
         if not routes:
             logger.warning(
-                "RoutesClient transit response empty: origin=%s destination=%s subtype=%s",
+                "RoutesClient transit response empty: origin=%s destination=%s subtype=%s fallbackInfo=%s",
                 origin.name,
                 destination.name,
                 transit_subtype or "ANY",
+                response.get("fallbackInfo"),
             )
-            return []
+            return [], "empty", has_fallback_info
         route = routes[0]
         logger.info(
             "RoutesClient transit response summary: origin=%s destination=%s subtype=%s transit_steps=%s total_steps=%s",
@@ -397,14 +512,14 @@ class RoutesClient:
             self._count_transit_steps(route),
             self._count_total_steps(route),
         )
-        return self._extract_route_steps(route, origin.name, destination.name)
+        return self._extract_route_steps(route, origin.name, destination.name), "success", has_fallback_info
 
     async def _compute_route_steps_via_transit_hubs(
         self,
         origin: PlaceCandidate,
         destination: PlaceCandidate,
         departure_time: datetime,
-    ) -> list[RouteStep]:
+    ) -> tuple[list[RouteStep], str, bool]:
         origin_hub, destination_hub = await asyncio.gather(
             self._search_transit_hub_near(origin),
             self._search_transit_hub_near(destination),
@@ -417,17 +532,17 @@ class RoutesClient:
                 bool(origin_hub),
                 bool(destination_hub),
             )
-            return []
+            return [], "skipped", False
 
-        hub_steps = await asyncio.to_thread(
-            self._compute_route_steps_sync,
+        hub_steps, hub_status, hub_fallback_info = await asyncio.to_thread(
+            self._compute_route_steps_sync_with_meta,
             origin_hub,
             destination_hub,
             departure_time,
             None,
         )
         if not hub_steps:
-            return []
+            return [], hub_status, hub_fallback_info
 
         prefix = await asyncio.to_thread(
             self._compute_route_drive_sync,
@@ -447,14 +562,13 @@ class RoutesClient:
             destination_hub.name,
             len(hub_steps),
         )
-        return prefix + hub_steps + suffix
+        return prefix + hub_steps + suffix, hub_status, hub_fallback_info
 
     async def _search_transit_hub_near(self, place: PlaceCandidate) -> Optional[PlaceCandidate]:
         if place.latitude is None or place.longitude is None:
             return None
         places_client = GooglePlacesClient()
-        base = f"{place.latitude:.5f},{place.longitude:.5f}"
-        queries = [f"{base} 駅", f"{base} バス停"]
+        queries = self._build_transit_hub_queries(place)
         nearest: Optional[PlaceCandidate] = None
         nearest_distance = float("inf")
         for query in queries:
@@ -476,9 +590,36 @@ class RoutesClient:
                     nearest_distance = distance
         if nearest is None:
             return None
-        if nearest_distance > 20_000:
+        if nearest_distance > 40_000:
             return None
         return nearest
+
+    @staticmethod
+    def _build_transit_hub_queries(place: PlaceCandidate) -> list[str]:
+        queries: list[str] = []
+        place_name = (place.name or "").strip()
+        place_address = (place.address or "").strip()
+        if place_name:
+            queries.append(f"{place_name} 最寄り駅")
+            queries.append(f"{place_name} 最寄り バス停")
+            queries.append(f"{place_name} 駅")
+            queries.append(f"{place_name} バス停")
+        if place_address:
+            queries.append(f"{place_address} 最寄り駅")
+            queries.append(f"{place_address} 最寄り バス停")
+            queries.append(f"{place_address} 駅")
+            queries.append(f"{place_address} バス停")
+        queries.append(f"{place.latitude:.5f},{place.longitude:.5f} 駅")
+        queries.append(f"{place.latitude:.5f},{place.longitude:.5f} バス停")
+
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for query in queries:
+            if not query or query in seen:
+                continue
+            seen.add(query)
+            deduped.append(query)
+        return deduped
 
     def _compute_route_drive_sync(
         self,
@@ -511,14 +652,12 @@ class RoutesClient:
         headers = {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": self.api_key,
-            "X-Goog-FieldMask": (
-                "routes.duration,"
-                "routes.distanceMeters"
-            ),
+            "X-Goog-FieldMask": ROUTES_BASE_FIELD_MASK,
         }
         req = request.Request(self.endpoint, data=body, headers=headers, method="POST")
+        started = perf_counter()
         try:
-            with request.urlopen(req, timeout=20) as resp:
+            with request.urlopen(req, timeout=self._effective_timeout_seconds) as resp:
                 raw = resp.read().decode("utf-8")
         except Exception:
             logger.exception(
@@ -527,6 +666,14 @@ class RoutesClient:
                 destination.name,
             )
             return []
+        finally:
+            elapsed_ms = (perf_counter() - started) * 1000
+            logger.info(
+                "RoutesClient drive elapsed: origin=%s destination=%s elapsed_ms=%.1f",
+                origin.name,
+                destination.name,
+                elapsed_ms,
+            )
 
         response = json.loads(raw)
         routes = response.get("routes", []) or []
@@ -545,10 +692,95 @@ class RoutesClient:
             distance_meters=route.get("distanceMeters") if isinstance(route.get("distanceMeters"), int) else None,
             from_name=origin.name,
             to_name=destination.name,
-            notes="車で移動",
+            notes="公共交通機関が取得できませんでした。車で移動",
         )
         logger.info(
             "RoutesClient drive fallback used: origin=%s destination=%s duration=%s distance=%s",
+            origin.name,
+            destination.name,
+            step.duration_minutes,
+            step.distance_meters,
+        )
+        return [step]
+
+    def _compute_route_walk_sync(
+        self,
+        origin: PlaceCandidate,
+        destination: PlaceCandidate,
+    ) -> list[RouteStep]:
+        payload: dict = {
+            "origin": {
+                "location": {
+                    "latLng": {
+                        "latitude": origin.latitude,
+                        "longitude": origin.longitude,
+                    }
+                }
+            },
+            "destination": {
+                "location": {
+                    "latLng": {
+                        "latitude": destination.latitude,
+                        "longitude": destination.longitude,
+                    }
+                }
+            },
+            "travelMode": "WALK",
+            "languageCode": settings.google_places_language_code,
+            "regionCode": settings.google_places_region_code,
+            "units": "METRIC",
+        }
+        body = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": self.api_key,
+            "X-Goog-FieldMask": ROUTES_BASE_FIELD_MASK,
+        }
+        req = request.Request(self.endpoint, data=body, headers=headers, method="POST")
+        started = perf_counter()
+        try:
+            with request.urlopen(req, timeout=self._effective_timeout_seconds) as resp:
+                raw = resp.read().decode("utf-8")
+        except Exception:
+            logger.exception(
+                "RoutesClient walk request failed: origin=%s destination=%s",
+                origin.name,
+                destination.name,
+            )
+            return []
+        finally:
+            elapsed_ms = (perf_counter() - started) * 1000
+            logger.info(
+                "RoutesClient walk elapsed: origin=%s destination=%s elapsed_ms=%.1f",
+                origin.name,
+                destination.name,
+                elapsed_ms,
+            )
+
+        response = json.loads(raw)
+        routes = response.get("routes", []) or []
+        if not routes:
+            logger.warning(
+                "RoutesClient walk response empty: origin=%s destination=%s",
+                origin.name,
+                destination.name,
+            )
+            return []
+        route = routes[0]
+        distance_meters = route.get("distanceMeters")
+        if isinstance(distance_meters, int) and distance_meters > 3000:
+            return []
+        step = RouteStep(
+            travel_mode="WALK",
+            transit_subtype=None,
+            duration_minutes=self._duration_to_minutes(route.get("duration")),
+            distance_meters=distance_meters if isinstance(distance_meters, int) else None,
+            from_name=origin.name,
+            to_name=destination.name,
+            notes="公共交通機関が取得できませんでした。徒歩で移動",
+        )
+        logger.info(
+            "RoutesClient walk fallback used: origin=%s destination=%s duration=%s distance=%s",
             origin.name,
             destination.name,
             step.duration_minutes,
@@ -649,6 +881,17 @@ class RoutesClient:
                 line_name, vehicle_type = self._extract_line_metadata(transit_details.get("transitLine") or {})
                 mapped_mode, transit_subtype = self._map_step_mode(travel_mode, vehicle_type)
                 notes = step.get("navigationInstruction", {}).get("instructions")
+                stop_count = transit_details.get("stopCount")
+                if (
+                    mapped_mode == "TRANSIT"
+                    and isinstance(stop_count, int)
+                    and stop_count > 0
+                    and isinstance(notes, str)
+                    and notes.strip()
+                ):
+                    notes = f"{notes} / {stop_count}駅・停留所"
+                elif mapped_mode == "TRANSIT" and isinstance(stop_count, int) and stop_count > 0:
+                    notes = f"{stop_count}駅・停留所"
                 extracted.append(
                     RouteStep(
                         travel_mode=mapped_mode,
@@ -739,6 +982,17 @@ class RoutesClient:
         return "TRANSIT", "TRAIN"
 
     @staticmethod
+    def _normalize_transit_departure_time(departure_time: datetime) -> datetime:
+        if departure_time.tzinfo is None:
+            parsed = departure_time.replace(tzinfo=timezone.utc)
+        else:
+            parsed = departure_time.astimezone(timezone.utc)
+        min_future = datetime.now(timezone.utc) + timedelta(minutes=5)
+        if parsed < min_future:
+            parsed = min_future
+        return parsed.replace(microsecond=0)
+
+    @staticmethod
     def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
         if not value or not isinstance(value, str):
             return None
@@ -754,6 +1008,48 @@ class RoutesClient:
         for step in steps:
             total += step.duration_minutes or 0
         return total
+
+    @property
+    def _effective_timeout_seconds(self) -> float:
+        return float(max(self.connect_timeout_seconds, self.read_timeout_seconds))
+
+    @staticmethod
+    def _is_timeout_exception(exc: Exception) -> bool:
+        if isinstance(exc, (socket.timeout, TimeoutError)):
+            return True
+        if isinstance(exc, error.URLError):
+            reason = getattr(exc, "reason", None)
+            if isinstance(reason, (socket.timeout, TimeoutError)):
+                return True
+            if isinstance(reason, str) and "timed out" in reason.lower():
+                return True
+        return "timed out" in str(exc).lower()
+
+    @staticmethod
+    def _update_diagnostics(
+        diagnostics: RouteDiagnostics,
+        *,
+        status: str,
+        has_fallback_info: bool,
+        is_walk_fallback: bool,
+        is_drive_fallback: bool,
+    ) -> None:
+        if status in {"success", "empty", "timeout", "exception"}:
+            diagnostics.transit_attempted_pairs += 1
+        if status == "success":
+            diagnostics.transit_succeeded_pairs += 1
+        elif status == "empty":
+            diagnostics.transit_empty_pairs += 1
+        elif status == "timeout":
+            diagnostics.transit_timeout_pairs += 1
+        elif status == "exception":
+            diagnostics.transit_exception_pairs += 1
+        if has_fallback_info:
+            diagnostics.transit_fallback_info_pairs += 1
+        if is_walk_fallback:
+            diagnostics.walk_fallback_pairs += 1
+        if is_drive_fallback:
+            diagnostics.drive_fallback_pairs += 1
 
     @staticmethod
     def _coordinate_distance_meters(

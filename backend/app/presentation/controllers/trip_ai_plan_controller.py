@@ -36,6 +36,13 @@ async def create_ai_plan_generation(
         generation = await trip_service.start_my_ai_plan_generation(
             owner_user_id=current_user.id,
             trip_id=trip_id,
+            origin={"latitude": payload.origin.latitude, "longitude": payload.origin.longitude},
+            destination={"latitude": payload.destination.latitude, "longitude": payload.destination.longitude},
+            lodging=(
+                None
+                if payload.lodging is None
+                else {"latitude": payload.lodging.latitude, "longitude": payload.lodging.longitude}
+            ),
             provider=payload.provider,
             prompt_version=payload.prompt_version,
             run_async=payload.run_async,
@@ -49,6 +56,8 @@ async def create_ai_plan_generation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except PermissionDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.get(
