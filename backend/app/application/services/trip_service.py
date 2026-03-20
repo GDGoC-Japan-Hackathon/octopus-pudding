@@ -126,6 +126,57 @@ class TripService:
     MAX_NEAREST_DESTINATIONS_PER_CANDIDATE = 3
     ACTIVITY_START_TIME = "09:00"
     ACTIVITY_END_TIME = "22:00"
+    LOCAL_DESTINATION_RADIUS_METERS = 80_000
+    WIDE_DESTINATION_RADIUS_METERS = 350_000
+    PREFECTURE_TOKENS = (
+        "北海道",
+        "青森県",
+        "岩手県",
+        "宮城県",
+        "秋田県",
+        "山形県",
+        "福島県",
+        "茨城県",
+        "栃木県",
+        "群馬県",
+        "埼玉県",
+        "千葉県",
+        "東京都",
+        "神奈川県",
+        "新潟県",
+        "富山県",
+        "石川県",
+        "福井県",
+        "山梨県",
+        "長野県",
+        "岐阜県",
+        "静岡県",
+        "愛知県",
+        "三重県",
+        "滋賀県",
+        "京都府",
+        "大阪府",
+        "兵庫県",
+        "奈良県",
+        "和歌山県",
+        "鳥取県",
+        "島根県",
+        "岡山県",
+        "広島県",
+        "山口県",
+        "徳島県",
+        "香川県",
+        "愛媛県",
+        "高知県",
+        "福岡県",
+        "佐賀県",
+        "長崎県",
+        "熊本県",
+        "大分県",
+        "宮崎県",
+        "鹿児島県",
+        "沖縄県",
+    )
     _SUSPECT_LOCATION_WORDS = {"test", "testing", "aaa", "aaaa", "abcde", "qwerty"}
 
     def __init__(self, trip_repository: TripRepository):
@@ -660,6 +711,7 @@ class TripService:
                 preference=aggregate.preference,
                 max_candidates=24,
                 must_visit_places=(generation_input or {}).get("must_visit_places"),
+                destination_location=(generation_input or {}).get("destination"),
             )
             route_options = await self._collect_route_options(
                 trip=aggregate.trip,
@@ -687,6 +739,7 @@ class TripService:
                 fallback_candidates=place_candidates,
                 route_options=route_options,
                 destination=aggregate.trip.destination,
+                destination_location=(generation_input or {}).get("destination"),
             )
             normalized, route_diagnostics = await self._rebuild_transport_items_from_routes(
                 trip=aggregate.trip,
@@ -1037,6 +1090,7 @@ class TripService:
         preference: Optional[TripPreference],
         max_candidates: int,
         must_visit_places: Optional[list[str]] = None,
+        destination_location: Optional[dict] = None,
     ) -> list[PlaceCandidate]:
         place_client = GooglePlacesClient()
         atmosphere_hint = preference.atmosphere.value if preference is not None else ""
@@ -1057,6 +1111,12 @@ class TripService:
         for query in queries:
             results = await place_client.search_text(query=query, max_results=per_query)
             for result in results:
+                if not self._is_place_candidate_allowed_for_destination_context(
+                    candidate=result,
+                    destination=destination,
+                    destination_location=destination_location,
+                ):
+                    continue
                 key = (result.name, result.address or "")
                 if key in seen:
                     continue
@@ -1344,6 +1404,7 @@ class TripService:
         fallback_candidates: list[PlaceCandidate],
         route_options: list[RouteOption],
         destination: str,
+        destination_location: Optional[dict] = None,
     ) -> dict[int, list[dict]]:
         by_day: dict[int, list[dict]] = {day.day_number: [] for day in days}
         candidate_map = {candidate.name: candidate for candidate in fallback_candidates}
@@ -1366,6 +1427,7 @@ class TripService:
                             item=item,
                             destination=destination,
                             candidate_map=candidate_map,
+                            destination_location=destination_location,
                         )
                     ):
                         by_day[day_number].append(item)
@@ -1403,10 +1465,9 @@ class TripService:
         item: dict,
         destination: str,
         candidate_map: dict[str, PlaceCandidate],
+        destination_location: Optional[dict] = None,
     ) -> bool:
         if self._is_transport_item_payload(item):
-            return True
-        if not self._is_okinawa_destination(destination):
             return True
 
         name = str(item.get("name") or "")
@@ -1415,10 +1476,29 @@ class TripService:
         candidate = candidate_map.get(name)
         candidate_address = candidate.address if candidate is not None else None
 
-        if self._contains_non_okinawa_prefecture(joined):
+        if self._contains_non_matching_prefecture(
+            text=joined,
+            allowed_prefectures=self._extract_destination_prefecture_tokens(destination),
+        ):
             return False
-        if candidate_address and self._contains_non_okinawa_prefecture(candidate_address):
+        if candidate_address and self._contains_non_matching_prefecture(
+            text=candidate_address,
+            allowed_prefectures=self._extract_destination_prefecture_tokens(destination),
+        ):
             return False
+
+        coordinates = self._resolve_item_or_candidate_coordinates(item=item, candidate=candidate)
+        if coordinates is not None and self._is_far_from_destination(
+            latitude=coordinates[0],
+            longitude=coordinates[1],
+            destination=destination,
+            destination_location=destination_location,
+        ):
+            return False
+
+        if not self._is_okinawa_destination(destination):
+            return True
+
         if self._contains_okinawa_keyword(joined):
             return True
         if candidate_address and self._contains_okinawa_keyword(candidate_address):
@@ -1433,6 +1513,27 @@ class TripService:
 
         return True
 
+    def _is_place_candidate_allowed_for_destination_context(
+        self,
+        candidate: PlaceCandidate,
+        destination: str,
+        destination_location: Optional[dict] = None,
+    ) -> bool:
+        joined = " ".join(part for part in (candidate.name, candidate.address) if part).strip()
+        if self._contains_non_matching_prefecture(
+            text=joined,
+            allowed_prefectures=self._extract_destination_prefecture_tokens(destination),
+        ):
+            return False
+        if candidate.latitude is not None and candidate.longitude is not None and self._is_far_from_destination(
+            latitude=candidate.latitude,
+            longitude=candidate.longitude,
+            destination=destination,
+            destination_location=destination_location,
+        ):
+            return False
+        return True
+
     @staticmethod
     def _is_okinawa_destination(destination: str) -> bool:
         text = (destination or "").strip()
@@ -1442,57 +1543,72 @@ class TripService:
     def _contains_okinawa_keyword(text: str) -> bool:
         return any(keyword in text for keyword in ("沖縄", "那覇", "恩納", "石垣", "宮古", "宜野湾", "名護", "浦添"))
 
-    @staticmethod
-    def _contains_non_okinawa_prefecture(text: str) -> bool:
-        prefecture_tokens = (
-            "北海道",
-            "青森県",
-            "岩手県",
-            "宮城県",
-            "秋田県",
-            "山形県",
-            "福島県",
-            "茨城県",
-            "栃木県",
-            "群馬県",
-            "埼玉県",
-            "千葉県",
-            "東京都",
-            "神奈川県",
-            "新潟県",
-            "富山県",
-            "石川県",
-            "福井県",
-            "山梨県",
-            "長野県",
-            "岐阜県",
-            "静岡県",
-            "愛知県",
-            "三重県",
-            "滋賀県",
-            "京都府",
-            "大阪府",
-            "兵庫県",
-            "奈良県",
-            "和歌山県",
-            "鳥取県",
-            "島根県",
-            "岡山県",
-            "広島県",
-            "山口県",
-            "徳島県",
-            "香川県",
-            "愛媛県",
-            "高知県",
-            "福岡県",
-            "佐賀県",
-            "長崎県",
-            "熊本県",
-            "大分県",
-            "宮崎県",
-            "鹿児島県",
+    def _extract_destination_prefecture_tokens(self, destination: str) -> set[str]:
+        text = (destination or "").strip()
+        if not text:
+            return set()
+
+        matched = {token for token in self.PREFECTURE_TOKENS if token in text}
+        if "沖縄" in text or "那覇" in text:
+            matched.add("沖縄県")
+        return matched
+
+    def _contains_non_matching_prefecture(self, text: str, allowed_prefectures: set[str]) -> bool:
+        if not text or not allowed_prefectures:
+            return False
+        return any(token in text for token in self.PREFECTURE_TOKENS if token not in allowed_prefectures)
+
+    def _resolve_item_or_candidate_coordinates(
+        self,
+        *,
+        item: dict,
+        candidate: Optional[PlaceCandidate],
+    ) -> Optional[tuple[float, float]]:
+        latitude = item.get("latitude")
+        longitude = item.get("longitude")
+        if isinstance(latitude, (int, float)) and isinstance(longitude, (int, float)):
+            return float(latitude), float(longitude)
+        if candidate is not None and candidate.latitude is not None and candidate.longitude is not None:
+            return candidate.latitude, candidate.longitude
+        return None
+
+    def _is_destination_scope_wide(self, destination: str) -> bool:
+        text = (destination or "").strip()
+        if not text:
+            return False
+        return (
+            "北海道" in text
+            or "沖縄" in text
+            or any(token in text for token in self.PREFECTURE_TOKENS)
+            or any(marker in text for marker in ("都", "道", "府", "県"))
         )
-        return any(token in text for token in prefecture_tokens)
+
+    def _destination_radius_meters(self, destination: str) -> int:
+        if self._is_destination_scope_wide(destination):
+            return self.WIDE_DESTINATION_RADIUS_METERS
+        return self.LOCAL_DESTINATION_RADIUS_METERS
+
+    def _is_far_from_destination(
+        self,
+        *,
+        latitude: float,
+        longitude: float,
+        destination: str,
+        destination_location: Optional[dict] = None,
+    ) -> bool:
+        if not isinstance(destination_location, dict):
+            return False
+        destination_latitude = destination_location.get("latitude")
+        destination_longitude = destination_location.get("longitude")
+        if not isinstance(destination_latitude, (int, float)) or not isinstance(destination_longitude, (int, float)):
+            return False
+        distance = self._estimate_distance_to_coordinates(
+            latitude,
+            longitude,
+            float(destination_latitude),
+            float(destination_longitude),
+        )
+        return distance > self._destination_radius_meters(destination)
 
     @staticmethod
     def _is_within_okinawa_bounds(latitude: float, longitude: float) -> bool:

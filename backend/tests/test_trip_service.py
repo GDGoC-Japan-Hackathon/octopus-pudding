@@ -302,6 +302,42 @@ def test_merge_generated_itinerary_items_by_scope_replace_item_swaps_selected_pl
     assert [item.sequence for item in merged] == [1, 2, 3, 4, 5]
 
 
+def test_place_candidate_filter_rejects_tokyo_shop_for_hokkaido_destination():
+    service = TripService(FakeTripRepository([]))
+    candidate = PlaceCandidate(
+        name="北海道イタリアン ミアボッカ",
+        address="東京都新宿区西新宿1-1-1",
+        latitude=35.6900,
+        longitude=139.7000,
+    )
+
+    allowed = service._is_place_candidate_allowed_for_destination_context(
+        candidate=candidate,
+        destination="北海道",
+        destination_location={"latitude": 43.0642, "longitude": 141.3469},
+    )
+
+    assert allowed is False
+
+
+def test_place_candidate_filter_keeps_hokkaido_spot_for_hokkaido_destination():
+    service = TripService(FakeTripRepository([]))
+    candidate = PlaceCandidate(
+        name="大通公園",
+        address="北海道札幌市中央区大通西1丁目",
+        latitude=43.0605,
+        longitude=141.3545,
+    )
+
+    allowed = service._is_place_candidate_allowed_for_destination_context(
+        candidate=candidate,
+        destination="北海道",
+        destination_location={"latitude": 43.0642, "longitude": 141.3469},
+    )
+
+    assert allowed is True
+
+
 @pytest.mark.asyncio
 async def test_update_trip_cover_image_from_itinerary_uses_matching_place_photo(monkeypatch):
     trip = make_trip(1, destination="箱根")
