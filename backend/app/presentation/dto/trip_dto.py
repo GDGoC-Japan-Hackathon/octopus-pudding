@@ -1,8 +1,9 @@
 from datetime import date as dt_date
 from datetime import datetime
+import math
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator, root_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, root_validator
 
 from app.domain.entities.trip import TripAtmosphere
 
@@ -246,6 +247,34 @@ class ReplanAggregateResponse(BaseModel):
 
 
 class AiPlanGenerationCreate(BaseModel):
+    class LocationLatLng(BaseModel):
+        latitude: float
+        longitude: float
+
+        @field_validator("latitude", "longitude", mode="before")
+        @classmethod
+        def validate_numeric_type(cls, value):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError("latitude/longitude must be numeric")
+            return float(value)
+
+        @field_validator("latitude")
+        @classmethod
+        def validate_latitude(cls, value: float) -> float:
+            if not math.isfinite(value) or value < -90 or value > 90:
+                raise ValueError("latitude must be between -90 and 90")
+            return value
+
+        @field_validator("longitude")
+        @classmethod
+        def validate_longitude(cls, value: float) -> float:
+            if not math.isfinite(value) or value < -180 or value > 180:
+                raise ValueError("longitude must be between -180 and 180")
+            return value
+
+    origin: LocationLatLng
+    destination: LocationLatLng
+    lodging: Optional[LocationLatLng] = None
     provider: Optional[str] = None
     prompt_version: Optional[str] = None
     run_async: bool = True

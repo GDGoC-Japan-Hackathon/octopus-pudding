@@ -2,6 +2,7 @@ import { type CreateAiPlanGenerationRequest } from '@/features/trips/types/ai-pl
 import { type TripDetailAggregateResponse } from '@/features/trips/types/trip-detail';
 import { type CreateTripFormValues } from '@/features/trips/utils/create-trip';
 import { defaultCreateTripFormValues } from '@/features/trips/utils/create-trip-draft';
+import * as Location from 'expo-location';
 
 export function buildTripPlanFormValues(detail: TripDetailAggregateResponse): CreateTripFormValues {
   const participantCount = Math.max(1, detail.trip.participant_count ?? 1);
@@ -30,10 +31,36 @@ export function buildTripPlanFormValues(detail: TripDetailAggregateResponse): Cr
   };
 }
 
-export function buildAiGenerationRequestFromForm(
-  formValues: CreateTripFormValues
-): CreateAiPlanGenerationRequest {
+async function geocodeToLatLng(label: string, fieldLabel: string) {
+  const query = label.trim();
+  if (!query) {
+    throw new Error(`${fieldLabel}が未入力です。`);
+  }
+  const results = await Location.geocodeAsync(query);
+  const top = results[0];
+  if (!top) {
+    throw new Error(`${fieldLabel}の座標を特定できませんでした。入力を確認してください。`);
+  }
   return {
+    latitude: top.latitude,
+    longitude: top.longitude,
+  };
+}
+
+export async function buildAiGenerationRequestFromForm(
+  formValues: CreateTripFormValues
+): Promise<CreateAiPlanGenerationRequest> {
+  const [origin, destination] = await Promise.all([
+    geocodeToLatLng(formValues.origin, '出発地'),
+    geocodeToLatLng(formValues.destination, '目的地'),
+  ]);
+  const lodgingLabel = formValues.accommodationNotesByDay.find((item) => item.trim());
+  const lodging = lodgingLabel ? await geocodeToLatLng(lodgingLabel, '宿泊地') : undefined;
+
+  return {
+    origin,
+    destination,
+    lodging,
     run_async: false,
     must_visit_places: formValues.mustVisitPlacesText
       .split(/[\n,、]/)

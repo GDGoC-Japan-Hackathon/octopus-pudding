@@ -3,13 +3,14 @@ import DateTimePicker, {
   DateTimePickerAndroid,
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Platform,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
   type StyleProp,
   type ViewStyle,
@@ -225,9 +226,12 @@ export function ScheduleField({
   style,
   disabled = false,
 }: ScheduleFieldProps) {
+  const isWeb = Platform.OS === 'web';
   const [isIosDateModalVisible, setIsIosDateModalVisible] = useState(false);
   const [iosDraftStartDate, setIosDraftStartDate] = useState<Date | null>(() => parseDateInput(startDate));
   const [iosDraftEndDate, setIosDraftEndDate] = useState<Date | null>(() => parseDateInput(endDate));
+  const [webStartDateInput, setWebStartDateInput] = useState(startDate);
+  const [webEndDateInput, setWebEndDateInput] = useState(endDate);
   const todayDate = useMemo(() => getTodayDate(), []);
 
   const applyDateField = useCallback(
@@ -314,6 +318,14 @@ export function ScheduleField({
     setIsIosDateModalVisible(true);
   }, [disabled, openAndroidDatePicker, startDate, endDate]);
 
+  useEffect(() => {
+    if (!isWeb) {
+      return;
+    }
+    setWebStartDateInput(startDate);
+    setWebEndDateInput(endDate);
+  }, [endDate, isWeb, startDate]);
+
   const iosStartPickerValue = useMemo(() => iosDraftStartDate ?? todayDate, [iosDraftStartDate, todayDate]);
   const iosEndPickerValue = useMemo(() => iosDraftEndDate ?? iosDraftStartDate ?? todayDate, [iosDraftEndDate, iosDraftStartDate, todayDate]);
   const iosEndPickerMinimumDate = useMemo(() => iosDraftStartDate ?? undefined, [iosDraftStartDate]);
@@ -338,6 +350,7 @@ export function ScheduleField({
   const iosDraftScheduleLabel = useMemo(() => {
     return formatDraftDateRangeLabel(iosDraftStartDate, iosDraftEndDate);
   }, [iosDraftEndDate, iosDraftStartDate]);
+  const nonAndroidPickerDisplay = Platform.OS === 'ios' ? 'spinner' : 'default';
 
   const hasSelectedDates = Boolean(startDate || endDate);
   const iosDraftStartLabel = iosDraftStartDate ? formatDateDisplay(formatDateInput(iosDraftStartDate)) : '開始日を選択';
@@ -374,6 +387,85 @@ export function ScheduleField({
     onChangeEndDate(iosDraftEndDate ? formatDateInput(iosDraftEndDate) : '');
     setIsIosDateModalVisible(false);
   }, [iosDraftEndDate, iosDraftStartDate, onChangeEndDate, onChangeStartDate]);
+
+  const commitWebDates = useCallback(() => {
+    const startText = webStartDateInput.trim();
+    const endText = webEndDateInput.trim();
+    const parsedStart = startText ? parseDateInput(startText) : null;
+    const parsedEnd = endText ? parseDateInput(endText) : null;
+
+    if (startText && !parsedStart) {
+      Alert.alert('日程の形式エラー', '開始日は YYYY-MM-DD 形式で入力してください。');
+      return;
+    }
+    if (endText && !parsedEnd) {
+      Alert.alert('日程の形式エラー', '終了日は YYYY-MM-DD 形式で入力してください。');
+      return;
+    }
+
+    if (!parsedStart && !parsedEnd) {
+      onChangeStartDate('');
+      onChangeEndDate('');
+      return;
+    }
+
+    if (parsedStart && parsedEnd) {
+      const next = buildNextDateRange({
+        field: 'endDate',
+        selectedDate: parsedEnd,
+        currentStartDate: parsedStart,
+        currentEndDate: parsedEnd,
+        maxTripDays,
+      });
+      onChangeStartDate(next.startDate ? formatDateInput(next.startDate) : '');
+      onChangeEndDate(next.endDate ? formatDateInput(next.endDate) : '');
+      return;
+    }
+
+    if (parsedStart) {
+      onChangeStartDate(formatDateInput(parsedStart));
+      onChangeEndDate('');
+      return;
+    }
+
+    onChangeStartDate(formatDateInput(parsedEnd!));
+    onChangeEndDate(formatDateInput(parsedEnd!));
+  }, [maxTripDays, onChangeEndDate, onChangeStartDate, webEndDateInput, webStartDateInput]);
+
+  if (isWeb) {
+    return (
+      <View style={style}>
+        <FieldLabel label={label} required={required} iconName={iconName} />
+        <View style={styles.webDateRow}>
+          <TextInput
+            value={webStartDateInput}
+            onChangeText={setWebStartDateInput}
+            onBlur={commitWebDates}
+            placeholder="開始日 YYYY-MM-DD"
+            placeholderTextColor="#94A3B8"
+            style={styles.webDateInput}
+            autoCapitalize="none"
+          />
+          <TextInput
+            value={webEndDateInput}
+            onChangeText={setWebEndDateInput}
+            onBlur={commitWebDates}
+            placeholder="終了日 YYYY-MM-DD"
+            placeholderTextColor="#94A3B8"
+            style={styles.webDateInput}
+            autoCapitalize="none"
+          />
+          <Pressable
+            style={[styles.scheduleResetButton, !hasSelectedDates ? styles.scheduleResetButtonDisabled : null]}
+            onPress={handleResetDates}
+            disabled={!hasSelectedDates}
+          >
+            <MaterialIcons name="close" size={20} color={hasSelectedDates ? '#64748B' : '#CBD5E1'} />
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={style}>
@@ -441,7 +533,7 @@ export function ScheduleField({
                 </View>
                 <DateTimePicker
                   mode="date"
-                  display="compact"
+                  display={nonAndroidPickerDisplay}
                   themeVariant="light"
                   value={iosStartPickerValue}
                   onChange={handleIosFieldChange('startDate')}
@@ -456,7 +548,7 @@ export function ScheduleField({
                 </View>
                 <DateTimePicker
                   mode="date"
-                  display="compact"
+                  display={nonAndroidPickerDisplay}
                   themeVariant="light"
                   value={iosEndPickerValue}
                   minimumDate={iosEndPickerMinimumDate}
@@ -560,6 +652,23 @@ const styles = StyleSheet.create({
   scheduleResetButtonDisabled: {
     backgroundColor: '#FFFFFF',
     borderColor: '#E2E8F0',
+  },
+  webDateRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  webDateInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: '#0F172A',
   },
   scheduleHelperText: {
     fontSize: 12,

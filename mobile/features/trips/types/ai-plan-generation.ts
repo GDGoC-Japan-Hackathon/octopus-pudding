@@ -1,6 +1,14 @@
 export type AiPlanGenerationStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 
+export type LatLngInput = {
+  latitude: number;
+  longitude: number;
+};
+
 export type CreateAiPlanGenerationRequest = {
+  origin: LatLngInput;
+  destination: LatLngInput;
+  lodging?: LatLngInput | null;
   provider?: string;
   prompt_version?: string;
   run_async?: boolean;

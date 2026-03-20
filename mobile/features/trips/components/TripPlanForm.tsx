@@ -158,7 +158,7 @@ export function TripPlanForm({
       longitude: currentPosition.coords.longitude,
     });
 
-    const areaParts = [place?.region, place?.city, place?.district].filter(
+    const areaParts = [place?.region, place?.subregion, place?.city, place?.district].filter(
       (value): value is string => Boolean(value && value.trim())
     );
 
@@ -166,7 +166,11 @@ export function TripPlanForm({
       return areaParts.join(' ');
     }
 
-    return `${currentPosition.coords.latitude.toFixed(4)}, ${currentPosition.coords.longitude.toFixed(4)}`;
+    if (place?.name && place.name.trim()) {
+      return place.name.trim();
+    }
+
+    throw new Error('現在地の住所を特定できませんでした。位置情報設定を確認して再度お試しください。');
   }, []);
 
   const handleUseCurrentLocation = useCallback(async () => {

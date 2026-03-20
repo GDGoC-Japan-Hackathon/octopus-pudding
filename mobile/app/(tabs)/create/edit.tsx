@@ -134,11 +134,19 @@ export default function EditTripScreen() {
       .filter((member) => member.role !== 'owner')
       .map((member) => member.user_id);
     await syncTripMembers(tripId, currentMemberUserIds, selectedCompanionUserIds);
-    const sortedDays = [...detail.days].sort((a, b) => a.day_number - b.day_number);
-    await syncTripDayLodgingNotes(
+
+    let generationRequest;
+    try {
+      generationRequest = await buildAiGenerationRequestFromForm(formValues);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '座標の解決に失敗しました。';
+      Alert.alert('入力エラー', message);
+      return;
+    }
+
+    const generation = await createAiPlanGeneration(
       tripId,
-      sortedDays.map((day) => day.id),
-      formValues.accommodationNotesByDay
+      generationRequest
     );
 
     router.replace({

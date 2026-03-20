@@ -1,15 +1,25 @@
 import asyncio
 import json
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
-from typing import Optional
-from urllib import error, request
 import logging
+import socket
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from time import perf_counter
+from typing import Literal, Optional
+from urllib import error, parse, request
 
-from app.infrastructure.external.google_places_client import PlaceCandidate
 from app.shared.config import settings
 
 logger = logging.getLogger(__name__)
+
+DirectionsMode = Literal["driving", "walking", "transit"]
+
+
+class DirectionsAPIError(RuntimeError):
+    def __init__(self, status: str, error_message: Optional[str] = None):
+        self.status = status
+        self.error_message = error_message
+        super().__init__(f"Google Directions API error: status={status}, error_message={error_message}")
 
 
 @dataclass
@@ -60,6 +70,21 @@ class RouteOption:
         return data
 
 
+@dataclass
+class RouteDiagnostics:
+    transit_attempted_pairs: int = 0
+    transit_succeeded_pairs: int = 0
+    transit_empty_pairs: int = 0
+    transit_timeout_pairs: int = 0
+    transit_exception_pairs: int = 0
+    transit_fallback_info_pairs: int = 0
+    walk_fallback_pairs: int = 0
+    drive_fallback_pairs: int = 0
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
 class RoutesClient:
     def __init__(
         self,
@@ -67,517 +92,364 @@ class RoutesClient:
         endpoint: Optional[str] = None,
     ) -> None:
         self.api_key = api_key or settings.google_routes_api_key
-        self.endpoint = endpoint or settings.google_routes_endpoint
-        if not self.api_key and settings.google_places_api_key:
-            logger.warning(
-                "RoutesClient: GOOGLE_ROUTES_API_KEY is empty. GOOGLE_PLACES_API_KEY is set but will not be used for routes."
-            )
+        self.directions_endpoint = endpoint or settings.google_directions_endpoint
+        self.connect_timeout_seconds = settings.google_routes_connect_timeout_seconds
+        self.read_timeout_seconds = settings.google_routes_read_timeout_seconds
+
+    def fetch_directions(
+        self,
+        *,
+        origin: str,
+        destination: str,
+        mode: DirectionsMode,
+    ) -> dict:
+        response = self._request_directions(origin=origin, destination=destination, mode=mode)
+        return self._extract_summary(response)
 
     async def compute_route_options(
         self,
-        origin: PlaceCandidate,
-        destination: PlaceCandidate,
+        origin: str,
+        destination: str,
         departure_time: Optional[datetime] = None,
     ) -> list[RouteOption]:
-        if not self.api_key:
-            raise RuntimeError("Google Routes API key is not configured")
-        if origin.latitude is None or origin.longitude is None:
-            return []
-        if destination.latitude is None or destination.longitude is None:
-            return []
-
-        departure = departure_time or datetime.now(timezone.utc)
-        requests = [
-            ("WALK", None),
-            ("TRANSIT", "BUS"),
-            ("TRANSIT", "TRAIN"),
-        ]
-        results = await asyncio.gather(
-            *[
-                asyncio.to_thread(
-                    self._compute_route_sync,
+        _ = departure_time
+        route_options: list[RouteOption] = []
+        for mode in ("walking", "transit"):
+            try:
+                response = await asyncio.to_thread(
+                    self._request_directions,
                     origin,
                     destination,
-                    departure,
-                    travel_mode,
-                    transit_subtype,
+                    mode,
                 )
-                for travel_mode, transit_subtype in requests
-            ],
-            return_exceptions=True,
-        )
+            except DirectionsAPIError as exc:
+                logger.warning(
+                    "RoutesClient option request failed: origin=%s destination=%s mode=%s status=%s error=%s",
+                    origin,
+                    destination,
+                    mode,
+                    exc.status,
+                    exc.error_message,
+                )
+                continue
+            except Exception:
+                logger.exception(
+                    "RoutesClient option request exception: origin=%s destination=%s mode=%s",
+                    origin,
+                    destination,
+                    mode,
+                )
+                continue
 
-        route_options: list[RouteOption] = []
-        for result in results:
-            if isinstance(result, RouteOption):
-                route_options.append(result)
+            summary = self._extract_summary(response)
+            route_options.append(
+                RouteOption(
+                    from_name=origin,
+                    to_name=destination,
+                    travel_mode=self._map_mode_for_option(mode),
+                    duration_minutes=self._extract_duration_minutes(response),
+                    distance_meters=self._extract_distance_meters(response),
+                    summary=f"{summary['duration']} / {summary['distance']}",
+                )
+            )
+
         return route_options
 
     async def compute_route_steps(
         self,
-        origin: PlaceCandidate,
-        destination: PlaceCandidate,
+        origin: str,
+        destination: str,
         departure_time: Optional[datetime] = None,
     ) -> list[RouteStep]:
-        if not self.api_key:
-            raise RuntimeError("Google Routes API key is not configured")
-        if origin.latitude is None or origin.longitude is None:
-            return []
-        if destination.latitude is None or destination.longitude is None:
-            return []
-        departure = departure_time or datetime.now(timezone.utc)
-        primary_steps = await asyncio.to_thread(
-            self._compute_route_steps_sync,
+        route_steps, _ = await self.compute_route_steps_with_diagnostics(
+            origin=origin,
+            destination=destination,
+            departure_time=departure_time,
+        )
+        return route_steps
+
+    async def compute_route_steps_with_diagnostics(
+        self,
+        origin: str,
+        destination: str,
+        departure_time: Optional[datetime] = None,
+    ) -> tuple[list[RouteStep], dict]:
+        _ = departure_time
+
+        diagnostics = RouteDiagnostics()
+        diagnostics.transit_attempted_pairs += 1
+
+        try:
+            transit_response = await asyncio.to_thread(
+                self._request_directions,
+                origin,
+                destination,
+                "transit",
+            )
+            diagnostics.transit_succeeded_pairs += 1
+            return [
+                self._summary_response_to_step(transit_response, origin, destination, "transit")
+            ], diagnostics.to_dict()
+        except DirectionsAPIError as exc:
+            normalized = exc.status.upper()
+            if normalized in {"ZERO_RESULTS", "NOT_FOUND"}:
+                diagnostics.transit_empty_pairs += 1
+            elif normalized == "TIMEOUT":
+                diagnostics.transit_timeout_pairs += 1
+            else:
+                diagnostics.transit_exception_pairs += 1
+            logger.warning(
+                "RoutesClient transit failed: origin=%s destination=%s status=%s error=%s",
+                origin,
+                destination,
+                exc.status,
+                exc.error_message,
+            )
+        except Exception:
+            diagnostics.transit_exception_pairs += 1
+            logger.exception("RoutesClient transit exception: origin=%s destination=%s", origin, destination)
+
+        for mode in ("walking", "driving"):
+            try:
+                response = await asyncio.to_thread(
+                    self._request_directions,
+                    origin,
+                    destination,
+                    mode,
+                )
+                if mode == "walking":
+                    diagnostics.walk_fallback_pairs += 1
+                else:
+                    diagnostics.drive_fallback_pairs += 1
+                return [self._summary_response_to_step(response, origin, destination, mode)], diagnostics.to_dict()
+            except Exception:
+                logger.exception(
+                    "RoutesClient %s fallback failed: origin=%s destination=%s",
+                    mode,
+                    origin,
+                    destination,
+                )
+
+        return [], diagnostics.to_dict()
+
+    def _request_directions(self, origin: str, destination: str, mode: DirectionsMode) -> dict:
+        self._validate_inputs(origin=origin, destination=destination, mode=mode)
+
+        params = {
+            "origin": origin,
+            "destination": destination,
+            "mode": mode,
+            "language": "ja",
+            "key": self.api_key,
+        }
+        url = f"{self.directions_endpoint}?{parse.urlencode(params)}"
+
+        logger.info(
+            "RoutesClient directions request: origin=%s destination=%s mode=%s",
             origin,
             destination,
-            departure,
-            None,
+            mode,
         )
-        if primary_steps:
-            return primary_steps
 
-        bus_steps, train_steps = await asyncio.gather(
-            asyncio.to_thread(
-                self._compute_route_steps_sync,
-                origin,
-                destination,
-                departure,
-                "BUS",
-            ),
-            asyncio.to_thread(
-                self._compute_route_steps_sync,
-                origin,
-                destination,
-                departure,
-                "TRAIN",
-            ),
-        )
-        candidates = [steps for steps in (bus_steps, train_steps) if steps]
-        if not candidates:
-            return []
-        return min(candidates, key=self._total_step_minutes)
-
-    def _compute_route_sync(
-        self,
-        origin: PlaceCandidate,
-        destination: PlaceCandidate,
-        departure_time: datetime,
-        travel_mode: str,
-        transit_subtype: Optional[str],
-    ) -> Optional[RouteOption]:
-        payload: dict = {
-            "origin": {
-                "location": {
-                    "latLng": {
-                        "latitude": origin.latitude,
-                        "longitude": origin.longitude,
-                    }
-                }
-            },
-            "destination": {
-                "location": {
-                    "latLng": {
-                        "latitude": destination.latitude,
-                        "longitude": destination.longitude,
-                    }
-                }
-            },
-            "travelMode": travel_mode,
-            "languageCode": settings.google_places_language_code,
-            "regionCode": settings.google_places_region_code,
-            "units": "METRIC",
-        }
-        if travel_mode == "TRANSIT":
-            payload["departureTime"] = departure_time.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-            if transit_subtype == "BUS":
-                payload["transitPreferences"] = {
-                    "allowedTravelModes": ["BUS"],
-                    "routingPreference": "LESS_WALKING",
-                }
-            elif transit_subtype == "TRAIN":
-                payload["transitPreferences"] = {
-                    "allowedTravelModes": ["TRAIN", "RAIL", "SUBWAY", "LIGHT_RAIL"],
-                    "routingPreference": "FEWER_TRANSFERS",
-                }
-
-        body = json.dumps(payload).encode("utf-8")
-        headers = {
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": self.api_key,
-            "X-Goog-FieldMask": (
-                "routes.duration,"
-                "routes.distanceMeters,"
-                "routes.legs.steps.travelMode,"
-                "routes.legs.steps.navigationInstruction.instructions,"
-                "routes.legs.steps.transitDetails.stopDetails.departureTime,"
-                "routes.legs.steps.transitDetails.stopDetails.arrivalTime,"
-                "routes.legs.steps.transitDetails.transitLine.name,"
-                "routes.legs.steps.transitDetails.transitLine.nameShort,"
-                "routes.legs.steps.transitDetails.transitLine.vehicle.name.text,"
-                "routes.legs.steps.transitDetails.transitLine.vehicle.type"
-            ),
-        }
-        req = request.Request(self.endpoint, data=body, headers=headers, method="POST")
+        req = request.Request(url, method="GET")
+        started = perf_counter()
         try:
-            with request.urlopen(req, timeout=20) as resp:
+            with request.urlopen(req, timeout=self._effective_timeout_seconds) as resp:
                 raw = resp.read().decode("utf-8")
-        except error.HTTPError as e:
-            error_body: Optional[str]
+        except error.HTTPError as exc:
+            body = None
             try:
-                error_body = e.read().decode("utf-8")
+                body = exc.read().decode("utf-8")
             except Exception:
-                error_body = None
+                body = None
             logger.error(
-                "RoutesClient HTTPError when calling routes API: status=%s, reason=%s, body=%s",
-                getattr(e, "code", None),
-                getattr(e, "reason", None),
-                error_body,
+                "RoutesClient directions HTTPError: origin=%s destination=%s mode=%s status=%s reason=%s body=%s",
+                origin,
+                destination,
+                mode,
+                getattr(exc, "code", None),
+                getattr(exc, "reason", None),
+                body,
             )
-            return None
-        except error.URLError as e:
-            logger.error(
-                "RoutesClient URLError when calling routes API: reason=%s",
-                getattr(e, "reason", None),
-            )
-            return None
-
-        response = json.loads(raw)
-        routes = response.get("routes", []) or []
-        if not routes:
-            return None
-        route = routes[0]
-        duration_minutes = self._duration_to_minutes(route.get("duration"))
-        distance_meters = route.get("distanceMeters")
-        departure_time, arrival_time, line_name, vehicle_type = self._extract_transit_metadata(route)
-        mode_label = self._mode_label(travel_mode, transit_subtype)
-        summary = self._build_summary(mode_label, duration_minutes, distance_meters, line_name)
-        return RouteOption(
-            from_name=origin.name,
-            to_name=destination.name,
-            travel_mode=travel_mode,
-            transit_subtype=transit_subtype,
-            duration_minutes=duration_minutes,
-            distance_meters=distance_meters if isinstance(distance_meters, int) else None,
-            summary=summary,
-            departure_time=departure_time,
-            arrival_time=arrival_time,
-            line_name=line_name,
-            vehicle_type=vehicle_type,
-        )
-
-    def _compute_route_steps_sync(
-        self,
-        origin: PlaceCandidate,
-        destination: PlaceCandidate,
-        departure_time: datetime,
-        transit_subtype: Optional[str] = None,
-    ) -> list[RouteStep]:
-        payload: dict = {
-            "origin": {
-                "location": {
-                    "latLng": {
-                        "latitude": origin.latitude,
-                        "longitude": origin.longitude,
-                    }
-                }
-            },
-            "destination": {
-                "location": {
-                    "latLng": {
-                        "latitude": destination.latitude,
-                        "longitude": destination.longitude,
-                    }
-                }
-            },
-            "travelMode": "TRANSIT",
-            "languageCode": settings.google_places_language_code,
-            "regionCode": settings.google_places_region_code,
-            "units": "METRIC",
-            "departureTime": departure_time.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
-        }
-        if transit_subtype == "BUS":
-            payload["transitPreferences"] = {
-                "allowedTravelModes": ["BUS"],
-                "routingPreference": "LESS_WALKING",
-            }
-        elif transit_subtype == "TRAIN":
-            payload["transitPreferences"] = {
-                "allowedTravelModes": ["TRAIN", "RAIL", "SUBWAY", "LIGHT_RAIL"],
-                "routingPreference": "FEWER_TRANSFERS",
-            }
-
-        body = json.dumps(payload).encode("utf-8")
-        headers = {
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": self.api_key,
-            "X-Goog-FieldMask": (
-                "routes.duration,"
-                "routes.distanceMeters,"
-                "routes.legs.steps.distanceMeters,"
-                "routes.legs.steps.staticDuration,"
-                "routes.legs.steps.travelMode,"
-                "routes.legs.steps.navigationInstruction.instructions,"
-                "routes.legs.steps.transitDetails.stopDetails.departureTime,"
-                "routes.legs.steps.transitDetails.stopDetails.arrivalTime,"
-                "routes.legs.steps.transitDetails.stopDetails.departureStop.name,"
-                "routes.legs.steps.transitDetails.stopDetails.arrivalStop.name,"
-                "routes.legs.steps.transitDetails.transitLine.name,"
-                "routes.legs.steps.transitDetails.transitLine.nameShort,"
-                "routes.legs.steps.transitDetails.transitLine.vehicle.name.text,"
-                "routes.legs.steps.transitDetails.transitLine.vehicle.type"
-            ),
-        }
-        logger.info(
-            "RoutesClient transit request: origin=%s destination=%s departure_time=%s subtype=%s field_mask=%s",
-            origin.name,
-            destination.name,
-            payload["departureTime"],
-            transit_subtype or "ANY",
-            headers["X-Goog-FieldMask"],
-        )
-        req = request.Request(self.endpoint, data=body, headers=headers, method="POST")
-        try:
-            with request.urlopen(req, timeout=20) as resp:
-                raw = resp.read().decode("utf-8")
-                logger.debug(
-                    "RoutesClient transit raw response: origin=%s destination=%s subtype=%s body=%s",
-                    origin.name,
-                    destination.name,
-                    transit_subtype or "ANY",
-                    raw[:500],
+            raise DirectionsAPIError(status="HTTP_ERROR", error_message=body)
+        except error.URLError as exc:
+            if self._is_timeout_exception(exc):
+                logger.error(
+                    "RoutesClient directions timeout: origin=%s destination=%s mode=%s reason=%s",
+                    origin,
+                    destination,
+                    mode,
+                    getattr(exc, "reason", None),
                 )
-        except Exception:
-            logger.exception(
-                "RoutesClient transit request failed: origin=%s destination=%s subtype=%s",
-                origin.name,
-                destination.name,
-                transit_subtype or "ANY",
+                raise DirectionsAPIError(status="TIMEOUT", error_message=str(getattr(exc, "reason", "timeout")))
+            logger.error(
+                "RoutesClient directions URLError: origin=%s destination=%s mode=%s reason=%s",
+                origin,
+                destination,
+                mode,
+                getattr(exc, "reason", None),
             )
-            return []
+            raise DirectionsAPIError(
+                status="NETWORK_ERROR", error_message=str(getattr(exc, "reason", "network error"))
+            )
+        except Exception as exc:
+            if self._is_timeout_exception(exc):
+                logger.error(
+                    "RoutesClient directions timeout exception: origin=%s destination=%s mode=%s",
+                    origin,
+                    destination,
+                    mode,
+                )
+                raise DirectionsAPIError(status="TIMEOUT", error_message=str(exc))
+            logger.exception(
+                "RoutesClient directions request failed: origin=%s destination=%s mode=%s", origin, destination, mode
+            )
+            raise DirectionsAPIError(status="REQUEST_FAILED", error_message=str(exc))
+        finally:
+            elapsed_ms = (perf_counter() - started) * 1000
+            logger.info(
+                "RoutesClient directions elapsed: origin=%s destination=%s mode=%s elapsed_ms=%.1f",
+                origin,
+                destination,
+                mode,
+                elapsed_ms,
+            )
 
         try:
             response = json.loads(raw)
-        except Exception:
-            logger.exception(
-                "RoutesClient transit response JSON decode failed: origin=%s destination=%s subtype=%s",
-                origin.name,
-                destination.name,
-                transit_subtype or "ANY",
+        except json.JSONDecodeError as exc:
+            logger.error(
+                "RoutesClient directions json decode failed: origin=%s destination=%s mode=%s",
+                origin,
+                destination,
+                mode,
             )
-            return []
-        routes = response.get("routes", []) or []
-        if not routes:
+            raise DirectionsAPIError(status="INVALID_JSON", error_message=str(exc))
+
+        api_status = str(response.get("status") or "")
+        if api_status != "OK":
+            message = response.get("error_message")
             logger.warning(
-                "RoutesClient transit response empty: origin=%s destination=%s subtype=%s",
-                origin.name,
-                destination.name,
-                transit_subtype or "ANY",
+                "RoutesClient directions non-ok status: origin=%s destination=%s mode=%s status=%s error_message=%s",
+                origin,
+                destination,
+                mode,
+                api_status,
+                message,
             )
-            return []
+            raise DirectionsAPIError(status=api_status or "UNKNOWN", error_message=message)
+
+        return response
+
+    @staticmethod
+    def _extract_summary(response: dict) -> dict:
+        routes = response.get("routes") or []
+        if not routes:
+            logger.error("RoutesClient directions parse failed: routes missing")
+            raise DirectionsAPIError(status="PARSE_ERROR", error_message="routes is empty")
+
         route = routes[0]
-        logger.info(
-            "RoutesClient transit response summary: origin=%s destination=%s subtype=%s transit_steps=%s total_steps=%s",
-            origin.name,
-            destination.name,
-            transit_subtype or "ANY",
-            self._count_transit_steps(route),
-            self._count_total_steps(route),
+        legs = route.get("legs") or []
+        if not legs:
+            logger.error("RoutesClient directions parse failed: legs missing")
+            raise DirectionsAPIError(status="PARSE_ERROR", error_message="legs is empty")
+
+        leg = legs[0]
+        distance = (leg.get("distance") or {}).get("text")
+        duration = (leg.get("duration") or {}).get("text")
+        polyline = (route.get("overview_polyline") or {}).get("points")
+
+        if not isinstance(distance, str) or not distance.strip():
+            raise DirectionsAPIError(status="PARSE_ERROR", error_message="distance.text is missing")
+        if not isinstance(duration, str) or not duration.strip():
+            raise DirectionsAPIError(status="PARSE_ERROR", error_message="duration.text is missing")
+        if not isinstance(polyline, str) or not polyline.strip():
+            raise DirectionsAPIError(status="PARSE_ERROR", error_message="overview_polyline.points is missing")
+
+        return {
+            "distance": distance,
+            "duration": duration,
+            "polyline": polyline,
+        }
+
+    @staticmethod
+    def _extract_duration_minutes(response: dict) -> Optional[int]:
+        routes = response.get("routes") or []
+        if not routes:
+            return None
+        legs = routes[0].get("legs") or []
+        if not legs:
+            return None
+        seconds = (legs[0].get("duration") or {}).get("value")
+        if not isinstance(seconds, (int, float)):
+            return None
+        return max(1, round(float(seconds) / 60))
+
+    @staticmethod
+    def _extract_distance_meters(response: dict) -> Optional[int]:
+        routes = response.get("routes") or []
+        if not routes:
+            return None
+        legs = routes[0].get("legs") or []
+        if not legs:
+            return None
+        value = (legs[0].get("distance") or {}).get("value")
+        if not isinstance(value, int):
+            return None
+        return value
+
+    def _summary_response_to_step(
+        self, response: dict, origin: str, destination: str, mode: DirectionsMode
+    ) -> RouteStep:
+        return RouteStep(
+            travel_mode=self._map_mode_for_step(mode),
+            transit_subtype="TRAIN" if mode == "transit" else None,
+            duration_minutes=self._extract_duration_minutes(response),
+            distance_meters=self._extract_distance_meters(response),
+            from_name=origin,
+            to_name=destination,
+            notes="Google Directions API",
         )
-        return self._extract_route_steps(route, origin.name, destination.name)
 
     @staticmethod
-    def _duration_to_minutes(value: Optional[str]) -> Optional[int]:
-        if not value or not isinstance(value, str) or not value.endswith("s"):
-            return None
-        try:
-            seconds = float(value[:-1])
-        except ValueError:
-            return None
-        return max(1, round(seconds / 60))
+    def _map_mode_for_option(mode: DirectionsMode) -> str:
+        if mode == "walking":
+            return "WALK"
+        if mode == "transit":
+            return "TRANSIT"
+        return "DRIVE"
 
     @staticmethod
-    def _mode_label(travel_mode: str, transit_subtype: Optional[str]) -> str:
-        if travel_mode == "WALK":
-            return "徒歩"
-        if transit_subtype == "BUS":
-            return "バス"
-        return "電車"
+    def _map_mode_for_step(mode: DirectionsMode) -> str:
+        if mode == "walking":
+            return "WALK"
+        if mode == "transit":
+            return "TRANSIT"
+        return "DRIVE"
+
+    def _validate_inputs(self, *, origin: str, destination: str, mode: DirectionsMode) -> None:
+        if not self.api_key:
+            raise ValueError("Google Directions API key is not configured")
+
+        if not isinstance(origin, str) or not origin.strip():
+            raise ValueError("origin must be a non-empty string")
+        if not isinstance(destination, str) or not destination.strip():
+            raise ValueError("destination must be a non-empty string")
+        if mode not in {"driving", "walking", "transit"}:
+            raise ValueError("mode must be one of ['driving', 'walking', 'transit']")
+
+    @property
+    def _effective_timeout_seconds(self) -> float:
+        return float(max(self.connect_timeout_seconds, self.read_timeout_seconds))
 
     @staticmethod
-    def _build_summary(
-        mode_label: str,
-        duration_minutes: Optional[int],
-        distance_meters: Optional[int],
-        line_name: Optional[str],
-    ) -> str:
-        parts = [f"{mode_label}で移動"]
-        if line_name:
-            parts.append(line_name)
-        if duration_minutes is not None:
-            parts.append(f"約{duration_minutes}分")
-        if isinstance(distance_meters, int):
-            if distance_meters >= 1000:
-                parts.append(f"約{distance_meters / 1000:.1f}km")
-            else:
-                parts.append(f"約{distance_meters}m")
-        return " / ".join(parts)
-
-    def _extract_transit_metadata(
-        self,
-        route: dict,
-    ) -> tuple[Optional[datetime], Optional[datetime], Optional[str], Optional[str]]:
-        for leg in route.get("legs", []) or []:
-            for step in leg.get("steps", []) or []:
-                transit_details = step.get("transitDetails") or {}
-                if not transit_details:
-                    continue
-                stop_details = transit_details.get("stopDetails") or {}
-                departure_time = self._parse_datetime(stop_details.get("departureTime"))
-                arrival_time = self._parse_datetime(stop_details.get("arrivalTime"))
-                transit_line = transit_details.get("transitLine") or {}
-                line_name = None
-                name_short = transit_line.get("nameShort")
-                if isinstance(name_short, str) and name_short.strip():
-                    line_name = name_short.strip()
-                elif isinstance(transit_line.get("name"), dict):
-                    text = transit_line["name"].get("text")
-                    if isinstance(text, str) and text.strip():
-                        line_name = text.strip()
-                vehicle_type = None
-                vehicle = transit_line.get("vehicle")
-                if isinstance(vehicle, dict):
-                    if isinstance(vehicle.get("name"), dict):
-                        text = vehicle["name"].get("text")
-                        if isinstance(text, str) and text.strip():
-                            vehicle_type = text.strip()
-                    if not vehicle_type:
-                        type_value = vehicle.get("type")
-                        if isinstance(type_value, str) and type_value.strip():
-                            vehicle_type = type_value.strip()
-                return departure_time, arrival_time, line_name, vehicle_type
-        return None, None, None, None
-
-    def _extract_route_steps(
-        self,
-        route: dict,
-        origin_name: str,
-        destination_name: str,
-    ) -> list[RouteStep]:
-        extracted: list[RouteStep] = []
-        for leg in route.get("legs", []) or []:
-            for step in leg.get("steps", []) or []:
-                travel_mode = step.get("travelMode")
-                duration_minutes = self._duration_to_minutes(step.get("staticDuration") or step.get("duration"))
-                distance_meters = step.get("distanceMeters")
-                transit_details = step.get("transitDetails") or {}
-                stop_details = transit_details.get("stopDetails") or {}
-                departure_stop_name = self._extract_stop_name(stop_details.get("departureStop"))
-                arrival_stop_name = self._extract_stop_name(stop_details.get("arrivalStop"))
-                departure_time = self._parse_datetime(stop_details.get("departureTime"))
-                arrival_time = self._parse_datetime(stop_details.get("arrivalTime"))
-                line_name, vehicle_type = self._extract_line_metadata(transit_details.get("transitLine") or {})
-                mapped_mode, transit_subtype = self._map_step_mode(travel_mode, vehicle_type)
-                notes = step.get("navigationInstruction", {}).get("instructions")
-                extracted.append(
-                    RouteStep(
-                        travel_mode=mapped_mode,
-                        transit_subtype=transit_subtype,
-                        duration_minutes=duration_minutes,
-                        distance_meters=distance_meters if isinstance(distance_meters, int) else None,
-                        from_name=departure_stop_name or origin_name,
-                        to_name=arrival_stop_name or destination_name,
-                        departure_time=departure_time,
-                        arrival_time=arrival_time,
-                        line_name=line_name,
-                        vehicle_type=vehicle_type,
-                        notes=notes if isinstance(notes, str) and notes.strip() else None,
-                        departure_stop_name=departure_stop_name,
-                        arrival_stop_name=arrival_stop_name,
-                    )
-                )
-        logger.info(
-            "RoutesClient extracted route steps: origin=%s destination=%s steps=%s transit_with_line=%s",
-            origin_name,
-            destination_name,
-            len(extracted),
-            sum(1 for step in extracted if step.line_name),
-        )
-        return extracted
-
-    @staticmethod
-    def _count_total_steps(route: dict) -> int:
-        count = 0
-        for leg in route.get("legs", []) or []:
-            count += len(leg.get("steps", []) or [])
-        return count
-
-    @staticmethod
-    def _count_transit_steps(route: dict) -> int:
-        count = 0
-        for leg in route.get("legs", []) or []:
-            for step in leg.get("steps", []) or []:
-                if step.get("transitDetails"):
-                    count += 1
-        return count
-
-    @staticmethod
-    def _extract_stop_name(value: Optional[dict]) -> Optional[str]:
-        if not isinstance(value, dict):
-            return None
-        name = value.get("name")
-        if isinstance(name, str) and name.strip():
-            return name.strip()
-        return None
-
-    @staticmethod
-    def _extract_line_metadata(transit_line: dict) -> tuple[Optional[str], Optional[str]]:
-        line_name = None
-        name_short = transit_line.get("nameShort")
-        if isinstance(name_short, str) and name_short.strip():
-            line_name = name_short.strip()
-        elif isinstance(transit_line.get("name"), dict):
-            text = transit_line["name"].get("text")
-            if isinstance(text, str) and text.strip():
-                line_name = text.strip()
-        vehicle_type = None
-        vehicle = transit_line.get("vehicle")
-        if isinstance(vehicle, dict):
-            if isinstance(vehicle.get("name"), dict):
-                text = vehicle["name"].get("text")
-                if isinstance(text, str) and text.strip():
-                    vehicle_type = text.strip()
-            if not vehicle_type:
-                type_value = vehicle.get("type")
-                if isinstance(type_value, str) and type_value.strip():
-                    vehicle_type = type_value.strip()
-        return line_name, vehicle_type
-
-    @staticmethod
-    def _map_step_mode(travel_mode: Optional[str], vehicle_type: Optional[str]) -> tuple[str, Optional[str]]:
-        if travel_mode == "WALK":
-            return "WALK", None
-        lowered = (vehicle_type or "").lower()
-        if "bus" in lowered:
-            return "TRANSIT", "BUS"
-        if any(keyword in lowered for keyword in ("train", "rail", "subway", "metro", "tram", "light_rail")):
-            return "TRANSIT", "TRAIN"
-        if travel_mode == "TRANSIT":
-            return "TRANSIT", "TRAIN"
-        return "TRANSIT", "TRAIN"
-
-    @staticmethod
-    def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
-        if not value or not isinstance(value, str):
-            return None
-        try:
-            normalized = value.replace("Z", "+00:00")
-            return datetime.fromisoformat(normalized)
-        except ValueError:
-            return None
-
-    @staticmethod
-    def _total_step_minutes(steps: list[RouteStep]) -> int:
-        total = 0
-        for step in steps:
-            total += step.duration_minutes or 0
-        return total
+    def _is_timeout_exception(exc: Exception) -> bool:
+        if isinstance(exc, (socket.timeout, TimeoutError)):
+            return True
+        if isinstance(exc, error.URLError):
+            reason = getattr(exc, "reason", None)
+            if isinstance(reason, (socket.timeout, TimeoutError)):
+                return True
+            if isinstance(reason, str) and "timed out" in reason.lower():
+                return True
+        return "timed out" in str(exc).lower()

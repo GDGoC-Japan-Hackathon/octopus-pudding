@@ -38,6 +38,13 @@ async def create_ai_plan_generation(
         generation = await trip_service.start_my_ai_plan_generation(
             owner_user_id=current_user.id,
             trip_id=trip_id,
+            origin={"latitude": payload.origin.latitude, "longitude": payload.origin.longitude},
+            destination={"latitude": payload.destination.latitude, "longitude": payload.destination.longitude},
+            lodging=(
+                None
+                if payload.lodging is None
+                else {"latitude": payload.lodging.latitude, "longitude": payload.lodging.longitude}
+            ),
             provider=payload.provider,
             prompt_version=payload.prompt_version,
             run_async=payload.run_async,

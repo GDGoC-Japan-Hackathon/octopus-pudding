@@ -7,7 +7,7 @@ import {
 
 export async function createAiPlanGeneration(
   tripId: number,
-  payload: CreateAiPlanGenerationRequest = { run_async: true }
+  payload: CreateAiPlanGenerationRequest
 ): Promise<AiPlanGenerationResponse> {
   return apiFetch<AiPlanGenerationResponse>(endpoints.trips.aiPlanGenerations.create(tripId), {
     method: 'POST',
