@@ -310,7 +310,7 @@ export default function CreateGeneratingScreen() {
 
   return (
     <View style={travelStyles.screen}>
-      <AppHeader title="プランを生成中" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
+      <AppHeader title="プランを作成中" weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`} />
 
       <ScrollView contentContainerStyle={styles.contentContainer}>
         <View style={styles.heroCard}>

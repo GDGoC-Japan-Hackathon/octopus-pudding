@@ -238,7 +238,7 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
     end: toTimeLabel(item.end_time),
     title:
       item.item_type === 'transport'
-        ? item.name || transportModeLabel(item.transport_mode, item.vehicle_type)
+        ? item.name || transportModeLabel(item.transport_mode)
         : item.name,
     body:
       item.item_type === 'transport'
@@ -306,11 +306,25 @@ function normalizeTransportNotes(notes?: string | null) {
 }
 
 function transportModeLabel(mode?: string | null) {
-  if (!mode) return '移動';
-  if (mode === 'WALK') return '徒歩で移動';
-  if (mode === 'BUS') return 'バスで移動';
-  if (mode === 'CAR') return '車で移動';
+  const normalized = normalizeTransportMode(mode);
+  if (!normalized) return '移動';
+  if (normalized === 'WALK') return '徒歩で移動';
+  if (normalized === 'BUS') return 'バスで移動';
+  if (normalized === 'CAR' || normalized === 'TAXI') return '車で移動';
+  if (normalized === 'SHIP') return '船で移動';
+  if (normalized === 'BICYCLE') return '自転車で移動';
+  if (normalized === 'PLANE') return '飛行機で移動';
   return '電車で移動';
+}
+
+function normalizeTransportMode(mode?: string | null) {
+  const normalized = String(mode ?? '').trim().toUpperCase();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === 'DRIVE' || normalized === 'DRIVING') return 'CAR';
+  if (normalized === 'TRANSIT') return 'TRAIN';
+  return normalized;
 }
 
 function transportModeIcon(mode?: string | null, vehicleType?: string | null): keyof typeof MaterialIcons.glyphMap {
