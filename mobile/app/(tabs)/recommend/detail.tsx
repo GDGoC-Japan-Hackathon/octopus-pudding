@@ -9,6 +9,7 @@ import { PlanDetailTemplate } from '@/features/plan-detail/components/PlanDetail
 import { formatTravelDateLabel } from '@/features/plan-detail/utils/plan-detail';
 import { cloneRecommendTrip } from '@/features/recommend/api/clone-recommend-trip';
 import { getRecommendPlanDetail } from '@/features/recommend/api/get-recommend-plan-detail';
+import { isMockRecommendPlanId } from '@/features/recommend/data/mock-recommend';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 import { getApiErrorMessage } from '@/lib/api/client';
 
@@ -70,6 +71,8 @@ export default function RecommendationDetailScreen() {
     }
     return `作成日 ${parsed.getFullYear()}/${String(parsed.getMonth() + 1).padStart(2, '0')}/${String(parsed.getDate()).padStart(2, '0')}`;
   }, [plan?.createdAt]);
+
+  const isMockPlan = plan ? isMockRecommendPlanId(plan.id) : false;
 
   const handleCustomize = async () => {
     if (!id) {
@@ -134,9 +137,13 @@ export default function RecommendationDetailScreen() {
       primaryActionLabel=""
       primaryActionSlot={
         <View style={styles.actionWrap}>
-          <Pressable style={[styles.actionButton, styles.actionButtonOrange]} onPress={() => void handleCustomize()}>
-            <MaterialIcons name="edit-note" size={22} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>プランをカスタマイズ</Text>
+          <Pressable
+            style={[styles.actionButton, isMockPlan ? styles.actionButtonGray : styles.actionButtonOrange]}
+            onPress={isMockPlan ? undefined : () => void handleCustomize()}
+            disabled={isMockPlan}
+          >
+            <MaterialIcons name={isMockPlan ? 'visibility' : 'edit-note'} size={22} color="#FFFFFF" />
+            <Text style={styles.actionButtonText}>{isMockPlan ? 'ダミーデータを表示中' : 'プランをカスタマイズ'}</Text>
           </Pressable>
         </View>
       }
@@ -160,6 +167,9 @@ const styles = StyleSheet.create({
   },
   actionButtonOrange: {
     backgroundColor: '#EC5B13',
+  },
+  actionButtonGray: {
+    backgroundColor: '#94A3B8',
   },
   actionButtonText: {
     color: '#FFFFFF',

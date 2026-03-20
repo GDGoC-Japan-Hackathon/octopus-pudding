@@ -1,5 +1,6 @@
 import { apiFetch } from '@/lib/api/client';
 import { endpoints } from '@/lib/api/endpoints';
+import { getMockRecommendPlanDetail, isMockRecommendPlanId } from '@/features/recommend/data/mock-recommend';
 import { type RecommendPlanDetail } from '@/features/recommend/types';
 
 type RecommendPlanDetailResponse = {
@@ -26,6 +27,10 @@ type RecommendPlanDetailResponse = {
 };
 
 export async function getRecommendPlanDetail(id: string): Promise<RecommendPlanDetail | null> {
+  if (isMockRecommendPlanId(id)) {
+    return getMockRecommendPlanDetail(id);
+  }
+
   const plan = await apiFetch<RecommendPlanDetailResponse>(endpoints.recommendations.detail(id));
   return {
     id: String(plan.id),
