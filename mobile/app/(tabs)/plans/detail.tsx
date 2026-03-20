@@ -45,7 +45,6 @@ type AdjustmentPolicy =
 
 type PendingAdjustment = {
   item: PlanDetailTimelineItem;
-  mode: 'from_item' | 'replace_item';
   targetItemId: number;
 };
 
@@ -213,13 +212,12 @@ export default function PlanDetailScreen() {
     [aggregate, loadTripDetail, tripId]
   );
 
-  const openAdjustmentSheet = useCallback(
-    (mode: 'from_item' | 'replace_item', item: PlanDetailTimelineItem) => {
+  const openAdjustmentSheet = useCallback((item: PlanDetailTimelineItem) => {
       const itemId = Number(item.id);
       if (!Number.isInteger(itemId) || itemId <= 0) {
         return;
       }
-      setPendingAdjustment({ item, mode, targetItemId: itemId });
+      setPendingAdjustment({ item, targetItemId: itemId });
       setAdjustmentIncidentType('mood_change');
       setAdjustmentPolicies([]);
       setAdjustmentNote('');
@@ -230,14 +228,7 @@ export default function PlanDetailScreen() {
 
   const handleRegenerateFromItem = useCallback(
     async (item: PlanDetailTimelineItem) => {
-      openAdjustmentSheet('from_item', item);
-    },
-    [openAdjustmentSheet]
-  );
-
-  const handleReplaceItem = useCallback(
-    async (item: PlanDetailTimelineItem) => {
-      openAdjustmentSheet('replace_item', item);
+      openAdjustmentSheet(item);
     },
     [openAdjustmentSheet]
   );
@@ -278,7 +269,7 @@ export default function PlanDetailScreen() {
 
     const target = pendingAdjustment;
     setPendingAdjustment(null);
-    await handleRegeneration(target.mode, target.targetItemId, requestOverrides);
+    await handleRegeneration('from_item', target.targetItemId, requestOverrides);
   }, [
     adjustmentIncidentType,
     adjustmentNote,
@@ -358,10 +349,8 @@ export default function PlanDetailScreen() {
         timeline={detailView.timeline}
         timelinePrimaryActionLabel="ここ以降を再生成"
         onTimelinePrimaryAction={(item) => void handleRegenerateFromItem(item)}
-        timelineSecondaryActionLabel="差し替え"
-        onTimelineSecondaryAction={(item) => void handleReplaceItem(item)}
         timelineActionLoadingId={
-          activeRegenerationKey?.startsWith('from_item:') || activeRegenerationKey?.startsWith('replace_item:')
+          activeRegenerationKey?.startsWith('from_item:')
             ? Number(activeRegenerationKey.split(':')[1])
             : null
         }
@@ -438,12 +427,10 @@ export default function PlanDetailScreen() {
         animationType="slide"
         onRequestClose={() => setPendingAdjustment(null)}
       >
-        <Pressable style={styles.sheetBackdrop} onPress={() => setPendingAdjustment(null)}>
+          <Pressable style={styles.sheetBackdrop} onPress={() => setPendingAdjustment(null)}>
           <Pressable style={styles.sheetCard} onPress={() => {}}>
             <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>
-              {pendingAdjustment?.mode === 'from_item' ? 'ここ以降を再生成' : 'スポットを差し替え'}
-            </Text>
+            <Text style={styles.sheetTitle}>ここ以降を再生成</Text>
             <Text style={styles.sheetTarget}>{pendingAdjustment?.item.title ?? ''}</Text>
 
             <Text style={styles.sheetLabel}>変更理由</Text>

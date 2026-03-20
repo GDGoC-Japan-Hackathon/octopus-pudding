@@ -174,7 +174,17 @@ export function PlanDetailTemplate({
                           {(timelinePrimaryActionLabel || timelineSecondaryActionLabel) ? (
                             <Pressable
                               style={styles.moreButton}
-                              onPress={() => setSelectedPlaceActionItem(item)}
+                              onPress={() => {
+                                if (
+                                  timelinePrimaryActionLabel &&
+                                  !timelineSecondaryActionLabel &&
+                                  onTimelinePrimaryAction
+                                ) {
+                                  onTimelinePrimaryAction(item);
+                                  return;
+                                }
+                                setSelectedPlaceActionItem(item);
+                              }}
                             >
                               <MaterialIcons name="more-horiz" size={18} color="#94A3B8" />
                             </Pressable>
