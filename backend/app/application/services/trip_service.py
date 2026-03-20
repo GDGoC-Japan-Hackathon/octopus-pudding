@@ -1048,7 +1048,7 @@ class TripService:
         candidates = [
             candidate
             for candidate in place_candidates
-            if candidate.latitude is not None and candidate.longitude is not None
+            if isinstance(candidate.name, str) and candidate.name.strip()
         ]
         candidates = candidates[: self.MAX_ROUTE_CANDIDATES]
         if len(candidates) < 2:
@@ -1059,26 +1059,21 @@ class TripService:
         departure_time = local_departure_time.astimezone(timezone.utc)
         route_client = RoutesClient()
 
-        pair_candidates: list[tuple[PlaceCandidate, PlaceCandidate]] = []
-        seen_pairs: set[tuple[str, float, float, str, float, float]] = set()
+        pair_candidates: list[tuple[str, str]] = []
+        seen_pairs: set[tuple[str, str]] = set()
         for origin in candidates:
-            nearest_destinations = sorted(
-                [destination for destination in candidates if destination.name != origin.name],
-                key=lambda destination: self._estimate_distance_meters(origin, destination),
-            )[: self.MAX_NEAREST_DESTINATIONS_PER_CANDIDATE]
+            nearest_destinations = [
+                destination for destination in candidates if destination.name != origin.name
+            ][: self.MAX_NEAREST_DESTINATIONS_PER_CANDIDATE]
             for destination in nearest_destinations:
                 key = (
                     origin.name,
-                    origin.latitude,
-                    origin.longitude,
                     destination.name,
-                    destination.latitude,
-                    destination.longitude,
                 )
                 if key in seen_pairs:
                     continue
                 seen_pairs.add(key)
-                pair_candidates.append((origin, destination))
+                pair_candidates.append((origin.name, destination.name))
 
         results = await asyncio.gather(
             *[
@@ -1696,19 +1691,15 @@ class TripService:
                 and place_items
             ):
                 first_item = place_items[0]
-                origin_candidate = self._place_candidate_from_lat_lng(
-                    name=trip.origin,
-                    coordinates=origin_location,
-                )
-                destination_candidate = self._place_candidate_from_item(first_item, candidate_map)
-                if origin_candidate is not None and destination_candidate is not None:
+                destination_name = first_item.get("name")
+                if isinstance(destination_name, str) and destination_name.strip():
                     departure_time = self._resolve_route_departure_datetime(
                         trip_date=day.date or trip.start_date,
                         previous_end_time=None,
                     )
                     route_steps, diagnostics = await route_client.compute_route_steps_with_diagnostics(
-                        origin=origin_candidate,
-                        destination=destination_candidate,
+                        origin=trip.origin,
+                        destination=destination_name,
                         departure_time=departure_time,
                     )
                     for key in route_diagnostics:
@@ -1720,14 +1711,14 @@ class TripService:
                                 previous_end_time=None,
                                 next_start_time=first_item.get("start_time"),
                                 origin_name=trip.origin,
-                                destination_name=str(first_item.get("name")),
+                                destination_name=destination_name,
                             )
                         )
                     else:
                         expanded.append(
                             self._build_fallback_transport_item_payload(
                                 from_name=trip.origin,
-                                to_name=str(first_item.get("name")),
+                                to_name=destination_name,
                                 previous_end_time=None,
                                 next_start_time=first_item.get("start_time"),
                             )
@@ -1739,9 +1730,14 @@ class TripService:
                     continue
 
                 next_item = place_items[index + 1]
-                origin = self._place_candidate_from_item(item, candidate_map)
-                destination = self._place_candidate_from_item(next_item, candidate_map)
-                if origin is None or destination is None:
+                origin_name = item.get("name")
+                destination_name = next_item.get("name")
+                if (
+                    not isinstance(origin_name, str)
+                    or not origin_name.strip()
+                    or not isinstance(destination_name, str)
+                    or not destination_name.strip()
+                ):
                     expanded.append(
                         self._build_fallback_transport_item_payload(
                             from_name=str(item.get("name")),
@@ -1757,8 +1753,8 @@ class TripService:
                     previous_end_time=item.get("end_time"),
                 )
                 route_steps, diagnostics = await route_client.compute_route_steps_with_diagnostics(
-                    origin=origin,
-                    destination=destination,
+                    origin=origin_name,
+                    destination=destination_name,
                     departure_time=departure_time,
                 )
                 for key in route_diagnostics:
@@ -1778,8 +1774,8 @@ class TripService:
                             route_steps,
                             previous_end_time=item.get("end_time"),
                             next_start_time=next_item.get("start_time"),
-                            origin_name=str(item.get("name")),
-                            destination_name=str(next_item.get("name")),
+                            origin_name=origin_name,
+                            destination_name=destination_name,
                         )
                     )
                 else:
@@ -1804,19 +1800,15 @@ class TripService:
                 and place_items
             ):
                 last_item = place_items[-1]
-                origin_candidate = self._place_candidate_from_item(last_item, candidate_map)
-                destination_candidate = self._place_candidate_from_lat_lng(
-                    name=trip.origin,
-                    coordinates=destination_location,
-                )
-                if origin_candidate is not None and destination_candidate is not None:
+                origin_name = last_item.get("name")
+                if isinstance(origin_name, str) and origin_name.strip():
                     departure_time = self._resolve_route_departure_datetime(
                         trip_date=day.date or trip.start_date,
                         previous_end_time=last_item.get("end_time"),
                     )
                     route_steps, diagnostics = await route_client.compute_route_steps_with_diagnostics(
-                        origin=origin_candidate,
-                        destination=destination_candidate,
+                        origin=origin_name,
+                        destination=trip.origin,
                         departure_time=departure_time,
                     )
                     for key in route_diagnostics:
@@ -1827,14 +1819,14 @@ class TripService:
                                 route_steps,
                                 previous_end_time=last_item.get("end_time"),
                                 next_start_time=None,
-                                origin_name=str(last_item.get("name")),
+                                origin_name=origin_name,
                                 destination_name=trip.origin,
                             )
                         )
                     else:
                         expanded.append(
                             self._build_fallback_transport_item_payload(
-                                from_name=str(last_item.get("name")),
+                                from_name=origin_name,
                                 to_name=trip.origin,
                                 previous_end_time=last_item.get("end_time"),
                                 next_start_time=None,
