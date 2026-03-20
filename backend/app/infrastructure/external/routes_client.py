@@ -66,8 +66,12 @@ class RoutesClient:
         api_key: Optional[str] = None,
         endpoint: Optional[str] = None,
     ) -> None:
-        self.api_key = api_key or settings.google_routes_api_key or settings.google_places_api_key
+        self.api_key = api_key or settings.google_routes_api_key
         self.endpoint = endpoint or settings.google_routes_endpoint
+        if not self.api_key and settings.google_places_api_key:
+            logger.warning(
+                "RoutesClient: GOOGLE_ROUTES_API_KEY is empty. GOOGLE_PLACES_API_KEY is set but will not be used for routes."
+            )
 
     async def compute_route_options(
         self,
@@ -122,12 +126,36 @@ class RoutesClient:
         if destination.latitude is None or destination.longitude is None:
             return []
         departure = departure_time or datetime.now(timezone.utc)
-        return await asyncio.to_thread(
+        primary_steps = await asyncio.to_thread(
             self._compute_route_steps_sync,
             origin,
             destination,
             departure,
+            None,
         )
+        if primary_steps:
+            return primary_steps
+
+        bus_steps, train_steps = await asyncio.gather(
+            asyncio.to_thread(
+                self._compute_route_steps_sync,
+                origin,
+                destination,
+                departure,
+                "BUS",
+            ),
+            asyncio.to_thread(
+                self._compute_route_steps_sync,
+                origin,
+                destination,
+                departure,
+                "TRAIN",
+            ),
+        )
+        candidates = [steps for steps in (bus_steps, train_steps) if steps]
+        if not candidates:
+            return []
+        return min(candidates, key=self._total_step_minutes)
 
     def _compute_route_sync(
         self,
@@ -185,7 +213,8 @@ class RoutesClient:
                 "routes.legs.steps.transitDetails.stopDetails.arrivalTime,"
                 "routes.legs.steps.transitDetails.transitLine.name,"
                 "routes.legs.steps.transitDetails.transitLine.nameShort,"
-                "routes.legs.steps.transitDetails.transitLine.vehicle.name.text"
+                "routes.legs.steps.transitDetails.transitLine.vehicle.name.text,"
+                "routes.legs.steps.transitDetails.transitLine.vehicle.type"
             ),
         }
         req = request.Request(self.endpoint, data=body, headers=headers, method="POST")
@@ -241,6 +270,7 @@ class RoutesClient:
         origin: PlaceCandidate,
         destination: PlaceCandidate,
         departure_time: datetime,
+        transit_subtype: Optional[str] = None,
     ) -> list[RouteStep]:
         payload: dict = {
             "origin": {
@@ -265,6 +295,16 @@ class RoutesClient:
             "units": "METRIC",
             "departureTime": departure_time.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
+        if transit_subtype == "BUS":
+            payload["transitPreferences"] = {
+                "allowedTravelModes": ["BUS"],
+                "routingPreference": "LESS_WALKING",
+            }
+        elif transit_subtype == "TRAIN":
+            payload["transitPreferences"] = {
+                "allowedTravelModes": ["TRAIN", "RAIL", "SUBWAY", "LIGHT_RAIL"],
+                "routingPreference": "FEWER_TRANSFERS",
+            }
 
         body = json.dumps(payload).encode("utf-8")
         headers = {
@@ -283,14 +323,16 @@ class RoutesClient:
                 "routes.legs.steps.transitDetails.stopDetails.arrivalStop.name,"
                 "routes.legs.steps.transitDetails.transitLine.name,"
                 "routes.legs.steps.transitDetails.transitLine.nameShort,"
-                "routes.legs.steps.transitDetails.transitLine.vehicle.name.text"
+                "routes.legs.steps.transitDetails.transitLine.vehicle.name.text,"
+                "routes.legs.steps.transitDetails.transitLine.vehicle.type"
             ),
         }
         logger.info(
-            "RoutesClient transit request: origin=%s destination=%s departure_time=%s field_mask=%s",
+            "RoutesClient transit request: origin=%s destination=%s departure_time=%s subtype=%s field_mask=%s",
             origin.name,
             destination.name,
             payload["departureTime"],
+            transit_subtype or "ANY",
             headers["X-Goog-FieldMask"],
         )
         req = request.Request(self.endpoint, data=body, headers=headers, method="POST")
@@ -298,16 +340,18 @@ class RoutesClient:
             with request.urlopen(req, timeout=20) as resp:
                 raw = resp.read().decode("utf-8")
                 logger.info(
-                    "RoutesClient transit raw response: origin=%s destination=%s body=%s",
+                    "RoutesClient transit raw response: origin=%s destination=%s subtype=%s body=%s",
                     origin.name,
                     destination.name,
+                    transit_subtype or "ANY",
                     raw[:4000],
                 )
         except Exception:
             logger.exception(
-                "RoutesClient transit request failed: origin=%s destination=%s",
+                "RoutesClient transit request failed: origin=%s destination=%s subtype=%s",
                 origin.name,
                 destination.name,
+                transit_subtype or "ANY",
             )
             return []
 
@@ -315,16 +359,18 @@ class RoutesClient:
         routes = response.get("routes", []) or []
         if not routes:
             logger.warning(
-                "RoutesClient transit response empty: origin=%s destination=%s",
+                "RoutesClient transit response empty: origin=%s destination=%s subtype=%s",
                 origin.name,
                 destination.name,
+                transit_subtype or "ANY",
             )
             return []
         route = routes[0]
         logger.info(
-            "RoutesClient transit response summary: origin=%s destination=%s transit_steps=%s total_steps=%s",
+            "RoutesClient transit response summary: origin=%s destination=%s subtype=%s transit_steps=%s total_steps=%s",
             origin.name,
             destination.name,
+            transit_subtype or "ANY",
             self._count_transit_steps(route),
             self._count_total_steps(route),
         )
@@ -390,10 +436,15 @@ class RoutesClient:
                         line_name = text.strip()
                 vehicle_type = None
                 vehicle = transit_line.get("vehicle")
-                if isinstance(vehicle, dict) and isinstance(vehicle.get("name"), dict):
-                    text = vehicle["name"].get("text")
-                    if isinstance(text, str) and text.strip():
-                        vehicle_type = text.strip()
+                if isinstance(vehicle, dict):
+                    if isinstance(vehicle.get("name"), dict):
+                        text = vehicle["name"].get("text")
+                        if isinstance(text, str) and text.strip():
+                            vehicle_type = text.strip()
+                    if not vehicle_type:
+                        type_value = vehicle.get("type")
+                        if isinstance(type_value, str) and type_value.strip():
+                            vehicle_type = type_value.strip()
                 return departure_time, arrival_time, line_name, vehicle_type
         return None, None, None, None
 
@@ -481,10 +532,15 @@ class RoutesClient:
                 line_name = text.strip()
         vehicle_type = None
         vehicle = transit_line.get("vehicle")
-        if isinstance(vehicle, dict) and isinstance(vehicle.get("name"), dict):
-            text = vehicle["name"].get("text")
-            if isinstance(text, str) and text.strip():
-                vehicle_type = text.strip()
+        if isinstance(vehicle, dict):
+            if isinstance(vehicle.get("name"), dict):
+                text = vehicle["name"].get("text")
+                if isinstance(text, str) and text.strip():
+                    vehicle_type = text.strip()
+            if not vehicle_type:
+                type_value = vehicle.get("type")
+                if isinstance(type_value, str) and type_value.strip():
+                    vehicle_type = type_value.strip()
         return line_name, vehicle_type
 
     @staticmethod
@@ -494,6 +550,10 @@ class RoutesClient:
         lowered = (vehicle_type or "").lower()
         if "bus" in lowered:
             return "TRANSIT", "BUS"
+        if any(keyword in lowered for keyword in ("train", "rail", "subway", "metro", "tram", "light_rail")):
+            return "TRANSIT", "TRAIN"
+        if travel_mode == "TRANSIT":
+            return "TRANSIT", "TRAIN"
         return "TRANSIT", "TRAIN"
 
     @staticmethod
@@ -505,3 +565,10 @@ class RoutesClient:
             return datetime.fromisoformat(normalized)
         except ValueError:
             return None
+
+    @staticmethod
+    def _total_step_minutes(steps: list[RouteStep]) -> int:
+        total = 0
+        for step in steps:
+            total += step.duration_minutes or 0
+        return total

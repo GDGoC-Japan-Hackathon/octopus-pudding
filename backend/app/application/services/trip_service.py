@@ -665,6 +665,7 @@ class TripService:
                 days=days,
                 fallback_candidates=place_candidates,
                 route_options=route_options,
+                destination=aggregate.trip.destination,
             )
             normalized = await self._rebuild_transport_items_from_routes(
                 trip=aggregate.trip,
@@ -794,9 +795,9 @@ class TripService:
                 seen.add(key)
                 merged.append(result)
                 if len(merged) >= max_candidates:
-                    return merged
+                    return self._prune_outlier_candidates(merged, max_candidates)
         if merged:
-            return merged
+            return self._prune_outlier_candidates(merged, max_candidates)
         return [
             PlaceCandidate(
                 name=f"{destination} 散策",
@@ -804,6 +805,35 @@ class TripService:
                 category="tourist_attraction",
             )
         ]
+
+    def _prune_outlier_candidates(
+        self,
+        candidates: list[PlaceCandidate],
+        max_candidates: int,
+    ) -> list[PlaceCandidate]:
+        with_coordinates = [item for item in candidates if item.latitude is not None and item.longitude is not None]
+        if len(with_coordinates) < 4:
+            return candidates[:max_candidates]
+
+        center_lat = sum(item.latitude for item in with_coordinates if item.latitude is not None) / len(with_coordinates)
+        center_lon = sum(item.longitude for item in with_coordinates if item.longitude is not None) / len(with_coordinates)
+
+        filtered: list[PlaceCandidate] = []
+        for item in candidates:
+            if item.latitude is None or item.longitude is None:
+                filtered.append(item)
+                continue
+            distance = self._estimate_distance_to_coordinates(
+                item.latitude,
+                item.longitude,
+                center_lat,
+                center_lon,
+            )
+            if distance <= 120_000:
+                filtered.append(item)
+        if not filtered:
+            return candidates[:max_candidates]
+        return filtered[:max_candidates]
 
     async def _generate_plan_payload(
         self,
@@ -895,6 +925,8 @@ class TripService:
             "- transport は selected_transport_types に対応するものを優先して使う\n"
             "- 徒歩は selected_transport_types に含まれていなくても使ってよい\n"
             "- 徒歩以外で、selected_transport_types に含まれない移動手段は絶対に使わない\n"
+            "- budget は観光/食事/体験の目安であり、移動費（電車・バス・徒歩）は含めない\n"
+            "- transport item の estimated_cost は 0 または null にする\n"
             "- transport は route_options にある候補を優先して使う\n"
             "- route_options が不足する場合も、徒歩以外で selected_transport_types に無い手段は使わない\n"
             "- must_visit_places がある場合は、実現可能な範囲で優先して組み込む\n"
@@ -1048,8 +1080,10 @@ class TripService:
         days: list[TripDay],
         fallback_candidates: list[PlaceCandidate],
         route_options: list[RouteOption],
+        destination: str,
     ) -> dict[int, list[dict]]:
         by_day: dict[int, list[dict]] = {day.day_number: [] for day in days}
+        candidate_map = {candidate.name: candidate for candidate in fallback_candidates}
         days_payload = plan_payload.get("days", [])
         if isinstance(days_payload, list):
             for day_node in days_payload:
@@ -1062,7 +1096,15 @@ class TripService:
                 if not isinstance(items, list):
                     continue
                 for item in items:
-                    if isinstance(item, dict) and item.get("name"):
+                    if (
+                        isinstance(item, dict)
+                        and item.get("name")
+                        and self._is_place_item_allowed_for_destination(
+                            item=item,
+                            destination=destination,
+                            candidate_map=candidate_map,
+                        )
+                    ):
                         by_day[day_number].append(item)
 
         if any(by_day.values()):
@@ -1093,6 +1135,106 @@ class TripService:
             )
         return {day_number: self._inject_transport_items(items, route_options) for day_number, items in by_day.items()}
 
+    def _is_place_item_allowed_for_destination(
+        self,
+        item: dict,
+        destination: str,
+        candidate_map: dict[str, PlaceCandidate],
+    ) -> bool:
+        if self._is_transport_item_payload(item):
+            return True
+        if not self._is_okinawa_destination(destination):
+            return True
+
+        name = str(item.get("name") or "")
+        notes = str(item.get("notes") or "")
+        joined = f"{name} {notes}".strip()
+        candidate = candidate_map.get(name)
+        candidate_address = candidate.address if candidate is not None else None
+
+        if self._contains_non_okinawa_prefecture(joined):
+            return False
+        if candidate_address and self._contains_non_okinawa_prefecture(candidate_address):
+            return False
+        if self._contains_okinawa_keyword(joined):
+            return True
+        if candidate_address and self._contains_okinawa_keyword(candidate_address):
+            return True
+
+        latitude = item.get("latitude")
+        longitude = item.get("longitude")
+        if isinstance(latitude, (int, float)) and isinstance(longitude, (int, float)):
+            return self._is_within_okinawa_bounds(float(latitude), float(longitude))
+        if candidate and candidate.latitude is not None and candidate.longitude is not None:
+            return self._is_within_okinawa_bounds(candidate.latitude, candidate.longitude)
+
+        return True
+
+    @staticmethod
+    def _is_okinawa_destination(destination: str) -> bool:
+        text = (destination or "").strip()
+        return "沖縄" in text or "那覇" in text
+
+    @staticmethod
+    def _contains_okinawa_keyword(text: str) -> bool:
+        return any(keyword in text for keyword in ("沖縄", "那覇", "恩納", "石垣", "宮古", "宜野湾", "名護", "浦添"))
+
+    @staticmethod
+    def _contains_non_okinawa_prefecture(text: str) -> bool:
+        prefecture_tokens = (
+            "北海道",
+            "青森県",
+            "岩手県",
+            "宮城県",
+            "秋田県",
+            "山形県",
+            "福島県",
+            "茨城県",
+            "栃木県",
+            "群馬県",
+            "埼玉県",
+            "千葉県",
+            "東京都",
+            "神奈川県",
+            "新潟県",
+            "富山県",
+            "石川県",
+            "福井県",
+            "山梨県",
+            "長野県",
+            "岐阜県",
+            "静岡県",
+            "愛知県",
+            "三重県",
+            "滋賀県",
+            "京都府",
+            "大阪府",
+            "兵庫県",
+            "奈良県",
+            "和歌山県",
+            "鳥取県",
+            "島根県",
+            "岡山県",
+            "広島県",
+            "山口県",
+            "徳島県",
+            "香川県",
+            "愛媛県",
+            "高知県",
+            "福岡県",
+            "佐賀県",
+            "長崎県",
+            "熊本県",
+            "大分県",
+            "宮崎県",
+            "鹿児島県",
+        )
+        return any(token in text for token in prefecture_tokens)
+
+    @staticmethod
+    def _is_within_okinawa_bounds(latitude: float, longitude: float) -> bool:
+        return 24.0 <= latitude <= 28.8 and 122.0 <= longitude <= 131.5
+
     def _build_generated_itinerary_items(
         self,
         days: list[TripDay],
@@ -1120,7 +1262,11 @@ class TripService:
                     longitude=raw.get("longitude"),
                     start_time=self._build_datetime(day.date, raw.get("start_time")),
                     end_time=self._build_datetime(day.date, raw.get("end_time")),
-                    estimated_cost=self._to_optional_int(raw.get("estimated_cost")),
+                    estimated_cost=(
+                        None
+                        if str(raw.get("item_type", "place")) == "transport"
+                        else self._to_optional_int(raw.get("estimated_cost"))
+                    ),
                     notes=raw.get("notes"),
                     line_name=raw.get("line_name"),
                     vehicle_type=raw.get("vehicle_type"),
