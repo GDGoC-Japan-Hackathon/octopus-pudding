@@ -2144,6 +2144,7 @@ class TripService:
         to_name: str,
         previous_end_time: Optional[str],
         next_start_time: Optional[str],
+        diagnostics: Optional[dict] = None,
     ) -> dict:
         travel_minutes = self._infer_fallback_travel_minutes(previous_end_time, next_start_time)
         start_time, end_time = self._build_transport_time_window(
@@ -2152,6 +2153,9 @@ class TripService:
             travel_minutes=travel_minutes,
         )
         summary = f"公共交通機関が取得できませんでした。{from_name} → {to_name}"
+        diagnostics_status = str((diagnostics or {}).get("last_error_status") or "").strip()
+        if diagnostics_status:
+            summary = f"{summary} ({diagnostics_status})"
         return {
             "item_type": "transport",
             "name": "移動",
@@ -2261,16 +2265,10 @@ class TripService:
                 first_item = place_items[0]
                 destination_name = first_item.get("name")
                 if isinstance(destination_name, str) and destination_name.strip():
-                    # Prefer geo-coordinates for routing if origin_location is provided.
-                    # Fallback to the textual origin name to preserve existing behavior.
-                    if (
-                        isinstance(origin_location, dict)
-                        and "lat" in origin_location
-                        and "lng" in origin_location
-                    ):
-                        origin_for_routing = f'{origin_location["lat"]},{origin_location["lng"]}'
-                    else:
-                        origin_for_routing = trip.origin
+                    origin_candidate = self._place_candidate_from_lat_lng(name=trip.origin, coordinates=origin_location)
+                    destination_candidate = self._place_candidate_from_item(first_item, candidate_map)
+                    origin_for_routing = self._build_routing_location_input(origin_candidate) or trip.origin
+                    destination_for_routing = self._build_routing_location_input(destination_candidate) or destination_name
 
                     departure_time = self._resolve_route_departure_datetime(
                         trip_date=day.date or trip.start_date,
@@ -2278,7 +2276,7 @@ class TripService:
                     )
                     route_steps, diagnostics = await route_client.compute_route_steps_with_diagnostics(
                         origin=origin_for_routing,
-                        destination=destination_name,
+                        destination=destination_for_routing,
                         departure_time=departure_time,
                     )
                     for key in route_diagnostics:
@@ -2300,6 +2298,7 @@ class TripService:
                                 to_name=destination_name,
                                 previous_end_time=None,
                                 next_start_time=first_item.get("start_time"),
+                                diagnostics=diagnostics,
                             )
                         )
 
@@ -2323,17 +2322,22 @@ class TripService:
                             to_name=str(next_item.get("name")),
                             previous_end_time=item.get("end_time"),
                             next_start_time=next_item.get("start_time"),
+                            diagnostics=None,
                         )
                     )
                     continue
 
+                origin_candidate = self._place_candidate_from_item(item, candidate_map)
+                destination_candidate = self._place_candidate_from_item(next_item, candidate_map)
+                origin_for_routing = self._build_routing_location_input(origin_candidate) or origin_name
+                destination_for_routing = self._build_routing_location_input(destination_candidate) or destination_name
                 departure_time = self._resolve_route_departure_datetime(
                     trip_date=day.date or trip.start_date,
                     previous_end_time=item.get("end_time"),
                 )
                 route_steps, diagnostics = await route_client.compute_route_steps_with_diagnostics(
-                    origin=origin_name,
-                    destination=destination_name,
+                    origin=origin_for_routing,
+                    destination=destination_for_routing,
                     departure_time=departure_time,
                 )
                 for key in route_diagnostics:
@@ -2371,23 +2375,28 @@ class TripService:
                             to_name=str(next_item.get("name")),
                             previous_end_time=item.get("end_time"),
                             next_start_time=next_item.get("start_time"),
+                            diagnostics=diagnostics,
                         )
                     )
             if (
                 day.day_number == last_day_number
-                and destination_location
+                and origin_location
                 and place_items
             ):
                 last_item = place_items[-1]
                 origin_name = last_item.get("name")
                 if isinstance(origin_name, str) and origin_name.strip():
+                    origin_candidate = self._place_candidate_from_item(last_item, candidate_map)
+                    destination_candidate = self._place_candidate_from_lat_lng(name=trip.origin, coordinates=origin_location)
+                    origin_for_routing = self._build_routing_location_input(origin_candidate) or origin_name
+                    destination_for_routing = self._build_routing_location_input(destination_candidate) or trip.origin
                     departure_time = self._resolve_route_departure_datetime(
                         trip_date=day.date or trip.start_date,
                         previous_end_time=last_item.get("end_time"),
                     )
                     route_steps, diagnostics = await route_client.compute_route_steps_with_diagnostics(
-                        origin=origin_name,
-                        destination=trip.origin,
+                        origin=origin_for_routing,
+                        destination=destination_for_routing,
                         departure_time=departure_time,
                     )
                     for key in route_diagnostics:
@@ -2409,10 +2418,25 @@ class TripService:
                                 to_name=trip.origin,
                                 previous_end_time=last_item.get("end_time"),
                                 next_start_time=None,
+                                diagnostics=diagnostics,
                             )
                         )
             rebuilt[day.day_number] = expanded
         return rebuilt, route_diagnostics
+
+    def _build_routing_location_input(
+        self,
+        candidate: Optional[PlaceCandidate],
+    ) -> Optional[str]:
+        if candidate is None:
+            return None
+        if isinstance(candidate.latitude, (int, float)) and isinstance(candidate.longitude, (int, float)):
+            return f"{float(candidate.latitude)},{float(candidate.longitude)}"
+        if isinstance(candidate.address, str) and candidate.address.strip():
+            return candidate.address.strip()
+        if isinstance(candidate.name, str) and candidate.name.strip():
+            return candidate.name.strip()
+        return None
 
     def _place_candidate_from_item(
         self,
@@ -2431,6 +2455,19 @@ class TripService:
                 address=item.get("notes"),
                 latitude=float(latitude),
                 longitude=float(longitude),
+            )
+        matched_candidate = self._find_matching_place_candidate_for_payload(
+            item=item,
+            candidates=list(candidate_map.values()),
+        )
+        if matched_candidate is not None:
+            return matched_candidate
+        notes = item.get("notes")
+        if isinstance(notes, str) and notes.strip():
+            return PlaceCandidate(
+                name=name,
+                category=item.get("category"),
+                address=notes.strip(),
             )
         return candidate_map.get(name)
 
@@ -2534,8 +2571,8 @@ class TripService:
             "transport_mode": transport_mode,
             "travel_minutes": step.duration_minutes,
             "distance_meters": step.distance_meters,
-            "from_name": step.from_name or origin_name,
-            "to_name": step.to_name or destination_name,
+            "from_name": step.from_name,
+            "to_name": step.to_name,
             "start_time": start_time,
             "end_time": end_time,
             "notes": step.notes,

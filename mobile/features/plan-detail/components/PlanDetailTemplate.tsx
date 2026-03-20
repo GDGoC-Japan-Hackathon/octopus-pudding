@@ -147,10 +147,15 @@ export function PlanDetailTemplate({
                     <View style={styles.transportBubbleWrap}>
                       <Pressable style={styles.transportBubble} onPress={() => setSelectedTransportItem(item)}>
                         <MaterialIcons name={item.icon ?? 'directions-bus'} size={18} color="#2563EB" />
-                        <Text style={styles.transportTitle}>{item.title}</Text>
-                        {item.metaLabel ? <View style={styles.transportDot} /> : null}
-                        {item.durationLabel ? <Text style={styles.transportDuration}>{item.durationLabel}</Text> : null}
-                        {item.metaLabel ? <Text style={styles.transportMeta}>{item.metaLabel}</Text> : null}
+                        <View style={styles.transportContent}>
+                          <View style={styles.transportTitleRow}>
+                            <Text style={styles.transportTitle}>{item.title}</Text>
+                            {item.metaLabel ? <View style={styles.transportDot} /> : null}
+                            {item.durationLabel ? <Text style={styles.transportDuration}>{item.durationLabel}</Text> : null}
+                            {item.metaLabel ? <Text style={styles.transportMeta}>{item.metaLabel}</Text> : null}
+                          </View>
+                          {item.body ? <Text style={styles.transportBody}>{item.body}</Text> : null}
+                        </View>
                         <MaterialIcons name="chevron-right" size={16} color="#94A3B8" />
                       </Pressable>
                     </View>
@@ -707,8 +712,7 @@ const styles = StyleSheet.create({
   },
   transportBubble: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'flex-start',
     gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -721,6 +725,16 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
+    width: '100%',
+  },
+  transportContent: {
+    flex: 1,
+    gap: 4,
+  },
+  transportTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     flexWrap: 'wrap',
   },
   transportTitle: {
@@ -743,6 +757,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#64748B',
+  },
+  transportBody: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: '#475569',
   },
   modalBackdrop: {
     flex: 1,

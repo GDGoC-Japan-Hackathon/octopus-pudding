@@ -239,13 +239,7 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
     title: item.item_type === 'transport' ? transportModeLabel(item.transport_mode) : item.name,
     body:
       item.item_type === 'transport'
-        ? typeof item.notes === 'string' && item.notes.includes('公共交通機関が取得できませんでした')
-          ? item.notes
-          : item.departure_stop_name && item.arrival_stop_name
-          ? `${item.departure_stop_name} → ${item.arrival_stop_name}`
-          : item.from_name && item.to_name
-          ? `${item.from_name} → ${item.to_name}`
-          : item.notes || '移動'
+        ? buildTransportBody(item)
         : item.notes || item.category || '詳細メモは未設定です。',
     itemType: item.item_type === 'transport' ? 'transport' : 'place',
     metaLabel:
@@ -269,6 +263,43 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
     departureStopName: item.departure_stop_name ?? undefined,
     arrivalStopName: item.arrival_stop_name ?? undefined,
   }));
+}
+
+function buildTransportBody(item: TripDetailItineraryItemResponse) {
+  if (typeof item.notes === 'string' && item.notes.includes('公共交通機関が取得できませんでした')) {
+    return item.notes;
+  }
+
+  const routeLabel =
+    item.departure_stop_name && item.arrival_stop_name
+      ? `${item.departure_stop_name} → ${item.arrival_stop_name}`
+      : item.from_name && item.to_name
+      ? `${item.from_name} → ${item.to_name}`
+      : null;
+
+  const normalizedNotes = normalizeTransportNotes(item.notes);
+  if (routeLabel && normalizedNotes) {
+    return `${routeLabel}\n${normalizedNotes}`;
+  }
+  if (routeLabel) {
+    return routeLabel;
+  }
+  if (normalizedNotes) {
+    return normalizedNotes;
+  }
+  return '移動';
+}
+
+function normalizeTransportNotes(notes?: string | null) {
+  if (!notes) {
+    return null;
+  }
+  const compact = notes
+    .split('/')
+    .map((part) => part.trim())
+    .filter((part) => part && part !== 'Google Directions API')
+    .join(' / ');
+  return compact || null;
 }
 
 function transportModeLabel(mode?: string | null) {
