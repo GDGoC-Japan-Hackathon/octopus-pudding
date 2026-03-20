@@ -285,6 +285,10 @@ class AiPlanGenerationCreate(BaseModel):
     lodging_notes: list[str] = Field(default_factory=list)
     additional_request_comment: Optional[str] = None
     selected_companion_names: list[str] = Field(default_factory=list)
+    incident_type: Optional[str] = None
+    incident_note: Optional[str] = None
+    delay_minutes: Optional[int] = None
+    adjustment_policies: list[str] = Field(default_factory=list)
 
 
 class AiPlanGenerationResponse(BaseModel):

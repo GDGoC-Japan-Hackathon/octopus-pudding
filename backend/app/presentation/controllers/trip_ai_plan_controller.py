@@ -55,6 +55,10 @@ async def create_ai_plan_generation(
             lodging_notes=payload.lodging_notes,
             additional_request_comment=payload.additional_request_comment,
             selected_companion_names=payload.selected_companion_names,
+            incident_type=payload.incident_type,
+            incident_note=payload.incident_note,
+            delay_minutes=payload.delay_minutes,
+            adjustment_policies=payload.adjustment_policies,
         )
         return AiPlanGenerationResponse.model_validate(generation)
     except TripNotFoundError as exc:

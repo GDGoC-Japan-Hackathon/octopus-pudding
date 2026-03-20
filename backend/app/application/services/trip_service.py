@@ -552,6 +552,10 @@ class TripService:
         lodging_notes: Optional[list[str]] = None,
         additional_request_comment: Optional[str] = None,
         selected_companion_names: Optional[list[str]] = None,
+        incident_type: Optional[str] = None,
+        incident_note: Optional[str] = None,
+        delay_minutes: Optional[int] = None,
+        adjustment_policies: Optional[list[str]] = None,
     ) -> AiPlanGeneration:
         generation_input = {
             "must_visit_places": [],
@@ -561,6 +565,10 @@ class TripService:
             "origin": None,
             "destination": None,
             "lodging": None,
+            "incident_type": None,
+            "incident_note": None,
+            "delay_minutes": None,
+            "adjustment_policies": [],
         }
 
         aggregate = await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
@@ -579,6 +587,10 @@ class TripService:
         normalized_must_visit_places = _normalize_generation_text_items(must_visit_places)
         normalized_lodging_notes = _normalize_generation_text_items_by_day(lodging_notes)
         normalized_additional_comment = (additional_request_comment or "").strip() or None
+        normalized_incident_type = (incident_type or "").strip() or None
+        normalized_incident_note = (incident_note or "").strip() or None
+        normalized_delay_minutes = int(delay_minutes) if isinstance(delay_minutes, int) and delay_minutes > 0 else None
+        normalized_adjustment_policies = _normalize_generation_text_items(adjustment_policies)
         self._validate_location_like_text(aggregate.trip.origin, "出発地")
         self._validate_location_like_text(aggregate.trip.destination, "目的地")
         for lodging_note in normalized_lodging_notes:
@@ -637,6 +649,10 @@ class TripService:
             "origin": self._normalize_lat_lng(origin, field_name="origin"),
             "destination": self._normalize_lat_lng(destination, field_name="destination"),
             "lodging": self._normalize_lat_lng(lodging, field_name="lodging") if lodging else None,
+            "incident_type": normalized_incident_type,
+            "incident_note": normalized_incident_note,
+            "delay_minutes": normalized_delay_minutes,
+            "adjustment_policies": normalized_adjustment_policies,
         }
 
         generation = AiPlanGeneration(
@@ -712,6 +728,8 @@ class TripService:
                 max_candidates=24,
                 must_visit_places=(generation_input or {}).get("must_visit_places"),
                 destination_location=(generation_input or {}).get("destination"),
+                incident_type=(generation_input or {}).get("incident_type"),
+                adjustment_policies=(generation_input or {}).get("adjustment_policies"),
             )
             route_options = await self._collect_route_options(
                 trip=aggregate.trip,
@@ -748,6 +766,10 @@ class TripService:
                 place_candidates=place_candidates,
                 origin_location=(generation_input or {}).get("origin"),
                 destination_location=(generation_input or {}).get("destination"),
+            )
+            normalized = self._apply_incident_plan_adjustments(
+                normalized_plan=normalized,
+                generation_input=generation_input,
             )
             normalized = self._enforce_plan_constraints(
                 trip=aggregate.trip,
@@ -787,6 +809,9 @@ class TripService:
                     "candidates": len(place_candidates),
                     "inserted_items": inserted_count,
                     "regeneration_mode": regeneration_mode,
+                    "incident_type": (generation_input or {}).get("incident_type"),
+                    "delay_minutes": (generation_input or {}).get("delay_minutes"),
+                    "adjustment_policies": (generation_input or {}).get("adjustment_policies") or [],
                     "transit_step_items": transit_step_count,
                     "transit_line_items": transit_line_count,
                     "transit_attempted_pairs": route_diagnostics.get("transit_attempted_pairs", 0),
@@ -1091,15 +1116,35 @@ class TripService:
         max_candidates: int,
         must_visit_places: Optional[list[str]] = None,
         destination_location: Optional[dict] = None,
+        incident_type: Optional[str] = None,
+        adjustment_policies: Optional[list[str]] = None,
     ) -> list[PlaceCandidate]:
         place_client = GooglePlacesClient()
         atmosphere_hint = preference.atmosphere.value if preference is not None else ""
+        normalized_policies = set(_normalize_generation_text_items(adjustment_policies))
         queries = [
             f"{destination} 観光地",
             f"{destination} 人気スポット",
             f"{destination} レストラン",
             f"{destination} カフェ",
         ]
+        if incident_type == "bad_weather" or "indoor_preferred" in normalized_policies:
+            queries.extend(
+                [
+                    f"{destination} 屋内 おすすめ",
+                    f"{destination} 美術館",
+                    f"{destination} 水族館",
+                    f"{destination} ショッピングモール",
+                ]
+            )
+        if incident_type == "delay" or "shorter_travel" in normalized_policies:
+            queries.extend([f"{destination} 駅近 観光", f"{destination} 徒歩圏内 おすすめ"])
+        if incident_type == "fatigue" or "less_walking" in normalized_policies:
+            queries.extend([f"{destination} 休憩 カフェ", f"{destination} 温泉 日帰り"])
+        if "food_priority" in normalized_policies:
+            queries.extend([f"{destination} ランチ 人気", f"{destination} ディナー おすすめ"])
+        if "scenic_priority" in normalized_policies:
+            queries.extend([f"{destination} 展望台", f"{destination} 景色 おすすめ"])
         if atmosphere_hint:
             queries.append(f"{destination} {atmosphere_hint} おすすめ")
         for must_visit_place in _normalize_generation_text_items(must_visit_places):
@@ -1218,6 +1263,10 @@ class TripService:
         lodging_notes = _normalize_generation_text_items_by_day(generation_input.get("lodging_notes"))
         selected_companion_names = _normalize_generation_text_items(generation_input.get("selected_companion_names"))
         additional_request_comment = (generation_input.get("additional_request_comment") or "").strip() or None
+        incident_type = (generation_input.get("incident_type") or "").strip() or None
+        incident_note = (generation_input.get("incident_note") or "").strip() or None
+        delay_minutes = generation_input.get("delay_minutes")
+        adjustment_policies = _normalize_generation_text_items(generation_input.get("adjustment_policies"))
         return (
             "旅行日程を最適化してください。必ずJSONオブジェクトのみを返してください。\n"
             'フォーマット: {"days": [{"day_number": 1, "items": ['
@@ -1237,6 +1286,10 @@ class TripService:
             f"lodging_notes_by_day={json.dumps(lodging_notes, ensure_ascii=False)}\n"
             f"selected_companion_names={json.dumps(selected_companion_names, ensure_ascii=False)}\n"
             f"additional_request_comment={json.dumps(additional_request_comment, ensure_ascii=False)}\n"
+            f"incident_type={json.dumps(incident_type, ensure_ascii=False)}\n"
+            f"incident_note={json.dumps(incident_note, ensure_ascii=False)}\n"
+            f"delay_minutes={json.dumps(delay_minutes, ensure_ascii=False)}\n"
+            f"adjustment_policies={json.dumps(adjustment_policies, ensure_ascii=False)}\n"
             f"candidates={json.dumps(candidates_payload, ensure_ascii=False)}\n"
             f"route_options={json.dumps(route_options_payload, ensure_ascii=False)}\n"
             "ルール:\n"
@@ -1261,9 +1314,74 @@ class TripService:
             "- lodging_notes_by_day は day_number 順の配列（null は指定なし）として扱い、各日の夜の帰着や宿泊候補として尊重する\n"
             "- additional_request_comment に書かれた希望や制約を優先する\n"
             "- selected_companion_names は同行者コンテキストとして扱い、二人旅やグループ旅行らしい無理のないプランにする\n"
+            "- incident_type, incident_note, delay_minutes, adjustment_policies がある場合は通常の希望より優先する\n"
+            "- bad_weather または indoor_preferred のときは屋内スポットを優先する\n"
+            "- delay または delay_minutes があるときは後半の予定を詰め込みすぎず、必要なら優先度の低いスポットを減らす\n"
+            "- fatigue, less_walking, shorter_travel のときは徒歩負荷と移動回数を減らす\n"
+            "- food_priority のときは食事スポットを優先する\n"
+            "- scenic_priority のときは景色系スポットを優先する\n"
             "- 公共交通（電車・バス）を優先し、成立しない場合のみ徒歩や代替手段を使う\n"
             "- 長距離移動直後に予定を詰め込みすぎない現実的な行程にする\n"
         )
+
+    def _apply_incident_plan_adjustments(
+        self,
+        normalized_plan: dict,
+        generation_input: Optional[dict] = None,
+    ) -> dict:
+        generation_input = generation_input or {}
+        incident_type = (generation_input.get("incident_type") or "").strip()
+        delay_minutes = generation_input.get("delay_minutes")
+        policies = set(_normalize_generation_text_items(generation_input.get("adjustment_policies")))
+
+        max_places_per_day: Optional[int] = None
+        if isinstance(delay_minutes, int) and delay_minutes >= 90:
+            max_places_per_day = 2
+        elif isinstance(delay_minutes, int) and delay_minutes >= 30:
+            max_places_per_day = 3
+        elif incident_type == "fatigue" or {"less_walking", "shorter_travel"} & policies:
+            max_places_per_day = 3
+
+        if max_places_per_day is None:
+            return normalized_plan
+
+        adjusted_days: list[dict] = []
+        for day_payload in normalized_plan.get("days", []):
+            day_copy = dict(day_payload)
+            day_copy["items"] = self._limit_place_items_for_adjustment(
+                day_payload.get("items", []),
+                max_places_per_day=max_places_per_day,
+            )
+            adjusted_days.append(day_copy)
+
+        updated_plan = dict(normalized_plan)
+        updated_plan["days"] = adjusted_days
+        return updated_plan
+
+    def _limit_place_items_for_adjustment(
+        self,
+        items: list[dict],
+        max_places_per_day: int,
+    ) -> list[dict]:
+        trimmed: list[dict] = []
+        place_count = 0
+        for item in items:
+            item_type = (item.get("item_type") or "").strip().lower()
+            if item_type == "place":
+                if place_count >= max_places_per_day:
+                    continue
+                place_count += 1
+                trimmed.append(item)
+                continue
+
+            if item_type == "transport":
+                if place_count >= max_places_per_day:
+                    continue
+                trimmed.append(item)
+                continue
+
+            trimmed.append(item)
+        return trimmed
 
     def _validate_location_like_text(self, value: str, field_label: str) -> None:
         text = (value or "").strip()

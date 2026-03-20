@@ -19,6 +19,12 @@ export type CreateAiPlanGenerationRequest = {
   lodging_notes?: string[];
   additional_request_comment?: string;
   selected_companion_names?: string[];
+  incident_type?: 'bad_weather' | 'delay' | 'mood_change' | 'fatigue' | 'other';
+  incident_note?: string;
+  delay_minutes?: number;
+  adjustment_policies?: Array<
+    'indoor_preferred' | 'shorter_travel' | 'less_walking' | 'food_priority' | 'scenic_priority'
+  >;
 };
 
 export type AiPlanGenerationResponse = {
