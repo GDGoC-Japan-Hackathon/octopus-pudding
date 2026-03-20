@@ -9,7 +9,9 @@ from app.presentation.dependencies.auth import get_current_user
 from app.presentation.dto.trip_dto import AiPlanGenerationCreate, AiPlanGenerationResponse
 from app.shared.exceptions import (
     AiPlanGenerationNotFoundError,
+    ItineraryItemNotFoundError,
     PermissionDeniedError,
+    TripDayNotFoundError,
     TripNotFoundError,
 )
 
@@ -36,9 +38,19 @@ async def create_ai_plan_generation(
         generation = await trip_service.start_my_ai_plan_generation(
             owner_user_id=current_user.id,
             trip_id=trip_id,
+            origin={"latitude": payload.origin.latitude, "longitude": payload.origin.longitude},
+            destination={"latitude": payload.destination.latitude, "longitude": payload.destination.longitude},
+            lodging=(
+                None
+                if payload.lodging is None
+                else {"latitude": payload.lodging.latitude, "longitude": payload.lodging.longitude}
+            ),
             provider=payload.provider,
             prompt_version=payload.prompt_version,
             run_async=payload.run_async,
+            regeneration_mode=payload.regeneration_mode,
+            target_day_id=payload.target_day_id,
+            target_item_id=payload.target_item_id,
             must_visit_places=payload.must_visit_places,
             lodging_notes=payload.lodging_notes,
             additional_request_comment=payload.additional_request_comment,
@@ -47,8 +59,14 @@ async def create_ai_plan_generation(
         return AiPlanGenerationResponse.model_validate(generation)
     except TripNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except TripDayNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ItineraryItemNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except PermissionDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
 @router.get(

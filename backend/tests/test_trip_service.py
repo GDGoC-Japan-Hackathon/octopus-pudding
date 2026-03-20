@@ -242,6 +242,66 @@ def test_select_representative_place_item_uses_longest_place_stay():
     assert representative.name == "浅草寺"
 
 
+def test_merge_generated_itinerary_items_by_scope_from_item_keeps_prefix_and_rebuilds_tail():
+    service = TripService(FakeTripRepository([]))
+    day = TripDay(id=1, trip_id=1, day_number=1, date=date(2026, 4, 1))
+    existing_items = [
+        ItineraryItem(id=1, trip_day_id=1, name="東京駅", item_type="place", sequence=1, start_time=datetime(2026, 4, 1, 9, 0)),
+        ItineraryItem(id=2, trip_day_id=1, name="移動", item_type="transport", sequence=2, start_time=datetime(2026, 4, 1, 10, 0)),
+        ItineraryItem(id=3, trip_day_id=1, name="浅草寺", item_type="place", sequence=3, start_time=datetime(2026, 4, 1, 10, 30)),
+        ItineraryItem(id=4, trip_day_id=1, name="移動", item_type="transport", sequence=4, start_time=datetime(2026, 4, 1, 12, 0)),
+        ItineraryItem(id=5, trip_day_id=1, name="東京スカイツリー", item_type="place", sequence=5, start_time=datetime(2026, 4, 1, 12, 30)),
+    ]
+    generated_items = [
+        ItineraryItem(id=None, trip_day_id=1, name="東京駅", item_type="place", sequence=1, start_time=datetime(2026, 4, 1, 9, 0)),
+        ItineraryItem(id=None, trip_day_id=1, name="移動", item_type="transport", sequence=2, start_time=datetime(2026, 4, 1, 10, 0)),
+        ItineraryItem(id=None, trip_day_id=1, name="上野公園", item_type="place", sequence=3, start_time=datetime(2026, 4, 1, 10, 30)),
+        ItineraryItem(id=None, trip_day_id=1, name="移動", item_type="transport", sequence=4, start_time=datetime(2026, 4, 1, 12, 0)),
+        ItineraryItem(id=None, trip_day_id=1, name="アメ横", item_type="place", sequence=5, start_time=datetime(2026, 4, 1, 12, 30)),
+    ]
+
+    merged = service._merge_generated_itinerary_items_by_scope(
+        days=[day],
+        existing_items=existing_items,
+        generated_items=generated_items,
+        regeneration_mode="from_item",
+        target_item_id=3,
+    )
+
+    assert [item.name for item in merged] == ["東京駅", "移動", "上野公園", "移動", "アメ横"]
+    assert [item.sequence for item in merged] == [1, 2, 3, 4, 5]
+
+
+def test_merge_generated_itinerary_items_by_scope_replace_item_swaps_selected_place_block():
+    service = TripService(FakeTripRepository([]))
+    day = TripDay(id=1, trip_id=1, day_number=1, date=date(2026, 4, 1))
+    existing_items = [
+        ItineraryItem(id=1, trip_day_id=1, name="東京駅", item_type="place", sequence=1, start_time=datetime(2026, 4, 1, 9, 0)),
+        ItineraryItem(id=2, trip_day_id=1, name="移動", item_type="transport", sequence=2, start_time=datetime(2026, 4, 1, 10, 0)),
+        ItineraryItem(id=3, trip_day_id=1, name="浅草寺", item_type="place", sequence=3, start_time=datetime(2026, 4, 1, 10, 30)),
+        ItineraryItem(id=4, trip_day_id=1, name="移動", item_type="transport", sequence=4, start_time=datetime(2026, 4, 1, 12, 0)),
+        ItineraryItem(id=5, trip_day_id=1, name="東京スカイツリー", item_type="place", sequence=5, start_time=datetime(2026, 4, 1, 12, 30)),
+    ]
+    generated_items = [
+        ItineraryItem(id=None, trip_day_id=1, name="東京駅", item_type="place", sequence=1, start_time=datetime(2026, 4, 1, 9, 0)),
+        ItineraryItem(id=None, trip_day_id=1, name="移動", item_type="transport", sequence=2, start_time=datetime(2026, 4, 1, 10, 0)),
+        ItineraryItem(id=None, trip_day_id=1, name="上野公園", item_type="place", sequence=3, start_time=datetime(2026, 4, 1, 10, 30)),
+        ItineraryItem(id=None, trip_day_id=1, name="移動", item_type="transport", sequence=4, start_time=datetime(2026, 4, 1, 12, 0)),
+        ItineraryItem(id=None, trip_day_id=1, name="東京スカイツリー", item_type="place", sequence=5, start_time=datetime(2026, 4, 1, 12, 30)),
+    ]
+
+    merged = service._merge_generated_itinerary_items_by_scope(
+        days=[day],
+        existing_items=existing_items,
+        generated_items=generated_items,
+        regeneration_mode="replace_item",
+        target_item_id=3,
+    )
+
+    assert [item.name for item in merged] == ["東京駅", "移動", "上野公園", "移動", "東京スカイツリー"]
+    assert [item.sequence for item in merged] == [1, 2, 3, 4, 5]
+
+
 @pytest.mark.asyncio
 async def test_update_trip_cover_image_from_itinerary_uses_matching_place_photo(monkeypatch):
     trip = make_trip(1, destination="箱根")

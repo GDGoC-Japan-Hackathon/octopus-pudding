@@ -8,6 +8,7 @@ import { type PlanDetailDay, type PlanDetailTimelineItem } from '@/features/plan
 type PlanDetailTemplateProps = {
   headerTitle: string;
   weatherLabel: string;
+  topNoticeMessage?: string | null;
   headerLeftSlot?: ReactNode;
   headerRightSlot?: ReactNode;
   heroImage: string;
@@ -30,11 +31,17 @@ type PlanDetailTemplateProps = {
   secondaryActionDisabled?: boolean;
   secondaryButtonVariant?: 'light' | 'orange' | 'gray';
   footerSlot?: ReactNode;
+  timelinePrimaryActionLabel?: string;
+  onTimelinePrimaryAction?: (item: PlanDetailTimelineItem) => void;
+  timelineSecondaryActionLabel?: string;
+  onTimelineSecondaryAction?: (item: PlanDetailTimelineItem) => void;
+  timelineActionLoadingId?: string | number | null;
 };
 
 export function PlanDetailTemplate({
   headerTitle,
   weatherLabel,
+  topNoticeMessage,
   headerLeftSlot,
   headerRightSlot,
   heroImage,
@@ -57,12 +64,25 @@ export function PlanDetailTemplate({
   secondaryActionDisabled,
   secondaryButtonVariant = 'light',
   footerSlot,
+  timelinePrimaryActionLabel,
+  onTimelinePrimaryAction,
+  timelineSecondaryActionLabel,
+  onTimelineSecondaryAction,
+  timelineActionLoadingId,
 }: PlanDetailTemplateProps) {
   const [selectedTransportItem, setSelectedTransportItem] = useState<PlanDetailTimelineItem | null>(null);
+  const [selectedPlaceActionItem, setSelectedPlaceActionItem] = useState<PlanDetailTimelineItem | null>(null);
 
   return (
     <View style={styles.screen}>
       <AppHeader title={headerTitle} weatherLabel={weatherLabel} leftSlot={headerLeftSlot} rightSlot={headerRightSlot} />
+
+      {topNoticeMessage ? (
+        <View style={styles.topNoticeWrap}>
+          <MaterialIcons name="autorenew" size={16} color="#C2410C" />
+          <Text style={styles.topNoticeText}>{topNoticeMessage}</Text>
+        </View>
+      ) : null}
 
       <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
         <View style={styles.heroWrap}>
@@ -151,7 +171,16 @@ export function PlanDetailTemplate({
                             </View>
                             <Text style={styles.timelineCardTitle}>{item.title}</Text>
                           </View>
-                          <MaterialIcons name="more-horiz" size={18} color="#CBD5E1" />
+                          {(timelinePrimaryActionLabel || timelineSecondaryActionLabel) ? (
+                            <Pressable
+                              style={styles.moreButton}
+                              onPress={() => setSelectedPlaceActionItem(item)}
+                            >
+                              <MaterialIcons name="more-horiz" size={18} color="#94A3B8" />
+                            </Pressable>
+                          ) : (
+                            <MaterialIcons name="more-horiz" size={18} color="#CBD5E1" />
+                          )}
                         </View>
 
                         {item.durationLabel ? (
@@ -280,6 +309,60 @@ export function PlanDetailTemplate({
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={selectedPlaceActionItem !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedPlaceActionItem(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setSelectedPlaceActionItem(null)}>
+          <Pressable style={styles.placeMenuSheet} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.placeMenuTitle}>{selectedPlaceActionItem?.title ?? 'スポット操作'}</Text>
+
+            {timelinePrimaryActionLabel ? (
+              <Pressable
+                style={[
+                  styles.placeMenuButton,
+                  styles.placeMenuButtonLight,
+                  timelineActionLoadingId === selectedPlaceActionItem?.id && styles.timelineActionButtonDisabled,
+                ]}
+                onPress={() => {
+                  if (!selectedPlaceActionItem) {
+                    return;
+                  }
+                  setSelectedPlaceActionItem(null);
+                  onTimelinePrimaryAction?.(selectedPlaceActionItem);
+                }}
+                disabled={timelineActionLoadingId === selectedPlaceActionItem?.id}
+              >
+                <Text style={styles.timelineActionButtonText}>{timelinePrimaryActionLabel}</Text>
+              </Pressable>
+            ) : null}
+
+            {timelineSecondaryActionLabel ? (
+              <Pressable
+                style={[
+                  styles.placeMenuButton,
+                  styles.placeMenuButtonOrange,
+                  timelineActionLoadingId === selectedPlaceActionItem?.id && styles.timelineActionButtonDisabled,
+                ]}
+                onPress={() => {
+                  if (!selectedPlaceActionItem) {
+                    return;
+                  }
+                  setSelectedPlaceActionItem(null);
+                  onTimelineSecondaryAction?.(selectedPlaceActionItem);
+                }}
+                disabled={timelineActionLoadingId === selectedPlaceActionItem?.id}
+              >
+                <Text style={styles.timelineActionButtonTextOrange}>{timelineSecondaryActionLabel}</Text>
+              </Pressable>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -288,6 +371,25 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#FDFDFD',
+  },
+  topNoticeWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  topNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#C2410C',
   },
   contentContainer: {
     paddingBottom: 28,
@@ -499,6 +601,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0F172A',
   },
+  moreButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
   durationBadge: {
     alignSelf: 'flex-start',
     paddingHorizontal: 10,
@@ -518,6 +628,51 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     color: '#475569',
+  },
+  timelineActionButtonDisabled: {
+    opacity: 0.6,
+  },
+  timelineActionButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#C2410C',
+  },
+  timelineActionButtonTextOrange: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  placeMenuSheet: {
+    width: '100%',
+    marginTop: 'auto',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 28,
+    gap: 12,
+  },
+  placeMenuTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  placeMenuButton: {
+    minHeight: 46,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  placeMenuButtonLight: {
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+  },
+  placeMenuButtonOrange: {
+    backgroundColor: '#EC5B13',
   },
   transportRow: {
     flexDirection: 'row',

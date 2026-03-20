@@ -32,6 +32,8 @@ type TripPlanFormProps = {
   initialSelectedCompanionUserIds: number[];
   onBack: () => void;
   onSubmit: (payload: TripPlanFormSubmitPayload) => Promise<void> | void;
+  lockBasicInfoFields?: boolean;
+  submitHint?: string;
 };
 
 const DESTINATION_SUGGESTIONS = ['京都', '沖縄', '北海道', '金沢'] as const;
@@ -85,6 +87,8 @@ export function TripPlanForm({
   initialSelectedCompanionUserIds,
   onBack,
   onSubmit,
+  lockBasicInfoFields = false,
+  submitHint = 'AIが最適なルート、宿泊先、観光スポットを提案します',
 }: TripPlanFormProps) {
   const [isResolvingCurrentLocation, setIsResolvingCurrentLocation] = useState(false);
   const isResolvingCurrentLocationRef = useRef(false);
@@ -154,7 +158,7 @@ export function TripPlanForm({
       longitude: currentPosition.coords.longitude,
     });
 
-    const areaParts = [place?.region, place?.city, place?.district].filter(
+    const areaParts = [place?.region, place?.subregion, place?.city, place?.district].filter(
       (value): value is string => Boolean(value && value.trim())
     );
 
@@ -162,7 +166,11 @@ export function TripPlanForm({
       return areaParts.join(' ');
     }
 
-    return `${currentPosition.coords.latitude.toFixed(4)}, ${currentPosition.coords.longitude.toFixed(4)}`;
+    if (place?.name && place.name.trim()) {
+      return place.name.trim();
+    }
+
+    throw new Error('現在地の住所を特定できませんでした。位置情報設定を確認して再度お試しください。');
   }, []);
 
   const handleUseCurrentLocation = useCallback(async () => {
@@ -261,72 +269,95 @@ export function TripPlanForm({
   }, [fields, isSubmitting, onSubmit, selectedCompanionUserIds]);
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.contentContainer}>
+    <View style={styles.screen}>
       <AppHeader title={title} leftSlot={<BackButton size={28} onPress={onBack} />} />
 
-      <View style={styles.container}>
-        <Text style={styles.requiredLegend}>※必須</Text>
+      <ScrollView contentContainerStyle={styles.contentContainer}>
+        <View style={styles.container}>
+          <Text style={styles.requiredLegend}>※必須</Text>
 
-        <View style={styles.sectionBlock}>
-          <FieldLabel label="出発地" iconName="location-on" required />
-          <View style={styles.inputShell}>
-            <TextInput
-              value={fields.origin}
-              onChangeText={(value) => updateField('origin', value)}
-              placeholder="例：東京駅"
-              placeholderTextColor="#94A3B8"
-              style={[styles.textInput, styles.originInput]}
-            />
-            <Pressable
-              style={[styles.inlineActionButton, isResolvingCurrentLocation ? styles.inlineActionButtonDisabled : null]}
-              onPress={() => void handleUseCurrentLocation()}
-              disabled={isResolvingCurrentLocation}
-            >
-              {isResolvingCurrentLocation ? (
-                <ActivityIndicator color="#0F172A" size="small" />
-              ) : (
-                <>
-                  <MaterialIcons name="my-location" size={16} color="#0F172A" />
-                  <Text style={styles.inlineActionText}>現在地から入力</Text>
-                </>
+          {lockBasicInfoFields ? (
+            <View style={styles.lockedNotice}>
+              <MaterialIcons name="lock" size={16} color="#92400E" />
+              <Text style={styles.lockedNoticeText}>
+                出発地・目的地・日程は旅程整合のため変更できません。
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.sectionBlock}>
+            <FieldLabel label="出発地" iconName="location-on" required />
+            <View style={styles.inputShell}>
+              <TextInput
+                value={fields.origin}
+                onChangeText={(value) => updateField('origin', value)}
+                placeholder="例：東京駅"
+                placeholderTextColor="#94A3B8"
+                style={[
+                  styles.textInput,
+                  !lockBasicInfoFields && styles.originInput,
+                  lockBasicInfoFields ? styles.textInputLocked : null,
+                ]}
+                editable={!lockBasicInfoFields}
+              />
+              {lockBasicInfoFields ? null : (
+                <Pressable
+                  style={[styles.inlineActionButton, isResolvingCurrentLocation ? styles.inlineActionButtonDisabled : null]}
+                  onPress={() => void handleUseCurrentLocation()}
+                  disabled={isResolvingCurrentLocation}
+                >
+                  {isResolvingCurrentLocation ? (
+                    <ActivityIndicator color="#0F172A" size="small" />
+                  ) : (
+                    <>
+                      <MaterialIcons name="my-location" size={16} color="#0F172A" />
+                      <Text style={styles.inlineActionText}>現在地から入力</Text>
+                    </>
+                  )}
+                </Pressable>
               )}
-            </Pressable>
+            </View>
           </View>
-        </View>
 
-        <View style={styles.sectionBlock}>
-          <FieldLabel label="目的地" iconName="flag" required />
-          <TextInput
-            value={fields.destination}
-            onChangeText={(value) => updateField('destination', value)}
-            placeholder="例：那覇空港"
-            placeholderTextColor="#94A3B8"
-            style={styles.textInput}
-          />
-          <View style={styles.chipHintRow}>
-            <Text style={styles.chipHintLabel}>人気のスポット</Text>
+          <View style={styles.sectionBlock}>
+            <FieldLabel label="目的地" iconName="flag" required />
+            <TextInput
+              value={fields.destination}
+              onChangeText={(value) => updateField('destination', value)}
+              placeholder="例：那覇空港"
+              placeholderTextColor="#94A3B8"
+              style={[styles.textInput, lockBasicInfoFields ? styles.textInputLocked : null]}
+              editable={!lockBasicInfoFields}
+            />
+            {lockBasicInfoFields ? null : (
+              <>
+                <View style={styles.chipHintRow}>
+                  <Text style={styles.chipHintLabel}>人気のスポット</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScrollRow}>
+                  {DESTINATION_SUGGESTIONS.map((item) => (
+                    <Pressable key={item} style={styles.secondaryChip} onPress={() => updateField('destination', item)}>
+                      <Text style={styles.secondaryChipText}>{item}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </>
+            )}
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScrollRow}>
-            {DESTINATION_SUGGESTIONS.map((item) => (
-              <Pressable key={item} style={styles.secondaryChip} onPress={() => updateField('destination', item)}>
-                <Text style={styles.secondaryChipText}>{item}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
 
-        <View style={styles.sectionBlock}>
-          <ScheduleField
-            startDate={fields.startDate}
-            endDate={fields.endDate}
-            onChangeStartDate={(value) => updateField('startDate', value)}
-            onChangeEndDate={(value) => updateField('endDate', value)}
-            label="日程"
-            iconName="calendar-today"
-            required
-            maxTripDays={MAX_TRIP_DAYS}
-          />
-        </View>
+          <View style={styles.sectionBlock}>
+            <ScheduleField
+              startDate={fields.startDate}
+              endDate={fields.endDate}
+              onChangeStartDate={(value) => updateField('startDate', value)}
+              onChangeEndDate={(value) => updateField('endDate', value)}
+              label="日程"
+              iconName="calendar-today"
+              required
+              maxTripDays={MAX_TRIP_DAYS}
+              disabled={lockBasicInfoFields}
+            />
+          </View>
 
         <View style={styles.gridRow}>
           <View style={styles.gridItem}>
@@ -519,15 +550,16 @@ export function TripPlanForm({
           />
         </View>
 
-        <View style={styles.submitWrap}>
-          <Pressable style={[styles.submitButton, isSubmitting ? styles.submitButtonDisabled : null]} onPress={() => void handleSubmit()} disabled={isSubmitting}>
-            <MaterialIcons name="bolt" size={20} color="#FFFFFF" />
-            <Text style={styles.submitButtonText}>{submitLabel}</Text>
-          </Pressable>
-          <Text style={styles.submitHint}>AIが最適なルート、宿泊先、観光スポットを提案します</Text>
+          <View style={styles.submitWrap}>
+            <Pressable style={[styles.submitButton, isSubmitting ? styles.submitButtonDisabled : null]} onPress={() => void handleSubmit()} disabled={isSubmitting}>
+              <MaterialIcons name={lockBasicInfoFields ? 'save' : 'bolt'} size={20} color="#FFFFFF" />
+              <Text style={styles.submitButtonText}>{submitLabel}</Text>
+            </Pressable>
+            <Text style={styles.submitHint}>{submitHint}</Text>
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -548,6 +580,23 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     color: '#DC2626',
     fontSize: 12,
+    fontWeight: '700',
+  },
+  lockedNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  lockedNoticeText: {
+    flex: 1,
+    color: '#92400E',
+    fontSize: 13,
     fontWeight: '700',
   },
   brandingBlock: {
@@ -607,6 +656,10 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     fontSize: 14,
     color: '#0F172A',
+  },
+  textInputLocked: {
+    backgroundColor: '#F8FAFC',
+    color: '#64748B',
   },
   originInput: {
     paddingRight: 140,

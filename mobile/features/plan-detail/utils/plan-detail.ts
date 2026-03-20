@@ -3,6 +3,7 @@ import {
   type TripDetailAggregateResponse,
   type TripDetailItineraryItemResponse,
 } from '@/features/trips/types/trip-detail';
+import { type CreateAiPlanGenerationRequest } from '@/features/trips/types/ai-plan-generation';
 import { getApiErrorMessage } from '@/lib/api/client';
 
 import { type PlanDetailDay, type PlanDetailTimelineItem, type PlanDetailViewModel } from '@/features/plan-detail/types';
@@ -32,12 +33,29 @@ export function getTripDetailErrorMessage(error: unknown): string {
 
 export function getAiGenerationErrorMessage(error: unknown): string {
   return getApiErrorMessage(error, {
-    fallback: 'AIプラン構築の実行に失敗しました。',
+    fallback: 'AIプラン再構築の実行に失敗しました。',
     unauthorized: '認証が切れています。再ログイン後にお試しください。',
     forbidden: 'この計画でAIプランを作成する権限がありません。',
     notFound: '対象の計画が見つかりませんでした。',
     defaultWithStatus: true,
   });
+}
+
+export function buildAiGenerationRequestFromAggregate(
+  aggregate: TripDetailAggregateResponse,
+  overrides: Partial<CreateAiPlanGenerationRequest> = {}
+): CreateAiPlanGenerationRequest {
+  const sortedDays = [...aggregate.days].sort((a, b) => a.day_number - b.day_number);
+  return {
+    run_async: false,
+    must_visit_places: (aggregate.preference?.must_visit_places_text ?? '')
+      .split(/[\n,、]/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+    lodging_notes: sortedDays.map((day) => day.lodging_note?.trim() ?? ''),
+    additional_request_comment: aggregate.preference?.additional_request_comment?.trim() || undefined,
+    ...overrides,
+  };
 }
 
 export function getTripStartErrorMessage(error: unknown): string {
@@ -171,7 +189,19 @@ export function groupItineraryByDay(aggregate: TripDetailAggregateResponse | nul
     .sort((a, b) => (a.dayNumber ?? 999) - (b.dayNumber ?? 999))
     .map((group) => ({
       ...group,
-      items: [...group.items].sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? '')),
+      items: [...group.items].sort((a, b) => {
+        const sequenceDiff = (a.sequence ?? 9999) - (b.sequence ?? 9999);
+        if (sequenceDiff !== 0) {
+          return sequenceDiff;
+        }
+
+        const startDiff = (a.start_time ?? '').localeCompare(b.start_time ?? '');
+        if (startDiff !== 0) {
+          return startDiff;
+        }
+
+        return a.id - b.id;
+      }),
     }));
 }
 
@@ -183,7 +213,9 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
     title: item.item_type === 'transport' ? transportModeLabel(item.transport_mode) : item.name,
     body:
       item.item_type === 'transport'
-        ? item.departure_stop_name && item.arrival_stop_name
+        ? typeof item.notes === 'string' && item.notes.includes('公共交通機関が取得できませんでした')
+          ? item.notes
+          : item.departure_stop_name && item.arrival_stop_name
           ? `${item.departure_stop_name} → ${item.arrival_stop_name}`
           : item.from_name && item.to_name
           ? `${item.from_name} → ${item.to_name}`
@@ -192,7 +224,7 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
     itemType: item.item_type === 'transport' ? 'transport' : 'place',
     metaLabel:
       item.item_type === 'transport'
-        ? buildTransportMetaLabel(item.line_name, item.travel_minutes, item.distance_meters)
+        ? buildTransportMetaLabel(item.transport_mode, item.line_name, item.travel_minutes, item.distance_meters)
         : undefined,
     durationLabel:
       item.item_type === 'transport'
@@ -217,6 +249,7 @@ function transportModeLabel(mode?: string | null) {
   if (!mode) return '移動';
   if (mode === 'WALK') return '徒歩で移動';
   if (mode === 'BUS') return 'バスで移動';
+  if (mode === 'CAR') return '車で移動';
   return '電車で移動';
 }
 
@@ -224,13 +257,21 @@ function transportModeIcon(mode?: string | null): keyof typeof MaterialIcons.gly
   if (!mode) return 'swap-horiz';
   if (mode === 'WALK') return 'directions-walk';
   if (mode === 'BUS') return 'directions-bus';
+  if (mode === 'CAR') return 'directions-car';
   return 'train';
 }
 
-function buildTransportMetaLabel(lineName?: string | null, travelMinutes?: number | null, distanceMeters?: number | null) {
+function buildTransportMetaLabel(
+  transportMode?: string | null,
+  lineName?: string | null,
+  travelMinutes?: number | null,
+  distanceMeters?: number | null
+) {
   const parts: string[] = [];
   if (lineName) {
     parts.push(lineName);
+  } else if (transportMode === 'BUS' || transportMode === 'TRAIN') {
+    parts.push('公共交通');
   }
   if (typeof distanceMeters === 'number') {
     parts.push(distanceMeters >= 1000 ? `${(distanceMeters / 1000).toFixed(1)}km` : `${distanceMeters}m`);

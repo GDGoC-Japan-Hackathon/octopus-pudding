@@ -96,6 +96,12 @@ export type CreateTripDayRequest = {
   date?: string;
 };
 
+export type UpdateTripDayRequest = {
+  day_number?: number;
+  date?: string;
+  lodging_note?: string | null;
+};
+
 export type CreateItineraryItemRequest = {
   name: string;
   category?: string;

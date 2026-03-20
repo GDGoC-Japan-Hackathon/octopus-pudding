@@ -39,6 +39,7 @@ export const endpoints = {
     },
     days: {
       create: (tripId: number | string) => `/trips/${tripId}/days`,
+      update: (tripId: number | string, dayId: number | string) => `/trips/${tripId}/days/${dayId}`,
       items: {
         create: (tripId: number | string, dayId: number | string) => `/trips/${tripId}/days/${dayId}/items`,
       },
