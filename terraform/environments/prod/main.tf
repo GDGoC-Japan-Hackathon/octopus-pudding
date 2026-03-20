@@ -12,6 +12,7 @@ module "backend_infra" {
   cloud_run_service_name                  = var.cloud_run_service_name
   cloud_run_service_account_id            = var.cloud_run_service_account_id
   cloud_run_allow_unauthenticated         = var.cloud_run_allow_unauthenticated
+  cloud_run_deletion_protection           = var.cloud_run_deletion_protection
   cloudbuild_trigger_name                 = var.cloudbuild_trigger_name
   cloudbuild_filename                     = var.cloudbuild_filename
   cloudbuild_included_files               = var.cloudbuild_included_files

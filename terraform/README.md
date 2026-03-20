@@ -50,6 +50,23 @@ terraform plan -var-file=terraform.tfvars -out=tfplan
 terraform apply tfplan
 ```
 
+```bash
+# 重要: 設定変更後は古い tfplan を使い回さず、必ず plan を再作成してください
+terraform plan -var-file=terraform.tfvars -out=tfplan
+terraform apply tfplan
+```
+
+```bash
+# Cloud Run の deletion_protection 切り替えが必要で通常 apply が失敗する場合
+terraform apply \
+  -target=module.backend_infra.module.cloud_run.google_cloud_run_v2_service.this \
+  -var-file=terraform.tfvars
+
+# その後に通常の plan/apply
+terraform plan -var-file=terraform.tfvars -out=tfplan
+terraform apply tfplan
+```
+
 ## 重要事項
 
 - `backend/cloudbuild.yaml` の `--set-secrets` で参照する Secret 名は、Terraform のデフォルト Secret 名と一致させています。

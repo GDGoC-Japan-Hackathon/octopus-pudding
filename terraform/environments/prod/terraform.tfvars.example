@@ -3,6 +3,7 @@ region                       = "asia-northeast1"
 artifact_registry_repository = "backend"
 cloud_run_service_name       = "gdgoc-backend-prod"
 cloud_run_service_account_id = "gdgoc-backend-prod-run"
+cloud_run_deletion_protection = true
 
 cloudbuild_trigger_name = "gdgoc-backend-prod-trigger"
 cloudbuild_filename     = "backend/cloudbuild.yaml"

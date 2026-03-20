@@ -34,6 +34,12 @@ variable "cloud_run_allow_unauthenticated" {
   default     = true
 }
 
+variable "cloud_run_deletion_protection" {
+  description = "Enable deletion protection for Cloud Run service"
+  type        = bool
+  default     = false
+}
+
 variable "cloudbuild_trigger_name" {
   description = "Cloud Build trigger name"
   type        = string

@@ -104,6 +104,7 @@ module "cloud_run" {
   service_account_id    = var.cloud_run_service_account_id
   image_uri             = "${module.artifact_registry.repository_url}/${var.cloudbuild_image}:latest"
   allow_unauthenticated = var.cloud_run_allow_unauthenticated
+  deletion_protection   = var.cloud_run_deletion_protection
 
   depends_on = [module.secret_manager]
 }
