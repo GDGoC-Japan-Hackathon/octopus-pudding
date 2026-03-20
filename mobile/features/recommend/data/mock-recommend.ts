@@ -6,11 +6,10 @@ export function getMockRecommendPlans(): RecommendPlanListItem[] {
   return recommendedPlans.map((plan) => ({
     id: plan.id,
     title: plan.title,
-    location: plan.location,
-    author: plan.author,
+    dateLabel: plan.location,
     saveCount: plan.likes,
     image: plan.image,
-    category: plan.category,
+    categories: [plan.category],
   }));
 }
 
@@ -27,11 +26,14 @@ export function getMockRecommendPlanDetail(id: string): RecommendPlanDetail | nu
     title: plan.title,
     image: plan.image,
     username: meta.username,
-    date: meta.date,
+    createdAt: null,
+    startDate: '',
+    endDate: '',
     area: meta.area,
-    intro: meta.intro,
+    comment: meta.intro,
     budget: meta.budget,
     moveTime: meta.moveTime,
+    isSavedByMe: false,
     days: meta.days.map((day) => ({
       key: day.key,
       label: day.label,

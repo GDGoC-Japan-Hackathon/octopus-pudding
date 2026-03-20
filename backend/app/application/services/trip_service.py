@@ -491,6 +491,9 @@ class TripService:
         provider: Optional[str] = None,
         prompt_version: Optional[str] = None,
         run_async: bool = True,
+        regeneration_mode: str = "full",
+        target_day_id: Optional[int] = None,
+        target_item_id: Optional[int] = None,
         must_visit_places: Optional[list[str]] = None,
         lodging_notes: Optional[list[str]] = None,
         additional_request_comment: Optional[str] = None,
@@ -504,6 +507,12 @@ class TripService:
         }
 
         aggregate = await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+        normalized_regeneration_mode = self._normalize_regeneration_mode(regeneration_mode)
+        self._validate_ai_generation_scope(
+            aggregate=aggregate,
+            regeneration_mode=normalized_regeneration_mode,
+            target_item_id=target_item_id,
+        )
         days = await self._sync_trip_days_to_range(
             trip_id=trip_id,
             start_date=aggregate.trip.start_date,
@@ -555,6 +564,9 @@ class TripService:
             persisted_companion_names = _normalize_generation_text_items(selected_companion_names)
 
         generation_input = {
+            "regeneration_mode": normalized_regeneration_mode,
+            "target_day_id": target_day_id,
+            "target_item_id": target_item_id,
             "must_visit_places": _normalize_generation_text_items(
                 (refreshed_preference.must_visit_places_text or "").splitlines()
                 if refreshed_preference is not None and refreshed_preference.must_visit_places_text
@@ -678,9 +690,17 @@ class TripService:
                 days=days,
                 normalized_plan=normalized,
             )
+            regeneration_mode = self._normalize_regeneration_mode((generation_input or {}).get("regeneration_mode"))
             transit_step_count, transit_line_count = self._count_transit_transport_items(normalized)
             generated_items = self._build_generated_itinerary_items(days=days, normalized_plan=normalized)
-            inserted_count = await self.trip_repository.replace_items_by_trip(aggregate.trip.id, generated_items)
+            items_to_persist = self._merge_generated_itinerary_items_by_scope(
+                days=days,
+                existing_items=aggregate.itinerary_items,
+                generated_items=generated_items,
+                regeneration_mode=regeneration_mode,
+                target_item_id=(generation_input or {}).get("target_item_id"),
+            )
+            inserted_count = await self.trip_repository.replace_items_by_trip(aggregate.trip.id, items_to_persist)
             if not aggregate.trip.recommendation_comment:
                 aggregate.trip.recommendation_comment = build_trip_recommendation_comment(
                     destination=aggregate.trip.destination,
@@ -690,7 +710,7 @@ class TripService:
                 await self.trip_repository.update_trip(aggregate.trip)
             cover_image_updated = await self._update_trip_cover_image_from_itinerary(
                 trip=aggregate.trip,
-                itinerary_items=generated_items,
+                itinerary_items=items_to_persist,
                 fallback_candidates=place_candidates,
             )
             generation.status = "succeeded"
@@ -702,6 +722,7 @@ class TripService:
                     "days": len(days),
                     "candidates": len(place_candidates),
                     "inserted_items": inserted_count,
+                    "regeneration_mode": regeneration_mode,
                     "transit_step_items": transit_step_count,
                     "transit_line_items": transit_line_count,
                     "cover_image_updated": cover_image_updated,
@@ -717,6 +738,232 @@ class TripService:
 
         updated = await self.trip_repository.update_ai_plan_generation(generation)
         return updated or generation
+
+    def _normalize_regeneration_mode(self, raw_mode: Optional[str]) -> str:
+        if raw_mode in {"full", "from_item", "replace_item"}:
+            return raw_mode
+        if raw_mode in {None, ""}:
+            return "full"
+        raise ValueError("regeneration_mode must be one of full, from_item, replace_item")
+
+    def _validate_ai_generation_scope(
+        self,
+        *,
+        aggregate: TripAggregate,
+        regeneration_mode: str,
+        target_item_id: Optional[int],
+    ) -> None:
+        if regeneration_mode == "full":
+            return
+
+        if target_item_id is None:
+            raise ValueError("target_item_id is required for this regeneration_mode")
+
+        target_item = next((item for item in aggregate.itinerary_items if item.id == target_item_id), None)
+        if target_item is None:
+            raise ItineraryItemNotFoundError(f"Itinerary item with ID {target_item_id} not found")
+        if target_item.item_type != "place":
+            raise ValueError("target_item_id must reference a place item")
+
+    def _merge_generated_itinerary_items_by_scope(
+        self,
+        *,
+        days: list[TripDay],
+        existing_items: list[ItineraryItem],
+        generated_items: list[ItineraryItem],
+        regeneration_mode: str,
+        target_item_id: Optional[int],
+    ) -> list[ItineraryItem]:
+        if regeneration_mode == "full":
+            return self._resequence_itinerary_items(days=days, items=generated_items)
+
+        if target_item_id is None:
+            raise ItineraryItemNotFoundError("target_item_id is required for partial regeneration")
+
+        day_by_id = {day.id: day for day in days if day.id is not None}
+        existing_by_day = self._group_itinerary_items_by_day(existing_items)
+        generated_by_day = self._group_itinerary_items_by_day(generated_items)
+        target_item = next((item for item in existing_items if item.id == target_item_id), None)
+        if target_item is None:
+            raise ItineraryItemNotFoundError(f"Itinerary item with ID {target_item_id} not found")
+
+        target_day_id = target_item.trip_day_id
+        target_day = day_by_id.get(target_day_id)
+        if target_day is None:
+            raise TripDayNotFoundError(f"Trip day with ID {target_day_id} not found")
+
+        merged_by_day: dict[int, list[ItineraryItem]] = {}
+        target_day_number = target_day.day_number
+        for day in sorted(days, key=lambda value: value.day_number):
+            if day.id is None:
+                continue
+
+            if day.day_number < target_day_number:
+                merged_by_day[day.id] = list(existing_by_day.get(day.id, []))
+                continue
+
+            if day.id == target_day_id:
+                if regeneration_mode == "from_item":
+                    merged_by_day[day.id] = self._merge_day_from_item(
+                        existing_day_items=existing_by_day.get(day.id, []),
+                        generated_day_items=generated_by_day.get(day.id, []),
+                        target_item_id=target_item_id,
+                    )
+                elif regeneration_mode == "replace_item":
+                    merged_by_day[day.id] = self._merge_day_replace_item(
+                        existing_day_items=existing_by_day.get(day.id, []),
+                        generated_day_items=generated_by_day.get(day.id, []),
+                        target_item_id=target_item_id,
+                    )
+                else:
+                    merged_by_day[day.id] = list(generated_by_day.get(day.id, []))
+                continue
+
+            merged_by_day[day.id] = list(generated_by_day.get(day.id, []))
+
+        flattened: list[ItineraryItem] = []
+        for day in sorted(days, key=lambda value: value.day_number):
+            if day.id is None:
+                continue
+            flattened.extend(merged_by_day.get(day.id, []))
+        return self._resequence_itinerary_items(days=days, items=flattened)
+
+    def _group_itinerary_items_by_day(self, items: list[ItineraryItem]) -> dict[int, list[ItineraryItem]]:
+        grouped: dict[int, list[ItineraryItem]] = {}
+        for item in items:
+            grouped.setdefault(item.trip_day_id, []).append(item)
+        return {
+            day_id: sorted(values, key=self._itinerary_item_sort_key)
+            for day_id, values in grouped.items()
+        }
+
+    def _itinerary_item_sort_key(self, item: ItineraryItem) -> tuple[int, float, int]:
+        sequence = item.sequence or 9999
+        time_value = self._sortable_datetime_value(item.start_time)
+        item_id = item.id or 0
+        return sequence, time_value, item_id
+
+    def _merge_day_from_item(
+        self,
+        *,
+        existing_day_items: list[ItineraryItem],
+        generated_day_items: list[ItineraryItem],
+        target_item_id: int,
+    ) -> list[ItineraryItem]:
+        target_index = next((index for index, item in enumerate(existing_day_items) if item.id == target_item_id), None)
+        if target_index is None:
+            raise ItineraryItemNotFoundError(f"Itinerary item with ID {target_item_id} not found")
+
+        head = list(existing_day_items[:target_index])
+        while head and head[-1].item_type == "transport":
+            head.pop()
+
+        start_index = self._find_generated_day_start_index(
+            generated_day_items=generated_day_items,
+            target_item=existing_day_items[target_index],
+        )
+        tail = generated_day_items[start_index:] if start_index < len(generated_day_items) else []
+        if not tail:
+            tail = generated_day_items
+        return head + list(tail)
+
+    def _merge_day_replace_item(
+        self,
+        *,
+        existing_day_items: list[ItineraryItem],
+        generated_day_items: list[ItineraryItem],
+        target_item_id: int,
+    ) -> list[ItineraryItem]:
+        target_index = next((index for index, item in enumerate(existing_day_items) if item.id == target_item_id), None)
+        if target_index is None:
+            raise ItineraryItemNotFoundError(f"Itinerary item with ID {target_item_id} not found")
+
+        remove_start = target_index - 1 if target_index > 0 and existing_day_items[target_index - 1].item_type == "transport" else target_index
+        remove_end = target_index + 1 if target_index + 1 < len(existing_day_items) and existing_day_items[target_index + 1].item_type == "transport" else target_index
+
+        replacement_block = self._select_generated_replacement_block(
+            generated_day_items=generated_day_items,
+            target_item=existing_day_items[target_index],
+        )
+        if not replacement_block:
+            return list(existing_day_items)
+
+        return list(existing_day_items[:remove_start]) + replacement_block + list(existing_day_items[remove_end + 1 :])
+
+    def _find_generated_day_start_index(
+        self,
+        *,
+        generated_day_items: list[ItineraryItem],
+        target_item: ItineraryItem,
+    ) -> int:
+        if not generated_day_items:
+            return 0
+
+        candidate_index: Optional[int] = None
+        if target_item.start_time is not None:
+            for index, item in enumerate(generated_day_items):
+                if item.item_type != "place" or item.start_time is None:
+                    continue
+                if item.start_time >= target_item.start_time:
+                    candidate_index = index
+                    break
+
+        if candidate_index is None:
+            for index, item in enumerate(generated_day_items):
+                if item.item_type == "place":
+                    candidate_index = index
+                    break
+
+        if candidate_index is None:
+            return 0
+        if candidate_index > 0 and generated_day_items[candidate_index - 1].item_type == "transport":
+            return candidate_index - 1
+        return candidate_index
+
+    def _select_generated_replacement_block(
+        self,
+        *,
+        generated_day_items: list[ItineraryItem],
+        target_item: ItineraryItem,
+    ) -> list[ItineraryItem]:
+        place_candidates = [item for item in generated_day_items if item.item_type == "place"]
+        if not place_candidates:
+            return []
+
+        alternative_candidates = [
+            item
+            for item in place_candidates
+            if self._normalize_place_name(item.name) != self._normalize_place_name(target_item.name)
+        ]
+        candidate_pool = alternative_candidates or place_candidates
+
+        def replacement_sort_key(item: ItineraryItem) -> tuple[float, int]:
+            return (
+                abs(self._sortable_datetime_value(item.start_time) - self._sortable_datetime_value(target_item.start_time)),
+                item.sequence or 9999,
+            )
+
+        chosen_item = min(candidate_pool, key=replacement_sort_key)
+        chosen_index = generated_day_items.index(chosen_item)
+        block_start = chosen_index - 1 if chosen_index > 0 and generated_day_items[chosen_index - 1].item_type == "transport" else chosen_index
+        block_end = chosen_index + 1 if chosen_index + 1 < len(generated_day_items) and generated_day_items[chosen_index + 1].item_type == "transport" else chosen_index
+        return list(generated_day_items[block_start : block_end + 1])
+
+    def _resequence_itinerary_items(
+        self,
+        *,
+        days: list[TripDay],
+        items: list[ItineraryItem],
+    ) -> list[ItineraryItem]:
+        grouped = self._group_itinerary_items_by_day(items)
+        resequenced: list[ItineraryItem] = []
+        for day in sorted(days, key=lambda value: value.day_number):
+            if day.id is None:
+                continue
+            for sequence, item in enumerate(grouped.get(day.id, []), start=1):
+                item.sequence = sequence
+                resequenced.append(item)
+        return resequenced
 
     async def _ensure_trip_days(
         self,

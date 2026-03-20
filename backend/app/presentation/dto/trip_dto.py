@@ -249,6 +249,9 @@ class AiPlanGenerationCreate(BaseModel):
     provider: Optional[str] = None
     prompt_version: Optional[str] = None
     run_async: bool = True
+    regeneration_mode: Literal["full", "from_item", "replace_item"] = "full"
+    target_day_id: Optional[int] = None
+    target_item_id: Optional[int] = None
     must_visit_places: list[str] = Field(default_factory=list)
     lodging_notes: list[str] = Field(default_factory=list)
     additional_request_comment: Optional[str] = None
@@ -333,6 +336,7 @@ class ItineraryItemResponse(BaseModel):
     id: int
     trip_day_id: int
     name: str
+    sequence: Optional[int] = None
     item_type: str = "place"
     category: Optional[str] = None
     transport_mode: Optional[str] = None

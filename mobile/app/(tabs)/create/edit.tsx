@@ -1,14 +1,14 @@
 import { BackButton } from '@/components/back-button';
 import { AppHeader } from '@/features/travel/components/AppHeader';
-import { createAiPlanGeneration } from '@/features/trips/api/ai-plan-generation';
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
 import { addTripMember, removeTripMember } from '@/features/trips/api/trip-members';
+import { updateTripDay } from '@/features/trips/api/update-trip-day';
 import { updateTrip } from '@/features/trips/api/update-trip';
 import { upsertTripPreference } from '@/features/trips/api/upsert-trip-preference';
 import { TripPlanForm, type TripPlanFormSubmitPayload } from '@/features/trips/components/TripPlanForm';
 import { type TripDetailAggregateResponse } from '@/features/trips/types/trip-detail';
 import { validateAndBuildCreateTripPayload } from '@/features/trips/utils/create-trip';
-import { buildAiGenerationRequestFromForm, buildTripPlanFormValues } from '@/features/trips/utils/trip-plan-form';
+import { buildTripPlanFormValues } from '@/features/trips/utils/trip-plan-form';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
@@ -37,6 +37,20 @@ async function syncTripMembers(tripId: number, currentUserIds: number[], nextUse
     }
     await removeTripMember(tripId, userId);
   }
+}
+
+async function syncTripDayLodgingNotes(
+  tripId: number,
+  dayIdsInOrder: number[],
+  lodgingNotes: string[]
+) {
+  await Promise.all(
+    dayIdsInOrder.map((dayId, index) =>
+      updateTripDay(tripId, dayId, {
+        lodging_note: lodgingNotes[index]?.trim() || null,
+      })
+    )
+  );
 }
 
 export default function EditTripScreen() {
@@ -97,12 +111,12 @@ export default function EditTripScreen() {
     }
 
     const payload = validation.payload;
+    if (!payload.preference) {
+      Alert.alert('入力エラー', 'プラン条件を確認してください。');
+      return;
+    }
 
     await updateTrip(tripId, {
-      origin: payload.origin,
-      destination: payload.destination,
-      start_date: payload.start_date,
-      end_date: payload.end_date,
       participant_count: payload.participant_count,
       recommendation_categories: payload.recommendation_categories,
       status: 'planned',
@@ -120,16 +134,12 @@ export default function EditTripScreen() {
       .filter((member) => member.role !== 'owner')
       .map((member) => member.user_id);
     await syncTripMembers(tripId, currentMemberUserIds, selectedCompanionUserIds);
-
-    const generation = await createAiPlanGeneration(
+    const sortedDays = [...detail.days].sort((a, b) => a.day_number - b.day_number);
+    await syncTripDayLodgingNotes(
       tripId,
-      buildAiGenerationRequestFromForm(formValues)
+      sortedDays.map((day) => day.id),
+      formValues.accommodationNotesByDay
     );
-
-    if (generation.status === 'failed') {
-      Alert.alert('プラン更新に失敗しました', generation.error_message ?? 'AIプランの再生成に失敗しました。');
-      return;
-    }
 
     router.replace({
       pathname: '/plans/detail',
@@ -162,9 +172,11 @@ export default function EditTripScreen() {
   return (
     <TripPlanForm
       title="プランをカスタマイズ"
-      submitLabel="プランを更新"
+      submitLabel="情報を更新"
       initialFormValues={buildTripPlanFormValues(detail)}
       initialSelectedCompanionUserIds={detail.members.filter((member) => member.role !== 'owner').map((member) => member.user_id)}
+      lockBasicInfoFields
+      submitHint="この画面では人数や予算などの情報のみ更新します。旅程の再生成は実行されません。"
       onBack={() => {
         router.replace({
           pathname: '/plans/detail',

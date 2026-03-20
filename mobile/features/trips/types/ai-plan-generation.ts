@@ -4,6 +4,9 @@ export type CreateAiPlanGenerationRequest = {
   provider?: string;
   prompt_version?: string;
   run_async?: boolean;
+  regeneration_mode?: 'full' | 'from_item' | 'replace_item';
+  target_day_id?: number;
+  target_item_id?: number;
   must_visit_places?: string[];
   lodging_notes?: string[];
   additional_request_comment?: string;
