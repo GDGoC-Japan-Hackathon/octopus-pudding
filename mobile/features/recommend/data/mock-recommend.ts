@@ -1,24 +1,74 @@
 import { type PlanDetailTimelineItem } from '@/features/plan-detail/types';
-import { type RecommendPlanDetail, type RecommendPlanDetailDay, type RecommendPlanListItem } from '@/features/recommend/types';
+import {
+  type RecommendPlanDetail,
+  type RecommendPlanDetailDay,
+  type RecommendPlanListItem,
+} from '@/features/recommend/types';
+import { type TripAtmosphere } from '@/features/trips/types/create-trip';
+import { type TripTransportMode } from '@/features/trips/types/trip-edit';
 
-type MockRecommendation = {
+export type MockRecommendationSeed = {
   id: string;
-  title: string;
+  origin: string;
+  destination: string;
   startDate: string;
   endDate: string;
-  dateLabel: string;
   participantCount: number;
   saveCount: number;
   createdAt: string;
   categories: string[];
-  image: string;
+  coverImageUrl: string;
   username: string;
   area: string;
-  comment: string;
-  budget: string;
-  moveTime: string;
-  days: RecommendPlanDetailDay[];
+  recommendationComment: string;
+  budgetAmount: number;
+  atmosphere: TripAtmosphere;
+  transportType: string;
+  companions?: string;
+  days: MockRecommendationDaySeed[];
 };
+
+export type MockRecommendationDaySeed = {
+  key: string;
+  label: string;
+  items: MockRecommendationItemSeed[];
+};
+
+export type MockRecommendationPlaceSeed = {
+  kind: 'place';
+  id: string | number;
+  start: string;
+  end: string;
+  title: string;
+  body: string;
+  icon: PlanDetailTimelineItem['icon'];
+  category?: string;
+  estimatedCost?: number;
+  latitude?: number;
+  longitude?: number;
+};
+
+export type MockRecommendationTransportSeed = {
+  kind: 'transport';
+  id: string | number;
+  start: string;
+  end: string;
+  title: string;
+  body: string;
+  icon: PlanDetailTimelineItem['icon'];
+  transportMode: TripTransportMode;
+  travelMinutes: number;
+  distanceMeters?: number;
+  fromName: string;
+  toName: string;
+  metaLabel?: string;
+  lineName?: string;
+  vehicleType?: string;
+  departureStopName?: string;
+  arrivalStopName?: string;
+};
+
+export type MockRecommendationItemSeed = MockRecommendationPlaceSeed | MockRecommendationTransportSeed;
 
 type PlaceItemOptions = {
   id: string | number;
@@ -27,7 +77,10 @@ type PlaceItemOptions = {
   title: string;
   body: string;
   icon: PlanDetailTimelineItem['icon'];
-  durationLabel: string;
+  category?: string;
+  estimatedCost?: number;
+  latitude?: number;
+  longitude?: number;
 };
 
 type TransportItemOptions = {
@@ -37,12 +90,61 @@ type TransportItemOptions = {
   title: string;
   body: string;
   icon: PlanDetailTimelineItem['icon'];
-  durationLabel: string;
-  metaLabel: string;
+  transportMode: TripTransportMode;
+  travelMinutes?: number;
+  distanceMeters?: number;
+  fromName?: string;
+  toName?: string;
+  metaLabel?: string;
   lineName?: string;
+  vehicleType?: string;
   departureStopName?: string;
   arrivalStopName?: string;
 };
+
+function parseClockMinutes(value: string) {
+  const [hour, minute] = value.split(':').map((part) => Number(part));
+  return hour * 60 + minute;
+}
+
+function diffClockMinutes(start: string, end: string) {
+  return Math.max(0, parseClockMinutes(end) - parseClockMinutes(start));
+}
+
+function formatPlaceDurationLabel(start: string, end: string) {
+  const minutes = diffClockMinutes(start, end);
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  if (hour === 0) {
+    return `${minute}m`;
+  }
+  return `${hour}h ${minute}m`;
+}
+
+function formatTransportDurationLabel(minutes: number) {
+  return `${minutes}分`;
+}
+
+function formatBudgetLabel(amount: number) {
+  return `¥${amount.toLocaleString()}`;
+}
+
+function formatMoveTimeLabel(minutes: number) {
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  if (hour === 0) {
+    return `${minute}m`;
+  }
+  return `${hour}h ${minute}m`;
+}
+
+function buildTripDurationLabel(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const totalDays = Math.max(1, Math.floor((end.getTime() - start.getTime()) / 86400000) + 1);
+  const nights = Math.max(totalDays - 1, 0);
+  return `${nights}泊${totalDays}日`;
+}
 
 function placeItem({
   id,
@@ -51,17 +153,23 @@ function placeItem({
   title,
   body,
   icon,
-  durationLabel,
-}: PlaceItemOptions): PlanDetailTimelineItem {
+  category,
+  estimatedCost,
+  latitude,
+  longitude,
+}: PlaceItemOptions): MockRecommendationPlaceSeed {
   return {
+    kind: 'place',
     id,
     start,
     end,
     title,
     body,
     icon,
-    durationLabel,
-    itemType: 'place',
+    category,
+    estimatedCost,
+    latitude,
+    longitude,
   };
 }
 
@@ -72,50 +180,129 @@ function transportItem({
   title,
   body,
   icon,
-  durationLabel,
+  transportMode,
+  travelMinutes,
+  distanceMeters,
+  fromName,
+  toName,
   metaLabel,
   lineName,
+  vehicleType,
   departureStopName,
   arrivalStopName,
-}: TransportItemOptions): PlanDetailTimelineItem {
+}: TransportItemOptions): MockRecommendationTransportSeed {
   return {
+    kind: 'transport',
     id,
     start,
     end,
     title,
     body,
     icon,
-    durationLabel,
+    transportMode,
+    travelMinutes: travelMinutes ?? diffClockMinutes(start, end),
+    distanceMeters,
+    fromName: fromName ?? departureStopName ?? title,
+    toName: toName ?? arrivalStopName ?? title,
     metaLabel,
     lineName,
+    vehicleType,
     departureStopName,
     arrivalStopName,
-    itemType: 'transport',
   };
 }
 
-const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
+function cloneItem(item: MockRecommendationItemSeed): MockRecommendationItemSeed {
+  return { ...item };
+}
+
+function cloneDay(day: MockRecommendationDaySeed): MockRecommendationDaySeed {
+  return {
+    ...day,
+    items: day.items.map(cloneItem),
+  };
+}
+
+function toTimelineItem(item: MockRecommendationItemSeed): PlanDetailTimelineItem {
+  if (item.kind === 'transport') {
+    return {
+      id: item.id,
+      start: item.start,
+      end: item.end,
+      title: item.title,
+      body: item.body,
+      icon: item.icon,
+      durationLabel: formatTransportDurationLabel(item.travelMinutes),
+      metaLabel: item.metaLabel,
+      lineName: item.lineName,
+      vehicleType: item.vehicleType,
+      departureStopName: item.departureStopName,
+      arrivalStopName: item.arrivalStopName,
+      itemType: 'transport',
+    };
+  }
+
+  return {
+    id: item.id,
+    start: item.start,
+    end: item.end,
+    title: item.title,
+    body: item.body,
+    icon: item.icon,
+    durationLabel: formatPlaceDurationLabel(item.start, item.end),
+    itemType: 'place',
+  };
+}
+
+function toRecommendDetailDay(day: MockRecommendationDaySeed): RecommendPlanDetailDay {
+  return {
+    key: day.key,
+    label: day.label,
+    timeline: day.items.map(toTimelineItem),
+  };
+}
+
+function buildPlanTitle(plan: MockRecommendationSeed) {
+  return `${plan.origin} → ${plan.destination}`;
+}
+
+function totalTravelMinutes(plan: MockRecommendationSeed) {
+  return plan.days.reduce(
+    (sum, day) =>
+      sum +
+      day.items.reduce(
+        (daySum, item) => daySum + (item.kind === 'transport' ? item.travelMinutes : 0),
+        0
+      ),
+    0
+  );
+}
+
+const MOCK_RECOMMENDATIONS: MockRecommendationSeed[] = [
   {
     id: 'demo-rec-kamakura-cafe',
-    title: '東京 → 鎌倉',
+    origin: '東京',
+    destination: '鎌倉',
     startDate: '2026-04-12',
     endDate: '2026-04-12',
-    dateLabel: '0泊1日',
     participantCount: 1,
     saveCount: 1240,
     createdAt: '2026-03-10T09:00:00+09:00',
     categories: ['カフェ'],
-    image: 'https://cdn.zekkei-japan.jp/images/spots/921c6d12a3fad00ca966eb9eed0630e7.jpg',
+    coverImageUrl: 'https://cdn.zekkei-japan.jp/images/spots/921c6d12a3fad00ca966eb9eed0630e7.jpg',
     username: 'travel_miki',
     area: '鎌倉',
-    comment: '朝は神社、昼は小町通り、午後は海辺カフェと由比ヶ浜で締める、ひとりでも回りやすい鎌倉日帰り旅です。',
-    budget: '¥8,500',
-    moveTime: '55m',
+    recommendationComment:
+      '朝は神社、昼は小町通り、午後は海辺カフェと由比ヶ浜で締める、ひとりでも回りやすい鎌倉日帰り旅です。',
+    budgetAmount: 8500,
+    atmosphere: 'のんびり',
+    transportType: 'train,walk',
+    companions: 'solo',
     days: [
       {
         key: 'day1',
         label: 'Day 1',
-        timeline: [
+        items: [
           placeItem({
             id: 1,
             start: '09:20',
@@ -123,7 +310,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '鶴岡八幡宮',
             body: '朝の空気が気持ちいい時間帯に参拝。段葛からゆっくり歩くと鎌倉らしい雰囲気を味わえます。',
             icon: 'account-balance',
-            durationLabel: '1h 0m',
+            category: 'sightseeing',
           }),
           transportItem({
             id: 2,
@@ -132,7 +319,8 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '徒歩で小町通りへ移動',
             body: '鶴岡八幡宮 二の鳥居前 → 小町通り入口。参道からそのまま商店街へ流れるルートです。',
             icon: 'directions-walk',
-            durationLabel: '15分',
+            transportMode: 'walk',
+            distanceMeters: 900,
             metaLabel: '15分 / 900m',
             departureStopName: '鶴岡八幡宮 二の鳥居前',
             arrivalStopName: '小町通り入口',
@@ -144,7 +332,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '小町通りで食べ歩き',
             body: 'しらすコロッケや和スイーツをつまみながら散策。混みやすいので午前中に回る想定です。',
             icon: 'shopping-bag',
-            durationLabel: '1h 15m',
+            category: 'food',
           }),
           transportItem({
             id: 4,
@@ -153,7 +341,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '江ノ電で長谷駅へ',
             body: '鎌倉駅 → 長谷駅。海側の景色が見えやすい区間で、移動自体も旅の見どころになります。',
             icon: 'train',
-            durationLabel: '15分',
+            transportMode: 'train',
             metaLabel: '江ノ電 / 15分 / 2駅',
             lineName: '江ノ島電鉄',
             departureStopName: '鎌倉駅',
@@ -166,7 +354,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '長谷寺',
             body: '見晴台から海を見渡せる時間帯に合わせて立ち寄り。写真を撮りながらでも回りやすい構成です。',
             icon: 'temple-buddhist',
-            durationLabel: '1h 0m',
+            category: 'sightseeing',
           }),
           transportItem({
             id: 6,
@@ -175,7 +363,8 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '徒歩で海沿いカフェへ',
             body: '長谷寺 → 由比ヶ浜沿いのカフェ。坂が少なく、食後でも移動しやすいルートです。',
             icon: 'directions-walk',
-            durationLabel: '10分',
+            transportMode: 'walk',
+            distanceMeters: 650,
             metaLabel: '10分 / 650m',
             departureStopName: '長谷寺',
             arrivalStopName: '海沿いカフェ',
@@ -187,7 +376,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '由比ヶ浜の海辺カフェ',
             body: '窓際席から海が見える想定で、午後は休憩を兼ねてゆっくり過ごせるようにしています。',
             icon: 'local-cafe',
-            durationLabel: '1h 10m',
+            category: 'cafe',
           }),
           transportItem({
             id: 8,
@@ -196,7 +385,8 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '徒歩で由比ヶ浜へ',
             body: 'カフェ前 → 由比ヶ浜海岸。帰り時間まで少し浜辺を歩ける距離感です。',
             icon: 'directions-walk',
-            durationLabel: '15分',
+            transportMode: 'walk',
+            distanceMeters: 700,
             metaLabel: '15分 / 700m',
             departureStopName: '海沿いカフェ',
             arrivalStopName: '由比ヶ浜',
@@ -208,7 +398,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '由比ヶ浜散策',
             body: '波打ち際を歩きながら、日帰り旅の締めとして軽くリフレッシュできる時間を確保しています。',
             icon: 'beach-access',
-            durationLabel: '1h 0m',
+            category: 'sightseeing',
           }),
         ],
       },
@@ -216,25 +406,28 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
   },
   {
     id: 'demo-rec-kyoto-night-gourmet',
-    title: '大阪 → 京都',
+    origin: '大阪',
+    destination: '京都',
     startDate: '2026-05-03',
     endDate: '2026-05-04',
-    dateLabel: '1泊2日',
     participantCount: 4,
     saveCount: 850,
     createdAt: '2026-03-02T18:20:00+09:00',
     categories: ['夜景', 'グルメ'],
-    image: 'https://static.gltjp.com/glt/data/article/21000/20372/20230817_145716_42bf4910_w1920.webp',
+    coverImageUrl: 'https://static.gltjp.com/glt/data/article/21000/20372/20230817_145716_42bf4910_w1920.webp',
     username: 'maitanaka',
     area: '京都',
-    comment: '王道観光を押さえつつ、ランチ・カフェ・夜景をテンポよくつないだ、友達同士向けの京都1泊2日旅です。',
-    budget: '¥22,000',
-    moveTime: '2h 30m',
+    recommendationComment:
+      '王道観光を押さえつつ、ランチ・カフェ・夜景をテンポよくつないだ、友達同士向けの京都1泊2日旅です。',
+    budgetAmount: 22000,
+    atmosphere: 'グルメ',
+    transportType: 'train,bus,taxi,walk',
+    companions: 'friends',
     days: [
       {
         key: 'day1',
         label: 'Day 1',
-        timeline: [
+        items: [
           placeItem({
             id: 1,
             start: '09:30',
@@ -242,7 +435,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '伏見稲荷大社',
             body: '朝の混雑を避けて千本鳥居を散策。写真を撮る時間も確保しやすいスタートです。',
             icon: 'account-balance',
-            durationLabel: '1h 15m',
+            category: 'sightseeing',
           }),
           transportItem({
             id: 2,
@@ -251,7 +444,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '京阪と徒歩で清水寺エリアへ',
             body: '伏見稲荷駅周辺 → 清水道。乗り換えよりも観光導線を優先して、混雑しにくい移動にしています。',
             icon: 'directions-bus',
-            durationLabel: '20分',
+            transportMode: 'bus',
             metaLabel: '京阪 + バス / 20分',
             lineName: '京阪本線',
             departureStopName: '伏見稲荷駅',
@@ -264,7 +457,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '清水寺周辺散策',
             body: '清水の舞台だけでなく、二年坂・産寧坂まで含めて京都らしい街並みを楽しめる時間配分です。',
             icon: 'place',
-            durationLabel: '1h 5m',
+            category: 'sightseeing',
           }),
           transportItem({
             id: 4,
@@ -273,7 +466,8 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '徒歩で祇園へ',
             body: '清水寺周辺 → 祇園四条。坂道を下りながらお店をのぞいて移動できるルートです。',
             icon: 'directions-walk',
-            durationLabel: '20分',
+            transportMode: 'walk',
+            distanceMeters: 1200,
             metaLabel: '20分 / 1.2km',
             departureStopName: '清水寺周辺',
             arrivalStopName: '祇園四条',
@@ -285,7 +479,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '祇園ランチ',
             body: '少し贅沢な京料理ランチを想定。観光エリアの真ん中なので、午後の再開もスムーズです。',
             icon: 'restaurant',
-            durationLabel: '1h 20m',
+            category: 'food',
           }),
           transportItem({
             id: 6,
@@ -294,7 +488,8 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '徒歩で鴨川沿いカフェへ',
             body: '祇園四条 → 鴨川沿いのカフェ。移動を短くして、午後の休憩時間を長めに取っています。',
             icon: 'directions-walk',
-            durationLabel: '15分',
+            transportMode: 'walk',
+            distanceMeters: 850,
             metaLabel: '15分 / 850m',
             departureStopName: '祇園四条',
             arrivalStopName: '鴨川沿いカフェ',
@@ -306,7 +501,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '鴨川沿いカフェ',
             body: '歩き疲れをリセットしつつ、夕方までの時間をのんびり過ごせる休憩ポイントです。',
             icon: 'local-cafe',
-            durationLabel: '1h 0m',
+            category: 'cafe',
           }),
           transportItem({
             id: 8,
@@ -315,7 +510,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: 'タクシーで将軍塚青龍殿へ',
             body: '市街地から山側へ上がる区間。夜景スポットへ無理なく到着できるようタクシー移動を採用しています。',
             icon: 'local-taxi',
-            durationLabel: '30分',
+            transportMode: 'taxi',
             metaLabel: 'タクシー / 30分',
             departureStopName: '祇園周辺',
             arrivalStopName: '将軍塚青龍殿',
@@ -327,14 +522,14 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '将軍塚青龍殿 展望台',
             body: '夕景から夜景へ切り替わる時間帯を狙って滞在。京都市内を一望できる締めのスポットです。',
             icon: 'photo-camera',
-            durationLabel: '1h 10m',
+            category: 'sightseeing',
           }),
         ],
       },
       {
         key: 'day2',
         label: 'Day 2',
-        timeline: [
+        items: [
           transportItem({
             id: 10,
             start: '09:20',
@@ -342,7 +537,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '阪急と嵐電で嵐山へ',
             body: '四条周辺 → 嵐山駅。朝のうちに移動して、観光エリアの混雑前に入る想定です。',
             icon: 'train',
-            durationLabel: '45分',
+            transportMode: 'train',
             metaLabel: '阪急 + 嵐電 / 45分',
             lineName: '阪急京都線・嵐電',
             departureStopName: '京都河原町駅',
@@ -355,7 +550,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '竹林の小径',
             body: '午前中の比較的人が少ない時間帯を想定。写真を撮りながらでも歩きやすい構成です。',
             icon: 'park',
-            durationLabel: '1h 0m',
+            category: 'sightseeing',
           }),
           transportItem({
             id: 12,
@@ -364,7 +559,8 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '徒歩で渡月橋周辺へ',
             body: '竹林の小径 → 渡月橋。嵐山の景色を見ながらそのまま移動できます。',
             icon: 'directions-walk',
-            durationLabel: '15分',
+            transportMode: 'walk',
+            distanceMeters: 900,
             metaLabel: '15分 / 900m',
             departureStopName: '竹林の小径',
             arrivalStopName: '渡月橋周辺',
@@ -376,7 +572,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '嵐山ランチ',
             body: '観光地の景色を楽しみながら、早めの時間に食事を済ませて午後の移動負担を下げています。',
             icon: 'restaurant',
-            durationLabel: '1h 0m',
+            category: 'food',
           }),
           placeItem({
             id: 14,
@@ -385,7 +581,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '嵐山散策',
             body: '渡月橋周辺を最後に軽く歩き、京都旅をゆるやかに締める想定です。',
             icon: 'place',
-            durationLabel: '55m',
+            category: 'sightseeing',
           }),
         ],
       },
@@ -393,26 +589,29 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
   },
   {
     id: 'demo-rec-okinawa-family',
-    title: '福岡 → 沖縄',
+    origin: '福岡',
+    destination: '沖縄',
     startDate: '2026-07-18',
     endDate: '2026-07-20',
-    dateLabel: '2泊3日',
     participantCount: 6,
     saveCount: 2105,
     createdAt: '2026-03-14T12:10:00+09:00',
     categories: ['グルメ', '温泉'],
-    image:
+    coverImageUrl:
       'https://th.bing.com/th/id/R.1869e3abe45a9308710489b74e403d8b?rik=2Yt6EaiNgFL%2bNw&riu=http%3a%2f%2ffeeljapan.net%2fokinawa%2fwp-content%2fuploads%2fsites%2f2%2freIMG_2798-1920x1280.jpg&ehk=JyLuVrolu5fgpPlhLTutNR%2bj%2bzfJZFFXz%2bn7VWBPJDY%3d&risl=&pid=ImgRaw&r=0',
     username: 'family_route',
     area: '沖縄本島',
-    comment: '海・観光・ごはんをバランスよく詰めつつ、車移動でテンポよく回れる家族向けの沖縄3日間プランです。',
-    budget: '¥58,000',
-    moveTime: '6h 15m',
+    recommendationComment:
+      '海・観光・ごはんをバランスよく詰めつつ、車移動でテンポよく回れる家族向けの沖縄3日間プランです。',
+    budgetAmount: 58000,
+    atmosphere: 'アクティブ',
+    transportType: 'train,car,taxi',
+    companions: 'family',
     days: [
       {
         key: 'day1',
         label: 'Day 1',
-        timeline: [
+        items: [
           transportItem({
             id: 1,
             start: '14:10',
@@ -420,7 +619,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: 'ゆいレールで県庁前へ',
             body: '那覇空港駅 → 県庁前駅。到着後すぐに市街地へ入り、初日の移動負担を抑える想定です。',
             icon: 'tram',
-            durationLabel: '30分',
+            transportMode: 'train',
             metaLabel: 'ゆいレール / 30分',
             lineName: '沖縄都市モノレール',
             departureStopName: '那覇空港駅',
@@ -433,7 +632,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '国際通り散策',
             body: 'お土産店や軽食を見ながら歩ける、初日にちょうどいい定番ルートです。',
             icon: 'shopping-bag',
-            durationLabel: '1h 20m',
+            category: 'shopping',
           }),
           transportItem({
             id: 3,
@@ -442,7 +641,8 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '徒歩で市場エリアへ',
             body: '国際通り中央付近 → 第一牧志公設市場。商店街を抜けてそのまま移動できます。',
             icon: 'directions-walk',
-            durationLabel: '15分',
+            transportMode: 'walk',
+            distanceMeters: 750,
             metaLabel: '15分 / 750m',
             departureStopName: '国際通り',
             arrivalStopName: '第一牧志公設市場',
@@ -454,7 +654,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '第一牧志公設市場',
             body: '沖縄らしい食材を見ながら、夜ごはん候補も探せる立ち寄りポイントです。',
             icon: 'storefront',
-            durationLabel: '45m',
+            category: 'food',
           }),
           transportItem({
             id: 5,
@@ -463,7 +663,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: 'タクシーでホテルへ',
             body: '牧志周辺 → ホテル。荷物がある前提で、初日は徒歩を増やしすぎない構成にしています。',
             icon: 'local-taxi',
-            durationLabel: '20分',
+            transportMode: 'taxi',
             metaLabel: 'タクシー / 20分',
             departureStopName: '牧志周辺',
             arrivalStopName: '那覇市内ホテル',
@@ -475,14 +675,14 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '海鮮ディナー',
             body: '地元食材を中心にしっかり食事を取れるよう、初日の夜はアクセスの良い店を想定しています。',
             icon: 'restaurant',
-            durationLabel: '1h 20m',
+            category: 'food',
           }),
         ],
       },
       {
         key: 'day2',
         label: 'Day 2',
-        timeline: [
+        items: [
           transportItem({
             id: 7,
             start: '08:00',
@@ -490,7 +690,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: 'レンタカーで恩納村へ',
             body: '那覇市内 → 恩納村。アクティビティ開始時間に合わせて、朝のうちにまとめて移動します。',
             icon: 'directions-car',
-            durationLabel: '1h 0m',
+            transportMode: 'car',
             metaLabel: '車 / 1h 0m',
             departureStopName: '那覇市内ホテル',
             arrivalStopName: '恩納村',
@@ -502,7 +702,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '青の洞窟シュノーケル',
             body: '沖縄らしさをしっかり感じられるメインイベント。午前中の海況が比較的安定しやすい想定です。',
             icon: 'beach-access',
-            durationLabel: '3h 0m',
+            category: 'activity',
           }),
           transportItem({
             id: 9,
@@ -511,7 +711,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '車で海辺カフェへ',
             body: 'シュノーケル集合場所 → 海辺カフェ。着替え後に無理なくランチへ移動できます。',
             icon: 'directions-car',
-            durationLabel: '20分',
+            transportMode: 'car',
             metaLabel: '車 / 20分',
             departureStopName: '恩納村マリーナ',
             arrivalStopName: '海辺カフェ',
@@ -523,7 +723,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '海辺カフェランチ',
             body: '海を見ながら休憩できるランチスポット。アクティビティ後にペースを落とせるようにしています。',
             icon: 'local-cafe',
-            durationLabel: '1h 10m',
+            category: 'cafe',
           }),
           transportItem({
             id: 11,
@@ -532,7 +732,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '車で万座毛へ',
             body: '海辺カフェ → 万座毛。午後はドライブしながら景色を楽しめる流れにしています。',
             icon: 'directions-car',
-            durationLabel: '40分',
+            transportMode: 'car',
             metaLabel: '車 / 40分',
             departureStopName: '海辺カフェ',
             arrivalStopName: '万座毛',
@@ -544,7 +744,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '万座毛',
             body: '沖縄らしい海岸景観を短時間で楽しめる立ち寄りスポット。写真休憩に向いています。',
             icon: 'landscape',
-            durationLabel: '1h 0m',
+            category: 'sightseeing',
           }),
           transportItem({
             id: 13,
@@ -553,7 +753,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '車で温泉スパへ',
             body: '万座毛周辺 → リゾートスパ。夜はアクティブさを少し落として、休憩時間をしっかり取る構成です。',
             icon: 'directions-car',
-            durationLabel: '40分',
+            transportMode: 'car',
             metaLabel: '車 / 40分',
             departureStopName: '万座毛周辺',
             arrivalStopName: 'リゾートスパ',
@@ -565,14 +765,14 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '温泉スパ',
             body: '海で遊んだ後の疲れを取るための締めスポット。家族でも過ごしやすい滞在時間です。',
             icon: 'spa',
-            durationLabel: '1h 20m',
+            category: 'onsen',
           }),
         ],
       },
       {
         key: 'day3',
         label: 'Day 3',
-        timeline: [
+        items: [
           transportItem({
             id: 15,
             start: '08:30',
@@ -580,7 +780,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '車で美ら海水族館へ',
             body: '恩納村周辺 → 美ら海水族館。最終日は北部まで足を伸ばし、観光にしっかり時間を使えるようにしています。',
             icon: 'directions-car',
-            durationLabel: '1h 30m',
+            transportMode: 'car',
             metaLabel: '車 / 1h 30m',
             departureStopName: '恩納村周辺ホテル',
             arrivalStopName: '美ら海水族館',
@@ -592,7 +792,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '美ら海水族館',
             body: 'ジンベエザメ水槽を中心に、家族で回っても満足しやすい定番スポットとして十分な滞在時間を確保しています。',
             icon: 'pets',
-            durationLabel: '2h 10m',
+            category: 'sightseeing',
           }),
           transportItem({
             id: 17,
@@ -601,7 +801,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '車で備瀬エリアへ',
             body: '美ら海水族館 → 備瀬のフクギ並木。最終日でも寄りやすい近距離移動です。',
             icon: 'directions-car',
-            durationLabel: '30分',
+            transportMode: 'car',
             metaLabel: '車 / 30分',
             departureStopName: '美ら海水族館',
             arrivalStopName: '備瀬のフクギ並木',
@@ -613,7 +813,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '備瀬のフクギ並木',
             body: '木陰を歩きながら最後に落ち着いた時間を過ごせる、締めに向いた散策スポットです。',
             icon: 'park',
-            durationLabel: '1h 0m',
+            category: 'sightseeing',
           }),
           transportItem({
             id: 19,
@@ -622,7 +822,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '車で那覇空港へ',
             body: '北部観光エリア → 那覇空港。渋滞も見込んで余裕を持った返却導線にしています。',
             icon: 'directions-car',
-            durationLabel: '1h 35m',
+            transportMode: 'car',
             metaLabel: '車 / 1h 35m',
             departureStopName: '備瀬のフクギ並木',
             arrivalStopName: '那覇空港',
@@ -633,25 +833,28 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
   },
   {
     id: 'demo-rec-hakone-onsen',
-    title: '東京 → 箱根',
+    origin: '東京',
+    destination: '箱根',
     startDate: '2026-06-06',
     endDate: '2026-06-07',
-    dateLabel: '1泊2日',
     participantCount: 2,
     saveCount: 980,
     createdAt: '2026-03-08T07:45:00+09:00',
     categories: ['温泉', 'カフェ'],
-    image: 'https://www.hakonenavi.jp/wp-content/uploads/2024/06/21711_sub02_2.jpg',
+    coverImageUrl: 'https://www.hakonenavi.jp/wp-content/uploads/2024/06/21711_sub02_2.jpg',
     username: 'onsen_trip',
     area: '箱根',
-    comment: 'ロマンスカーとロープウェイを組み合わせて景色も楽しみつつ、温泉時間をしっかり確保した週末向け箱根旅です。',
-    budget: '¥28,000',
-    moveTime: '4h 55m',
+    recommendationComment:
+      'ロマンスカーとロープウェイを組み合わせて景色も楽しみつつ、温泉時間をしっかり確保した週末向け箱根旅です。',
+    budgetAmount: 28000,
+    atmosphere: 'のんびり',
+    transportType: 'train,bus,ship',
+    companions: 'couple',
     days: [
       {
         key: 'day1',
         label: 'Day 1',
-        timeline: [
+        items: [
           transportItem({
             id: 1,
             start: '09:00',
@@ -659,7 +862,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: 'ロマンスカーで箱根湯本へ',
             body: '新宿駅 → 箱根湯本駅。朝の移動を快適にして、現地の観光時間をしっかり確保する前提です。',
             icon: 'train',
-            durationLabel: '1h 25m',
+            transportMode: 'train',
             metaLabel: 'ロマンスカー / 1h 25m',
             lineName: '小田急ロマンスカー',
             departureStopName: '新宿駅',
@@ -672,7 +875,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '箱根登山バスで元箱根港へ',
             body: '箱根湯本駅 → 元箱根港。湖畔エリアへ先に移動して、景色のいい昼前の時間を使います。',
             icon: 'directions-bus',
-            durationLabel: '35分',
+            transportMode: 'bus',
             metaLabel: '登山バス / 35分',
             lineName: '箱根登山バス',
             departureStopName: '箱根湯本駅',
@@ -685,7 +888,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '芦ノ湖畔カフェ',
             body: '湖を見ながら軽めのランチと休憩。到着直後に景色を楽しめるように置いたスポットです。',
             icon: 'local-cafe',
-            durationLabel: '1h 0m',
+            category: 'cafe',
           }),
           transportItem({
             id: 4,
@@ -694,7 +897,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '海賊船で桃源台へ',
             body: '元箱根港 → 桃源台港。芦ノ湖の景色を楽しみながら移動そのものを観光に組み込んでいます。',
             icon: 'directions-boat',
-            durationLabel: '20分',
+            transportMode: 'ship',
             metaLabel: '海賊船 / 20分',
             departureStopName: '元箱根港',
             arrivalStopName: '桃源台港',
@@ -706,9 +909,10 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: 'ロープウェイで大涌谷へ',
             body: '桃源台駅 → 大涌谷駅。眺望が良い区間なので、午後の明るい時間帯に設定しています。',
             icon: 'tram',
-            durationLabel: '25分',
+            transportMode: 'other',
             metaLabel: 'ロープウェイ / 25分',
             lineName: '箱根ロープウェイ',
+            vehicleType: 'ロープウェイ',
             departureStopName: '桃源台駅',
             arrivalStopName: '大涌谷駅',
           }),
@@ -719,7 +923,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '大涌谷散策',
             body: '黒たまごや火山地形を見ながら、箱根らしいダイナミックな景色を楽しめる定番スポットです。',
             icon: 'landscape',
-            durationLabel: '1h 0m',
+            category: 'sightseeing',
           }),
           transportItem({
             id: 7,
@@ -728,7 +932,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: 'バスで強羅の温泉旅館へ',
             body: '大涌谷駅周辺 → 強羅の旅館。観光を切り上げて、夕方から温泉に入れるようにしています。',
             icon: 'directions-bus',
-            durationLabel: '30分',
+            transportMode: 'bus',
             metaLabel: '登山バス / 30分',
             lineName: '箱根登山バス',
             departureStopName: '大涌谷',
@@ -741,14 +945,14 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '温泉旅館チェックイン',
             body: '早めのチェックイン後に温泉と休憩時間を確保。夜を落ち着いて過ごせるようにしたメイン滞在です。',
             icon: 'spa',
-            durationLabel: '2h 0m',
+            category: 'onsen',
           }),
         ],
       },
       {
         key: 'day2',
         label: 'Day 2',
-        timeline: [
+        items: [
           transportItem({
             id: 9,
             start: '09:30',
@@ -756,7 +960,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '登山電車で彫刻の森へ',
             body: '強羅駅 → 彫刻の森駅。朝の移動は短くして、観光時間を優先する構成です。',
             icon: 'train',
-            durationLabel: '20分',
+            transportMode: 'train',
             metaLabel: '登山電車 / 20分',
             lineName: '箱根登山電車',
             departureStopName: '強羅駅',
@@ -769,7 +973,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '彫刻の森美術館',
             body: '屋外展示も含めて歩きやすい時間配分にしてあり、最終日でも満足感が出やすいスポットです。',
             icon: 'museum',
-            durationLabel: '1h 15m',
+            category: 'sightseeing',
           }),
           transportItem({
             id: 11,
@@ -778,7 +982,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '登山電車で箱根湯本へ',
             body: '彫刻の森駅 → 箱根湯本駅。帰路に向けて早めに山を下りる設定です。',
             icon: 'train',
-            durationLabel: '20分',
+            transportMode: 'train',
             metaLabel: '登山電車 / 20分',
             lineName: '箱根登山電車',
             departureStopName: '彫刻の森駅',
@@ -791,7 +995,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: '湯本商店街ランチ',
             body: '帰り前に食べ歩きとランチを兼ねられるよう、駅前エリアに時間を残しています。',
             icon: 'restaurant',
-            durationLabel: '1h 0m',
+            category: 'food',
           }),
           transportItem({
             id: 13,
@@ -800,7 +1004,7 @@ const MOCK_RECOMMENDATIONS: MockRecommendation[] = [
             title: 'ロマンスカーで新宿へ',
             body: '箱根湯本駅 → 新宿駅。帰宅時間を読みやすく、週末旅の締めとして扱いやすい移動です。',
             icon: 'train',
-            durationLabel: '1h 20m',
+            transportMode: 'train',
             metaLabel: 'ロマンスカー / 1h 20m',
             lineName: '小田急ロマンスカー',
             departureStopName: '箱根湯本駅',
@@ -816,48 +1020,57 @@ export function isMockRecommendPlanId(id: string) {
   return id.startsWith('demo-rec-');
 }
 
-export function getMockRecommendPlans(): RecommendPlanListItem[] {
-  return MOCK_RECOMMENDATIONS.map((plan) => ({
-    id: plan.id,
-    title: plan.title,
-    startDate: plan.startDate,
-    endDate: plan.endDate,
-    dateLabel: plan.dateLabel,
-    participantCount: plan.participantCount,
-    peopleLabel: `${plan.participantCount}名`,
-    saveCount: plan.saveCount,
-    isSavedByMe: false,
-    savedTripId: null,
-    categories: [...plan.categories],
-    image: plan.image,
-    createdAt: plan.createdAt,
-  }));
-}
-
-export function getMockRecommendPlanDetail(id: string): RecommendPlanDetail | null {
+export function getMockRecommendPlanSeed(id: string): MockRecommendationSeed | null {
   const plan = MOCK_RECOMMENDATIONS.find((item) => item.id === id);
   if (!plan) {
     return null;
   }
 
   return {
+    ...plan,
+    categories: [...plan.categories],
+    days: plan.days.map(cloneDay),
+  };
+}
+
+export function getMockRecommendPlans(): RecommendPlanListItem[] {
+  return MOCK_RECOMMENDATIONS.map((plan) => ({
     id: plan.id,
-    title: plan.title,
-    image: plan.image,
+    title: buildPlanTitle(plan),
+    startDate: plan.startDate,
+    endDate: plan.endDate,
+    dateLabel: buildTripDurationLabel(plan.startDate, plan.endDate),
+    participantCount: plan.participantCount,
+    peopleLabel: `${plan.participantCount}名`,
+    saveCount: plan.saveCount,
+    isSavedByMe: false,
+    savedTripId: null,
+    categories: [...plan.categories],
+    image: plan.coverImageUrl,
+    createdAt: plan.createdAt,
+  }));
+}
+
+export function getMockRecommendPlanDetail(id: string): RecommendPlanDetail | null {
+  const plan = getMockRecommendPlanSeed(id);
+  if (!plan) {
+    return null;
+  }
+
+  return {
+    id: plan.id,
+    title: buildPlanTitle(plan),
+    image: plan.coverImageUrl,
     username: plan.username,
     createdAt: plan.createdAt,
     startDate: plan.startDate,
     endDate: plan.endDate,
     area: plan.area,
-    comment: plan.comment,
-    budget: plan.budget,
-    moveTime: plan.moveTime,
+    comment: plan.recommendationComment,
+    budget: formatBudgetLabel(plan.budgetAmount),
+    moveTime: formatMoveTimeLabel(totalTravelMinutes(plan)),
     isSavedByMe: false,
     savedTripId: null,
-    days: plan.days.map((day) => ({
-      key: day.key,
-      label: day.label,
-      timeline: day.timeline.map((item) => ({ ...item })),
-    })),
+    days: plan.days.map(toRecommendDetailDay),
   };
 }

@@ -66,9 +66,19 @@ function compareUpdatedAtDesc(a: TripResponse, b: TripResponse) {
   return b.id - a.id;
 }
 
+function normalizeTransportMode(mode?: string | null) {
+  return mode?.toUpperCase() ?? null;
+}
+
 function transportModeLabel(mode?: string | null) {
-  if (mode === 'WALK') return '徒歩で移動';
-  if (mode === 'BUS') return 'バスで移動';
+  const normalized = normalizeTransportMode(mode);
+  if (normalized === 'WALK') return '徒歩で移動';
+  if (normalized === 'BUS') return 'バスで移動';
+  if (normalized === 'CAR') return '車で移動';
+  if (normalized === 'TAXI') return 'タクシーで移動';
+  if (normalized === 'SHIP') return '船で移動';
+  if (normalized === 'BICYCLE') return '自転車で移動';
+  if (normalized === 'PLANE') return '飛行機で移動';
   return '電車で移動';
 }
 

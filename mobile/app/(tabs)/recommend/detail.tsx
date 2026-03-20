@@ -7,6 +7,7 @@ import { BackButton } from '@/components/back-button';
 import { weatherMock } from '@/data/travel';
 import { PlanDetailTemplate } from '@/features/plan-detail/components/PlanDetailTemplate';
 import { formatTravelDateLabel } from '@/features/plan-detail/utils/plan-detail';
+import { addMockRecommendTrip } from '@/features/recommend/api/add-mock-recommend-trip';
 import { cloneRecommendTrip } from '@/features/recommend/api/clone-recommend-trip';
 import { getRecommendPlanDetail } from '@/features/recommend/api/get-recommend-plan-detail';
 import { isMockRecommendPlanId } from '@/features/recommend/data/mock-recommend';
@@ -19,6 +20,8 @@ export default function RecommendationDetailScreen() {
   const [plan, setPlan] = useState<Awaited<ReturnType<typeof getRecommendPlanDetail>>>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeDayKey, setActiveDayKey] = useState('day1');
+  const [isSavingMockPlan, setIsSavingMockPlan] = useState(false);
+  const [hasAddedMockPlan, setHasAddedMockPlan] = useState(false);
   const headerBackSlot = <BackButton onPress={() => router.push('/recommend')} size={28} />;
 
   useEffect(() => {
@@ -52,6 +55,11 @@ export default function RecommendationDetailScreen() {
       plan.days.some((day) => day.key === currentKey) ? currentKey : plan.days[0].key
     );
   }, [plan]);
+
+  useEffect(() => {
+    setIsSavingMockPlan(false);
+    setHasAddedMockPlan(false);
+  }, [plan?.id]);
 
   const activeDay = useMemo(() => {
     if (!plan?.days.length) {
@@ -92,6 +100,31 @@ export default function RecommendationDetailScreen() {
           defaultWithStatus: true,
         })
       );
+    }
+  };
+
+  const handleAddMockPlan = async () => {
+    if (!id || !isMockPlan || isSavingMockPlan || hasAddedMockPlan) {
+      return;
+    }
+
+    try {
+      setIsSavingMockPlan(true);
+      await addMockRecommendTrip(id);
+      setHasAddedMockPlan(true);
+      Alert.alert('追加完了', 'おすすめプランをマイプランに追加しました。');
+    } catch (error) {
+      Alert.alert(
+        '追加失敗',
+        getApiErrorMessage(error, {
+          fallback: 'おすすめプランの追加に失敗しました',
+          unauthorized: 'ログイン状態を確認してください',
+          forbidden: 'この操作を行う権限がありません',
+          defaultWithStatus: true,
+        })
+      );
+    } finally {
+      setIsSavingMockPlan(false);
     }
   };
 
@@ -138,12 +171,33 @@ export default function RecommendationDetailScreen() {
       primaryActionSlot={
         <View style={styles.actionWrap}>
           <Pressable
-            style={[styles.actionButton, isMockPlan ? styles.actionButtonGray : styles.actionButtonOrange]}
-            onPress={isMockPlan ? undefined : () => void handleCustomize()}
-            disabled={isMockPlan}
+            style={[
+              styles.actionButton,
+              isMockPlan && (isSavingMockPlan || hasAddedMockPlan)
+                ? styles.actionButtonGray
+                : styles.actionButtonOrange,
+            ]}
+            onPress={isMockPlan ? () => void handleAddMockPlan() : () => void handleCustomize()}
+            disabled={isMockPlan ? isSavingMockPlan || hasAddedMockPlan : false}
           >
-            <MaterialIcons name={isMockPlan ? 'visibility' : 'edit-note'} size={22} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>{isMockPlan ? 'ダミーデータを表示中' : 'プランをカスタマイズ'}</Text>
+            {isMockPlan ? (
+              isSavingMockPlan ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <MaterialIcons name={hasAddedMockPlan ? 'check-circle' : 'playlist-add'} size={22} color="#FFFFFF" />
+              )
+            ) : (
+              <MaterialIcons name="edit-note" size={22} color="#FFFFFF" />
+            )}
+            <Text style={styles.actionButtonText}>
+              {isMockPlan
+                ? isSavingMockPlan
+                  ? '追加中...'
+                  : hasAddedMockPlan
+                    ? '追加済み'
+                    : 'マイプランに追加'
+                : 'プランをカスタマイズ'}
+            </Text>
           </Pressable>
         </View>
       }

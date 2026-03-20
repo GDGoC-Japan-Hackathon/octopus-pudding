@@ -113,17 +113,28 @@ async def create_itinerary_item(
     current_user: User = Depends(get_current_user),
     trip_service: TripService = Depends(get_trip_service),
 ):
+    transport_mode = payload.transport_mode.upper() if payload.transport_mode is not None else None
     item = ItineraryItem(
         id=None,
         trip_day_id=day_id,
         name=payload.name,
+        item_type=payload.item_type,
         category=payload.category,
+        transport_mode=transport_mode,
+        travel_minutes=payload.travel_minutes,
+        distance_meters=payload.distance_meters,
+        from_name=payload.from_name,
+        to_name=payload.to_name,
         latitude=payload.latitude,
         longitude=payload.longitude,
         start_time=payload.start_time,
         end_time=payload.end_time,
         estimated_cost=payload.estimated_cost,
         notes=payload.notes,
+        line_name=payload.line_name,
+        vehicle_type=payload.vehicle_type,
+        departure_stop_name=payload.departure_stop_name,
+        arrival_stop_name=payload.arrival_stop_name,
     )
     try:
         created = await trip_service.add_my_item(
@@ -151,12 +162,15 @@ async def update_itinerary_item(
     trip_service: TripService = Depends(get_trip_service),
 ):
     try:
+        updates = payload.model_dump(exclude_unset=True)
+        if updates.get("transport_mode") is not None:
+            updates["transport_mode"] = updates["transport_mode"].upper()
         item = await trip_service.update_my_item(
             owner_user_id=current_user.id,
             trip_id=trip_id,
             day_id=day_id,
             item_id=item_id,
-            **payload.model_dump(exclude_unset=True),
+            **updates,
         )
         return ItineraryItemResponse.model_validate(item)
     except TripNotFoundError as e:

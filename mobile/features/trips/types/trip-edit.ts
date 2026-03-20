@@ -102,9 +102,34 @@ export type UpdateTripDayRequest = {
   lodging_note?: string | null;
 };
 
+export type TripTransportMode =
+  | 'car'
+  | 'train'
+  | 'bus'
+  | 'walk'
+  | 'bicycle'
+  | 'plane'
+  | 'ship'
+  | 'taxi'
+  | 'other';
+
 export type CreateItineraryItemRequest = {
   name: string;
+  item_type?: 'place' | 'transport';
   category?: string;
+  transport_mode?: TripTransportMode;
+  travel_minutes?: number;
+  distance_meters?: number;
+  from_name?: string;
+  to_name?: string;
+  latitude?: number;
+  longitude?: number;
+  start_time?: string;
+  end_time?: string;
   estimated_cost?: number;
   notes?: string;
+  line_name?: string;
+  vehicle_type?: string;
+  departure_stop_name?: string;
+  arrival_stop_name?: string;
 };

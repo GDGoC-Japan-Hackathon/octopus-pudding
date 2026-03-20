@@ -210,7 +210,10 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
     id: item.id,
     start: toTimeLabel(item.start_time),
     end: toTimeLabel(item.end_time),
-    title: item.item_type === 'transport' ? transportModeLabel(item.transport_mode) : item.name,
+    title:
+      item.item_type === 'transport'
+        ? item.name || transportModeLabel(item.transport_mode, item.vehicle_type)
+        : item.name,
     body:
       item.item_type === 'transport'
         ? typeof item.notes === 'string' && item.notes.includes('公共交通機関が取得できませんでした')
@@ -232,7 +235,7 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
         : toDurationLabel(item.start_time, item.end_time),
     icon:
       item.item_type === 'transport'
-        ? transportModeIcon(item.transport_mode)
+        ? transportModeIcon(item.transport_mode, item.vehicle_type)
         : item.category === 'food'
         ? 'restaurant'
         : item.category === 'transport'
@@ -245,19 +248,35 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
   }));
 }
 
-function transportModeLabel(mode?: string | null) {
-  if (!mode) return '移動';
-  if (mode === 'WALK') return '徒歩で移動';
-  if (mode === 'BUS') return 'バスで移動';
-  if (mode === 'CAR') return '車で移動';
+function normalizeTransportMode(mode?: string | null) {
+  return mode?.toUpperCase() ?? null;
+}
+
+function transportModeLabel(mode?: string | null, vehicleType?: string | null) {
+  const normalized = normalizeTransportMode(mode);
+  if (!normalized) return '移動';
+  if (normalized === 'WALK') return '徒歩で移動';
+  if (normalized === 'BUS') return 'バスで移動';
+  if (normalized === 'CAR') return '車で移動';
+  if (normalized === 'TAXI') return 'タクシーで移動';
+  if (normalized === 'SHIP') return '船で移動';
+  if (normalized === 'BICYCLE') return '自転車で移動';
+  if (normalized === 'PLANE') return '飛行機で移動';
+  if (normalized === 'OTHER' && vehicleType) return `${vehicleType}で移動`;
   return '電車で移動';
 }
 
-function transportModeIcon(mode?: string | null): keyof typeof MaterialIcons.glyphMap {
-  if (!mode) return 'swap-horiz';
-  if (mode === 'WALK') return 'directions-walk';
-  if (mode === 'BUS') return 'directions-bus';
-  if (mode === 'CAR') return 'directions-car';
+function transportModeIcon(mode?: string | null, vehicleType?: string | null): keyof typeof MaterialIcons.glyphMap {
+  const normalized = normalizeTransportMode(mode);
+  if (!normalized) return 'swap-horiz';
+  if (normalized === 'WALK') return 'directions-walk';
+  if (normalized === 'BUS') return 'directions-bus';
+  if (normalized === 'CAR') return 'directions-car';
+  if (normalized === 'TAXI') return 'local-taxi';
+  if (normalized === 'SHIP') return 'directions-boat';
+  if (normalized === 'BICYCLE') return 'directions-bike';
+  if (normalized === 'PLANE') return 'flight';
+  if (normalized === 'OTHER' && vehicleType?.includes('ロープウェイ')) return 'tram';
   return 'train';
 }
 
@@ -267,10 +286,11 @@ function buildTransportMetaLabel(
   travelMinutes?: number | null,
   distanceMeters?: number | null
 ) {
+  const normalized = normalizeTransportMode(transportMode);
   const parts: string[] = [];
   if (lineName) {
     parts.push(lineName);
-  } else if (transportMode === 'BUS' || transportMode === 'TRAIN') {
+  } else if (normalized === 'BUS' || normalized === 'TRAIN') {
     parts.push('公共交通');
   }
   if (typeof distanceMeters === 'number') {
