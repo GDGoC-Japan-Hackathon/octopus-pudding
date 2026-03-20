@@ -6,6 +6,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,64 +15,53 @@ import {
   View,
 } from 'react-native';
 
-import { weatherMock } from '@/data/travel';
 import { BackButton } from '@/components/back-button';
+import { weatherMock } from '@/data/travel';
+import { getFriends } from '@/features/friends/api/get-friends';
+import { type FriendResponse } from '@/features/friends/types/friend-request';
 import { AppHeader } from '@/features/travel/components/AppHeader';
 import { travelStyles } from '@/features/travel/styles';
-import {
-  ParticipantCountField,
-  ScheduleField,
-} from '@/features/trips/components/TripBasicInfoFields';
-import {
-  type CreateTripFormValues,
-  validateAndBuildCreateTripPayload,
-} from '@/features/trips/utils/create-trip';
+import { ScheduleField } from '@/features/trips/components/TripBasicInfoFields';
+import { validateAndBuildCreateTripPayload, type CreateTripFormValues } from '@/features/trips/utils/create-trip';
 import {
   clearCreateTripDraft,
   getCreateTripDraft,
   setCreateTripDraft,
 } from '@/features/trips/utils/create-trip-draft';
 
-const formItems = [
-  {
-    key: 'origin',
-    label: '出発地',
-    placeholder: '例: 東京',
-  },
-  {
-    key: 'destination',
-    label: '目的地（都市・エリア）',
-    placeholder: '例: 京都 / 札幌 / 箱根 / 那覇',
-  },
-  {
-    key: 'participantCount',
-    label: '人数',
-    placeholder: '例: 4',
-  },
-  {
-    key: 'budget',
-    label: '1人あたりの予算（全日程）',
-    placeholder: '',
-  },
-] as const;
-
-const destinationSuggestions = ['東京', '大阪', '京都', '札幌', '福岡', '那覇', '箱根', '軽井沢'] as const;
+const destinationSuggestions = ['京都', '沖縄', '北海道', '金沢'] as const;
 const ATMOSPHERE_OPTIONS = ['のんびり', 'アクティブ', '映え'] as const;
 const RECOMMEND_CATEGORY_OPTIONS = ['カフェ', '夜景', 'グルメ', '温泉'] as const;
 const BUDGET_STEP = 10000;
 const MAX_PARTICIPANT_COUNT = 10;
 const MAX_TRIP_DAYS = 3;
 const MAX_BUDGET_PER_PERSON = 100000;
-const REQUIRED_FIELD_KEYS = new Set(['origin', 'destination', 'participantCount', 'budget'] as const);
-type EditableFieldKey = 'origin' | 'destination' | 'participantCount' | 'budget' | 'startDate' | 'endDate';
 
-function FieldLabel({ label, required = false }: { label: string; required?: boolean }) {
+function FieldLabel({
+  label,
+  iconName,
+  required = false,
+}: {
+  label: string;
+  iconName: keyof typeof MaterialIcons.glyphMap;
+  required?: boolean;
+}) {
   return (
     <View style={styles.fieldLabelRow}>
-      <Text style={[travelStyles.sectionBody, styles.fieldLabel]}>{label}</Text>
-      {required ? <Text style={styles.requiredMark}>※</Text> : null}
+      <View style={styles.fieldLabelLeft}>
+        <MaterialIcons name={iconName} size={16} color="#EC5B13" />
+        <View style={styles.fieldLabelTextWrap}>
+          <Text style={styles.fieldLabel}>{label}</Text>
+          {required ? <Text style={styles.requiredMark}>※</Text> : null}
+        </View>
+      </View>
     </View>
   );
+}
+
+function getInitials(name: string) {
+  const trimmed = name.trim();
+  return trimmed ? trimmed.slice(0, 1) : '?';
 }
 
 export default function PlanCreateScreen() {
@@ -79,11 +69,15 @@ export default function PlanCreateScreen() {
   const [isResolvingCurrentLocation, setIsResolvingCurrentLocation] = useState(false);
   const isResolvingCurrentLocationRef = useRef(false);
   const [fields, setFields] = useState<CreateTripFormValues>(() => getCreateTripDraft().formValues);
+  const [friends, setFriends] = useState<FriendResponse[]>([]);
+  const [isLoadingFriends, setIsLoadingFriends] = useState(true);
   const [selectedCompanionUserIds, setSelectedCompanionUserIds] = useState<number[]>(
     () => getCreateTripDraft().selectedCompanionUserIds
   );
+
   const headerBackSlot = (
     <BackButton
+      size={28}
       onPress={() => {
         clearCreateTripDraft();
         router.replace('/create');
@@ -91,9 +85,9 @@ export default function PlanCreateScreen() {
     />
   );
 
-  const updateField = (key: EditableFieldKey, value: string) => {
+  const updateField = useCallback(<K extends keyof CreateTripFormValues>(key: K, value: CreateTripFormValues[K]) => {
     setFields((prev) => ({ ...prev, [key]: value }));
-  };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -103,16 +97,38 @@ export default function PlanCreateScreen() {
     }, [])
   );
 
-  const toggleRecommendationCategory = useCallback((category: string) => {
-    setFields((prev) => ({
-      ...prev,
-      recommendationCategories: prev.recommendationCategories.includes(category)
-        ? prev.recommendationCategories.filter((item) => item !== category)
-        : [...prev.recommendationCategories, category],
-    }));
-  }, []);
+  const participantCount = useMemo(() => {
+    const parsed = Number(fields.participantCount);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+  }, [fields.participantCount]);
 
-  const budgetSliderMax = MAX_BUDGET_PER_PERSON;
+  const maxSelectableCompanions = Math.max(0, participantCount - 1);
+
+  const selectedCompanionNameMap = useMemo(() => {
+    const names = new Map<number, string>();
+    for (const friend of friends) {
+      names.set(friend.user.id, friend.user.username);
+    }
+    return names;
+  }, [friends]);
+
+  const selectedCompanionNames = useMemo(
+    () => selectedCompanionUserIds.map((id) => selectedCompanionNameMap.get(id)).filter((value): value is string => Boolean(value)),
+    [selectedCompanionNameMap, selectedCompanionUserIds]
+  );
+
+  const tripDays = useMemo(() => {
+    if (!fields.startDate || !fields.endDate) {
+      return 1;
+    }
+    const start = new Date(`${fields.startDate}T00:00:00`);
+    const end = new Date(`${fields.endDate}T00:00:00`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+      return 1;
+    }
+    return Math.min(MAX_TRIP_DAYS, Math.max(1, Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1));
+  }, [fields.endDate, fields.startDate]);
+  const lodgingNights = Math.max(0, tripDays - 1);
 
   const budgetRawValue = useMemo(() => {
     const parsed = Number(fields.budget);
@@ -167,412 +183,700 @@ export default function PlanCreateScreen() {
     }
   }, [resolveCurrentLocationLabel, updateField]);
 
-  const handleOpenCompanions = () => {
-    setCreateTripDraft({
-      formValues: fields,
-      selectedCompanionUserIds,
-    });
-    router.push('/create/companions');
-  };
+  const toggleRecommendationCategory = useCallback((category: string) => {
+    setFields((prev) => ({
+      ...prev,
+      recommendationCategories: prev.recommendationCategories.includes(category)
+        ? prev.recommendationCategories.filter((item) => item !== category)
+        : [...prev.recommendationCategories, category],
+    }));
+  }, []);
 
-  const handleSubmit = async () => {
+  const toggleAtmosphere = useCallback((option: string) => {
+    setFields((prev) => ({
+      ...prev,
+      atmosphere: prev.atmosphere === option ? '' : option,
+    }));
+  }, []);
+
+  const toggleFriend = useCallback((userId: number) => {
+    setSelectedCompanionUserIds((prev) => {
+      if (prev.includes(userId)) {
+        return prev.filter((id) => id !== userId);
+      }
+      if (maxSelectableCompanions > 0 && prev.length >= maxSelectableCompanions) {
+        Alert.alert('選択上限', `同行者は最大${maxSelectableCompanions}人まで選択できます。`);
+        return prev;
+      }
+      return [...prev, userId];
+    });
+  }, [maxSelectableCompanions]);
+
+  const setAccommodationNote = useCallback((index: number, value: string) => {
+    const next = [...fields.accommodationNotesByDay];
+    while (next.length < MAX_TRIP_DAYS) {
+      next.push('');
+    }
+    next[index] = value;
+    updateField('accommodationNotesByDay', next);
+  }, [fields.accommodationNotesByDay, updateField]);
+
+  const loadFriends = useCallback(async () => {
+    try {
+      setIsLoadingFriends(true);
+      const list = await getFriends();
+      setFriends(list);
+    } catch {
+      setFriends([]);
+      Alert.alert('取得失敗', '友達一覧の取得に失敗しました。');
+    } finally {
+      setIsLoadingFriends(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadFriends();
+    }, [loadFriends])
+  );
+
+  const handleSubmit = () => {
     const result = validateAndBuildCreateTripPayload(fields);
     if (!result.ok) {
       Alert.alert('入力エラー', result.message);
       return;
     }
+
     setCreateTripDraft({
       formValues: fields,
       selectedCompanionUserIds,
+      selectedCompanionNames,
     });
     router.push('/create/generating');
   };
 
   return (
-    <ScrollView style={travelStyles.screen} contentContainerStyle={{ paddingBottom: 24 }}>
+    <ScrollView style={travelStyles.screen} contentContainerStyle={styles.contentContainer}>
       <AppHeader
-        title="基本情報の入力"
+        title="新規プラン作成"
         weatherLabel={`${weatherMock.temp} ${weatherMock.condition}`}
         leftSlot={headerBackSlot}
       />
 
-      <View style={travelStyles.container}>
+      <View style={styles.container}>
         <Text style={styles.requiredLegend}>※必須</Text>
-        {formItems.map((item) => (
-          <View key={item.key} style={styles.fieldBlock}>
-            {item.key !== 'participantCount' ? (
-              <View style={travelStyles.rowWrap}>
-                <FieldLabel label={item.label} required={REQUIRED_FIELD_KEYS.has(item.key)} />
-                {item.key === 'origin' ? (
-                  <Pressable
-                    style={[
-                      travelStyles.pillButton,
-                      styles.currentLocationButton,
-                      isResolvingCurrentLocation ? styles.currentLocationButtonDisabled : null,
-                    ]}
-                    onPress={handleUseCurrentLocation}
-                    disabled={isResolvingCurrentLocation}
-                  >
-                    {isResolvingCurrentLocation ? (
-                      <ActivityIndicator color="#F97316" size="small" />
-                    ) : (
-                      <Text style={[travelStyles.pillText, styles.currentLocationButtonText]}>現在地を入力</Text>
-                    )}
-                  </Pressable>
-                ) : null}
-              </View>
-            ) : null}
-            {item.key === 'participantCount' ? (
-              <ParticipantCountField
-                participantCount={fields.participantCount}
-                onChangeParticipantCount={(value) => updateField('participantCount', value)}
-                required
-                maxParticipantCount={MAX_PARTICIPANT_COUNT}
-              />
-            ) : item.key === 'budget' ? (
-              <View style={styles.budgetSection}>
-                <View style={styles.stepperWrap}>
-                  <Pressable
-                    style={[styles.stepperButton, budgetRawValue <= BUDGET_STEP ? styles.stepperButtonDisabled : null]}
-                    onPress={() => {
-                      if (budgetRawValue <= BUDGET_STEP) {
-                        return;
-                      }
-                      updateField('budget', String(Math.max(BUDGET_STEP, budgetRawValue - BUDGET_STEP)));
-                    }}
-                    disabled={budgetRawValue <= BUDGET_STEP}
-                  >
-                    <MaterialIcons
-                      name="remove"
-                      size={20}
-                      color={budgetRawValue <= BUDGET_STEP ? '#94A3B8' : '#334155'}
-                    />
-                  </Pressable>
 
-                  <View style={styles.stepperValueWrap}>
-                    <Text style={styles.stepperValueText}>{budgetRawValue.toLocaleString('ja-JP')}</Text>
-                    <Text style={styles.stepperValueUnit}>円 / 1人</Text>
-                  </View>
-
-                  <Pressable
-                    style={[styles.stepperButton, budgetRawValue >= budgetSliderMax ? styles.stepperButtonDisabled : null]}
-                    onPress={() => {
-                      const next = Math.min(budgetSliderMax, (budgetRawValue > 0 ? budgetRawValue : 0) + BUDGET_STEP);
-                      updateField('budget', String(next));
-                    }}
-                    disabled={budgetRawValue >= budgetSliderMax}
-                  >
-                    <MaterialIcons
-                      name="add"
-                      size={20}
-                      color={budgetRawValue >= budgetSliderMax ? '#94A3B8' : '#334155'}
-                    />
-                  </Pressable>
-                </View>
-              </View>
-            ) : (
-              <TextInput
-                style={travelStyles.input}
-                value={fields[item.key]}
-                onChangeText={(value) => updateField(item.key, value)}
-                placeholder={item.placeholder}
-                placeholderTextColor="#94A3B8"
-                keyboardType="default"
-                autoCapitalize="none"
-              />
-            )}
-            {item.key === 'destination' ? (
-              <>
-                <View style={styles.destinationSuggestionWrap}>
-                  {destinationSuggestions.map((suggestion) => {
-                    const isSelected = fields.destination.trim() === suggestion;
-                    return (
-                      <Pressable
-                        key={suggestion}
-                        style={[styles.destinationSuggestionChip, isSelected ? styles.destinationSuggestionChipSelected : null]}
-                        onPress={() => updateField('destination', suggestion)}
-                      >
-                        <Text
-                          style={[
-                            styles.destinationSuggestionText,
-                            isSelected ? styles.destinationSuggestionTextSelected : null,
-                          ]}
-                        >
-                          {suggestion}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                <View style={styles.scheduleSection}>
-                  <ScheduleField
-                    startDate={fields.startDate}
-                    endDate={fields.endDate}
-                    onChangeStartDate={(value) => updateField('startDate', value)}
-                    onChangeEndDate={(value) => updateField('endDate', value)}
-                    required
-                    maxTripDays={MAX_TRIP_DAYS}
-                  />
-                </View>
-              </>
-            ) : null}
-          </View>
-        ))}
-
-        <View style={styles.fieldBlock}>
-          <FieldLabel label="雰囲気" />
-          <View style={styles.optionWrap}>
-            {ATMOSPHERE_OPTIONS.map((option) => {
-              const active = fields.atmosphere === option;
-              return (
-                <Pressable
-                  key={option}
-                  style={[styles.optionChip, active && styles.optionChipActive]}
-                  onPress={() =>
-                    setFields((prev) => ({
-                      ...prev,
-                      atmosphere: prev.atmosphere === option ? '' : option,
-                    }))
-                  }
-                >
-                  <Text style={[styles.optionChipText, active && styles.optionChipTextActive]}>{option}</Text>
-                </Pressable>
-              );
-            })}
+        <View style={styles.sectionBlock}>
+          <FieldLabel label="出発地" iconName="location-on" required />
+          <View style={styles.inputShell}>
+            <TextInput
+              value={fields.origin}
+              onChangeText={(value) => updateField('origin', value)}
+              placeholder="例：東京駅"
+              placeholderTextColor="#94A3B8"
+              style={[styles.textInput, styles.originInput]}
+            />
+            <Pressable
+              style={[styles.inlineActionButton, isResolvingCurrentLocation ? styles.inlineActionButtonDisabled : null]}
+              onPress={handleUseCurrentLocation}
+              disabled={isResolvingCurrentLocation}
+            >
+              {isResolvingCurrentLocation ? (
+                <ActivityIndicator color="#0F172A" size="small" />
+              ) : (
+                <>
+                  <MaterialIcons name="my-location" size={16} color="#0F172A" />
+                  <Text style={styles.inlineActionText}>現在地から入力</Text>
+                </>
+              )}
+            </Pressable>
           </View>
         </View>
 
-        <View style={styles.fieldBlock}>
-          <FieldLabel label="カテゴリ（複数選択可）" />
-          <View style={styles.optionWrap}>
-            {RECOMMEND_CATEGORY_OPTIONS.map((option) => {
-              const active = fields.recommendationCategories.includes(option);
-              return (
-                <Pressable
-                  key={option}
-                  style={[styles.optionChip, active && styles.optionChipActive]}
-                  onPress={() => toggleRecommendationCategory(option)}
-                >
-                  <Text style={[styles.optionChipText, active && styles.optionChipTextActive]}>{option}</Text>
-                </Pressable>
-              );
-            })}
+        <View style={styles.sectionBlock}>
+          <FieldLabel label="目的地" iconName="flag" required />
+          <TextInput
+            value={fields.destination}
+            onChangeText={(value) => updateField('destination', value)}
+            placeholder="例：那覇空港"
+            placeholderTextColor="#94A3B8"
+            style={styles.textInput}
+          />
+          <View style={styles.chipHintRow}>
+            <Text style={styles.chipHintLabel}>人気のスポット</Text>
           </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScrollRow}>
+            {destinationSuggestions.map((item) => (
+              <Pressable key={item} style={styles.secondaryChip} onPress={() => updateField('destination', item)}>
+                <Text style={styles.secondaryChipText}>{item}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
         </View>
 
-        <View style={styles.fieldBlock}>
-          <FieldLabel label="同行者" />
-          <Pressable style={styles.companionSelector} onPress={handleOpenCompanions}>
-            <View style={styles.companionSelectorBody}>
-              <MaterialIcons name="group" size={20} color="#F97316" />
-              <View style={styles.companionSelectorTextWrap}>
-                <Text style={styles.companionSelectorTitle}>同行者を選ぶ</Text>
-                <Text style={styles.companionSelectorBodyText}>
-                  {selectedCompanionUserIds.length
-                    ? `${selectedCompanionUserIds.length}人を選択済み`
-                    : '選択しなくても作成できます'}
+        <View style={styles.sectionBlock}>
+          <ScheduleField
+            startDate={fields.startDate}
+            endDate={fields.endDate}
+            onChangeStartDate={(value) => updateField('startDate', value)}
+            onChangeEndDate={(value) => updateField('endDate', value)}
+            label="日程"
+            iconName="calendar-today"
+            required
+            maxTripDays={MAX_TRIP_DAYS}
+          />
+        </View>
+
+        <View style={styles.gridRow}>
+          <View style={styles.gridItem}>
+            <FieldLabel label="人数" iconName="group" required />
+            <View style={styles.budgetCard}>
+              <Pressable
+                style={[styles.stepperButton, participantCount <= 1 ? styles.stepperButtonDisabled : null]}
+                onPress={() => updateField('participantCount', String(Math.max(1, participantCount - 1)))}
+                disabled={participantCount <= 1}
+              >
+                <MaterialIcons name="remove" size={20} color={participantCount <= 1 ? '#94A3B8' : '#334155'} />
+              </Pressable>
+              <View style={styles.budgetValueWrap}>
+                <Text style={styles.budgetValueText}>
+                  {participantCount}
+                  <Text style={styles.budgetValueUnitInline}> 人</Text>
                 </Text>
               </View>
+              <Pressable
+                style={[styles.stepperButton, participantCount >= MAX_PARTICIPANT_COUNT ? styles.stepperButtonDisabled : null]}
+                onPress={() =>
+                  updateField('participantCount', String(Math.min(MAX_PARTICIPANT_COUNT, participantCount + 1)))
+                }
+                disabled={participantCount >= MAX_PARTICIPANT_COUNT}
+              >
+                <MaterialIcons
+                  name="add"
+                  size={20}
+                  color={participantCount >= MAX_PARTICIPANT_COUNT ? '#94A3B8' : '#334155'}
+                />
+              </Pressable>
             </View>
-            <MaterialIcons name="chevron-right" size={20} color="#94A3B8" />
-          </Pressable>
+          </View>
+
+          <View style={styles.gridItem}>
+            <FieldLabel label="予算 (一人あたり)" iconName="payments" required />
+            <View style={styles.budgetCard}>
+              <Pressable
+                style={[styles.stepperButton, budgetRawValue <= BUDGET_STEP ? styles.stepperButtonDisabled : null]}
+                onPress={() => updateField('budget', String(Math.max(BUDGET_STEP, budgetRawValue - BUDGET_STEP)))}
+                disabled={budgetRawValue <= BUDGET_STEP}
+              >
+                <MaterialIcons name="remove" size={20} color={budgetRawValue <= BUDGET_STEP ? '#94A3B8' : '#334155'} />
+              </Pressable>
+              <View style={styles.budgetValueWrap}>
+                <Text style={styles.budgetValueText}>
+                  <Text style={styles.budgetValueUnitInline}>〜 </Text>
+                  {Math.round(budgetRawValue / 10000)}
+                  <Text style={styles.budgetValueUnitInline}> 万円</Text>
+                </Text>
+              </View>
+              <Pressable
+                style={[styles.stepperButton, budgetRawValue >= MAX_BUDGET_PER_PERSON ? styles.stepperButtonDisabled : null]}
+                onPress={() => updateField('budget', String(Math.min(MAX_BUDGET_PER_PERSON, budgetRawValue + BUDGET_STEP)))}
+                disabled={budgetRawValue >= MAX_BUDGET_PER_PERSON}
+              >
+                <MaterialIcons name="add" size={20} color={budgetRawValue >= MAX_BUDGET_PER_PERSON ? '#94A3B8' : '#334155'} />
+              </Pressable>
+            </View>
+          </View>
         </View>
 
-        <Pressable
-          style={travelStyles.primaryButton}
-          onPress={handleSubmit}
-        >
-          <Text style={travelStyles.primaryButtonText}>プランを作成する</Text>
-        </Pressable>
+        <View style={styles.sectionBlock}>
+          <FieldLabel label="旅の雰囲気" iconName="auto-awesome" />
+          <View style={styles.wrapRow}>
+            {ATMOSPHERE_OPTIONS.map((option) => {
+              const selected = fields.atmosphere === option;
+              return (
+                <Pressable
+                  key={option}
+                  style={[styles.pillChip, selected ? styles.primaryPillChip : styles.secondaryPillChip]}
+                  onPress={() => toggleAtmosphere(option)}
+                >
+                  <Text style={[styles.pillChipText, selected ? styles.primaryPillChipText : styles.secondaryPillChipText]}>
+                    {option}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <FieldLabel label="カテゴリ" iconName="category" />
+          <View style={styles.wrapRow}>
+            {RECOMMEND_CATEGORY_OPTIONS.map((option) => {
+              const selected = fields.recommendationCategories.includes(option);
+              return (
+                <Pressable
+                  key={option}
+                  style={[styles.pillChip, selected ? styles.secondaryActiveChip : styles.secondaryPillChip]}
+                  onPress={() => toggleRecommendationCategory(option)}
+                >
+                  <Text style={[styles.pillChipText, selected ? styles.secondaryActiveChipText : styles.secondaryPillChipText]}>
+                    {option}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <FieldLabel label="同行者を選択" iconName="person-add" />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.friendScrollRow}>
+            {isLoadingFriends ? (
+              <View style={styles.friendsLoadingWrap}>
+                <ActivityIndicator color="#EC5B13" />
+              </View>
+            ) : friends.length === 0 ? (
+              <View style={styles.emptyFriendState}>
+                <Text style={styles.emptyFriendText}>共有できる友達がまだいません</Text>
+              </View>
+            ) : (
+              friends.map((friend) => {
+                const selected = selectedCompanionUserIds.includes(friend.user.id);
+                return (
+                  <Pressable key={friend.user.id} style={styles.friendPill} onPress={() => toggleFriend(friend.user.id)}>
+                    <View style={[styles.avatarRing, selected ? styles.avatarRingSelected : null]}>
+                      {friend.user.profile_image_url ? (
+                        <Image source={{ uri: friend.user.profile_image_url }} style={styles.avatarImage} />
+                      ) : (
+                        <View style={[styles.avatarFallback, selected ? styles.avatarFallbackSelected : null]}>
+                          <Text style={[styles.avatarFallbackText, selected ? styles.avatarFallbackTextSelected : null]}>
+                            {getInitials(friend.user.username)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.friendPillText, selected ? styles.friendPillTextSelected : null]} numberOfLines={1}>
+                      {friend.user.username}
+                    </Text>
+                  </Pressable>
+                );
+              })
+            )}
+          </ScrollView>
+          <Text style={styles.sectionHelper}>最大 {maxSelectableCompanions} 人まで選択できます</Text>
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <FieldLabel label="絶対に行きたい場所" iconName="stars" />
+          <TextInput
+            value={fields.mustVisitPlacesText}
+            onChangeText={(value) => updateField('mustVisitPlacesText', value)}
+            placeholder="例：清水寺, 地元の市場"
+            placeholderTextColor="#94A3B8"
+            style={styles.textInput}
+          />
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <FieldLabel label="宿泊地" iconName="hotel" />
+          <View style={styles.lodgingCard}>
+            {lodgingNights === 0 ? (
+              <Text style={styles.noLodgingText}>日帰りプランのため宿泊地入力は不要です</Text>
+            ) : (
+              Array.from({ length: lodgingNights }).map((_, index) => (
+                <View key={index} style={styles.lodgingBlock}>
+                  <Text style={styles.lodgingLabel}>{index + 1}泊目</Text>
+                  <TextInput
+                    value={fields.accommodationNotesByDay[index] ?? ''}
+                    onChangeText={(value) => setAccommodationNote(index, value)}
+                    placeholder="宿泊予定エリアやホテル名"
+                    placeholderTextColor="#94A3B8"
+                    style={styles.lodgingInput}
+                  />
+                </View>
+              ))
+            )}
+          </View>
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <FieldLabel label="追加のリクエスト (コメント)" iconName="chat-bubble" />
+          <TextInput
+            value={fields.additionalRequestComment}
+            onChangeText={(value) => updateField('additionalRequestComment', value)}
+            placeholder="例：夕食は海が見えるレストランがいい、移動はなるべく歩きたくない..."
+            placeholderTextColor="#94A3B8"
+            multiline
+            textAlignVertical="top"
+            style={styles.textArea}
+          />
+        </View>
+
+        <View style={styles.submitWrap}>
+          <Pressable style={styles.submitButton} onPress={handleSubmit}>
+            <MaterialIcons name="bolt" size={20} color="#FFFFFF" />
+            <Text style={styles.submitButtonText}>プラン作成</Text>
+          </Pressable>
+          <Text style={styles.submitHint}>AIが最適なルート、宿泊先、観光スポットを提案します</Text>
+        </View>
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  fieldBlock: {
-    marginBottom: 18,
+  contentContainer: {
+    paddingBottom: 32,
+  },
+  container: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 28,
   },
   requiredLegend: {
     alignSelf: 'flex-end',
-    marginBottom: 12,
+    color: '#DC2626',
     fontSize: 12,
     fontWeight: '700',
-    color: '#DC2626',
+  },
+  brandingBlock: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    gap: 4,
+  },
+  brandTitle: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#EC5B13',
+    letterSpacing: -0.8,
+  },
+  brandBody: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  sectionBlock: {
+    gap: 14,
   },
   fieldLabelRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+  },
+  fieldLabelLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  fieldLabelTextWrap: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 2,
-  },
-  headingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  requiredNote: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#DC2626',
-  },
-  optionWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
-  },
-  optionChip: {
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: '#FFFFFF',
-  },
-  optionChipActive: {
-    backgroundColor: '#FFF7ED',
-    borderColor: '#FDBA74',
-  },
-  optionChipText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  optionChipTextActive: {
-    color: '#EA580C',
-  },
-  currentLocationButton: {
-    minWidth: 112,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 7,
   },
   fieldLabel: {
     fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: '#0F172A',
   },
   requiredMark: {
-    fontSize: 10,
-    lineHeight: 12,
-    fontWeight: '700',
     color: '#DC2626',
-    marginTop: -1,
-  },
-  currentLocationButtonDisabled: {
-    opacity: 0.7,
-  },
-  currentLocationButtonText: {
-    color: '#0F172A',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  companionSelector: {
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  companionSelectorBody: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  companionSelectorTextWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  companionSelectorTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  companionSelectorBodyText: {
     fontSize: 12,
-    color: '#64748B',
+    fontWeight: '800',
+    lineHeight: 12,
+    marginTop: -3,
   },
-  scheduleSection: {
-    marginTop: 22,
-  },
-  stepperWrap: {
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  stepperButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
+  inputShell: {
+    position: 'relative',
     justifyContent: 'center',
   },
-  stepperButtonDisabled: {
-    backgroundColor: '#F8FAFC',
+  textInput: {
+    borderWidth: 1,
     borderColor: '#E2E8F0',
-  },
-  stepperValueWrap: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-  },
-  stepperValueText: {
-    fontSize: 20,
-    fontWeight: '700',
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    fontSize: 14,
     color: '#0F172A',
   },
-  stepperValueUnit: {
+  originInput: {
+    paddingRight: 140,
+  },
+  inlineActionButton: {
+    position: 'absolute',
+    right: 8,
+    top: 8,
+    bottom: 8,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  inlineActionButtonDisabled: {
+    opacity: 0.7,
+  },
+  inlineActionText: {
+    color: '#0F172A',
     fontSize: 12,
     fontWeight: '700',
-    color: '#64748B',
   },
-  budgetSection: {
-    marginTop: 0,
-    gap: 0,
+  chipHintRow: {
+    paddingHorizontal: 2,
   },
-  destinationSuggestionWrap: {
+  chipHintLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#94A3B8',
+    letterSpacing: 0.8,
+  },
+  chipScrollRow: {
+    gap: 8,
+    paddingHorizontal: 2,
+  },
+  secondaryChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  secondaryChipText: {
+    color: '#475569',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  gridRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 6,
+  },
+  gridItem: {
+    flex: 1,
+  },
+  budgetCard: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    padding: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 78,
+  },
+  stepperButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  stepperButtonDisabled: {
+    backgroundColor: '#F1F5F9',
+  },
+  budgetValueWrap: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  budgetValueText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+    lineHeight: 18,
+  },
+  budgetValueUnitInline: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#7b8592',
+  },
+  wrapRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 10,
   },
-  destinationSuggestionChip: {
+  pillChip: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 999,
+  },
+  primaryPillChip: {
+    backgroundColor: '#EC5B13',
+  },
+  primaryPillChipText: {
+    color: '#FFFFFF',
+  },
+  secondaryPillChip: {
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
     backgroundColor: '#FFFFFF',
   },
-  destinationSuggestionChipSelected: {
-    backgroundColor: '#FFF7ED',
-    borderColor: '#FDBA74',
+  secondaryPillChipText: {
+    color: '#64748B',
   },
-  destinationSuggestionText: {
+  secondaryActiveChip: {
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  secondaryActiveChipText: {
+    color: '#0284C7',
+  },
+  pillChipText: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
+    fontWeight: '700',
   },
-  destinationSuggestionTextSelected: {
-    color: '#EA580C',
+  friendScrollRow: {
+    gap: 14,
+    paddingHorizontal: 2,
+    alignItems: 'flex-start',
+  },
+  friendsLoadingWrap: {
+    width: 120,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyFriendState: {
+    minWidth: 200,
+    paddingVertical: 10,
+  },
+  emptyFriendText: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  friendPill: {
+    width: 72,
+    alignItems: 'center',
+    gap: 6,
+  },
+  avatarRing: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarRingSelected: {
+    borderColor: '#EC5B13',
+  },
+  avatarImage: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+  },
+  avatarFallback: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarFallbackSelected: {
+    backgroundColor: '#FFF7ED',
+  },
+  avatarFallbackText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#64748B',
+  },
+  avatarFallbackTextSelected: {
+    color: '#EC5B13',
+  },
+  friendPillText: {
+    width: '100%',
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  friendPillTextSelected: {
+    color: '#0F172A',
+    fontWeight: '800',
+  },
+  sectionHelper: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  lodgingCard: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 24,
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    gap: 14,
+  },
+  lodgingBlock: {
+    gap: 8,
+  },
+  noLodgingText: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  lodgingLabel: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#94A3B8',
+    letterSpacing: 0.6,
+  },
+  lodgingInput: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 13,
+    color: '#0F172A',
+  },
+  textArea: {
+    minHeight: 120,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    fontSize: 14,
+    lineHeight: 18,
+    color: '#0F172A',
+  },
+  submitWrap: {
+    paddingTop: 8,
+    paddingBottom: 32,
+    gap: 12,
+  },
+  submitButton: {
+    borderRadius: 18,
+    backgroundColor: '#EC5B13',
+    minHeight: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#EC5B13',
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
+  },
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  submitHint: {
+    textAlign: 'center',
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

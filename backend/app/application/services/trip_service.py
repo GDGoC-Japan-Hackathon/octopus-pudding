@@ -86,6 +86,17 @@ def _comment_category_phrase(recommendation_categories: list[str]) -> Optional[s
     return None
 
 
+def _normalize_generation_text_items(values: Optional[list[str]]) -> list[str]:
+    if not values:
+        return []
+    normalized: list[str] = []
+    for value in values:
+        item = (value or "").strip()
+        if item:
+            normalized.append(item)
+    return normalized
+
+
 class TripService:
     """Trip application service."""
 
@@ -423,8 +434,19 @@ class TripService:
         provider: Optional[str] = None,
         prompt_version: Optional[str] = None,
         run_async: bool = True,
+        must_visit_places: Optional[list[str]] = None,
+        lodging_notes: Optional[list[str]] = None,
+        additional_request_comment: Optional[str] = None,
+        selected_companion_names: Optional[list[str]] = None,
     ) -> AiPlanGeneration:
         await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+
+        generation_input = {
+            "must_visit_places": _normalize_generation_text_items(must_visit_places),
+            "lodging_notes": _normalize_generation_text_items(lodging_notes),
+            "additional_request_comment": (additional_request_comment or "").strip() or None,
+            "selected_companion_names": _normalize_generation_text_items(selected_companion_names),
+        }
 
         generation = AiPlanGeneration(
             id=None,
@@ -438,7 +460,7 @@ class TripService:
         if run_async and created.id is not None:
             asyncio.create_task(self.run_ai_plan_generation_in_background(created.id))
         elif created.id is not None:
-            created = await self.execute_ai_plan_generation(created.id)
+            created = await self.execute_ai_plan_generation(created.id, generation_input=generation_input)
 
         return created
 
@@ -467,7 +489,11 @@ class TripService:
             service = TripService(repo)
             await service.execute_ai_plan_generation(generation_id)
 
-    async def execute_ai_plan_generation(self, generation_id: int) -> AiPlanGeneration:
+    async def execute_ai_plan_generation(
+        self,
+        generation_id: int,
+        generation_input: Optional[dict] = None,
+    ) -> AiPlanGeneration:
         generation = await self.trip_repository.get_ai_plan_generation(generation_id)
         if generation is None:
             raise AiPlanGenerationNotFoundError(
@@ -492,6 +518,7 @@ class TripService:
                 destination=aggregate.trip.destination,
                 preference=aggregate.preference,
                 max_candidates=24,
+                must_visit_places=(generation_input or {}).get("must_visit_places"),
             )
             route_options = await self._collect_route_options(
                 trip=aggregate.trip,
@@ -507,6 +534,7 @@ class TripService:
                     days=days,
                     place_candidates=place_candidates,
                     route_options=route_options,
+                    generation_input=generation_input,
                 )
             except Exception as exc:  # noqa: BLE001
                 plan_payload = {}
@@ -591,6 +619,7 @@ class TripService:
         destination: str,
         preference: Optional[TripPreference],
         max_candidates: int,
+        must_visit_places: Optional[list[str]] = None,
     ) -> list[PlaceCandidate]:
         place_client = GooglePlacesClient()
         atmosphere_hint = preference.atmosphere.value if preference is not None else ""
@@ -602,6 +631,8 @@ class TripService:
         ]
         if atmosphere_hint:
             queries.append(f"{destination} {atmosphere_hint} おすすめ")
+        for must_visit_place in _normalize_generation_text_items(must_visit_places):
+            queries.append(f"{destination} {must_visit_place}")
 
         merged: list[PlaceCandidate] = []
         seen: set[tuple[str, str]] = set()
@@ -633,6 +664,7 @@ class TripService:
         days: list[TripDay],
         place_candidates: list[PlaceCandidate],
         route_options: list[RouteOption],
+        generation_input: Optional[dict] = None,
     ) -> dict:
         gemini_client = GeminiClient()
         prompt = self._build_gemini_prompt(
@@ -641,6 +673,7 @@ class TripService:
             days=days,
             place_candidates=place_candidates,
             route_options=route_options,
+            generation_input=generation_input,
         )
         return await gemini_client.generate_json(prompt=prompt, temperature=0.2)
 
@@ -651,7 +684,9 @@ class TripService:
         days: list[TripDay],
         place_candidates: list[PlaceCandidate],
         route_options: list[RouteOption],
+        generation_input: Optional[dict] = None,
     ) -> str:
+        generation_input = generation_input or {}
         days_payload = [
             {"day_number": d.day_number, "date": d.date.isoformat() if d.date is not None else None}
             for d in days
@@ -672,6 +707,10 @@ class TripService:
             if preference is not None
             else None
         )
+        must_visit_places = _normalize_generation_text_items(generation_input.get("must_visit_places"))
+        lodging_notes = _normalize_generation_text_items(generation_input.get("lodging_notes"))
+        selected_companion_names = _normalize_generation_text_items(generation_input.get("selected_companion_names"))
+        additional_request_comment = (generation_input.get("additional_request_comment") or "").strip() or None
         return (
             "旅行日程を最適化してください。必ずJSONオブジェクトのみを返してください。\n"
             "フォーマット: {\"days\": [{\"day_number\": 1, \"items\": ["
@@ -687,6 +726,10 @@ class TripService:
             f"preference={json.dumps(preference_payload, ensure_ascii=False)}\n"
             f"recommended_categories={json.dumps(trip.recommendation_categories, ensure_ascii=False)}\n"
             f"selected_transport_types={json.dumps(selected_transport_types, ensure_ascii=False)}\n"
+            f"must_visit_places={json.dumps(must_visit_places, ensure_ascii=False)}\n"
+            f"lodging_notes={json.dumps(lodging_notes, ensure_ascii=False)}\n"
+            f"selected_companion_names={json.dumps(selected_companion_names, ensure_ascii=False)}\n"
+            f"additional_request_comment={json.dumps(additional_request_comment, ensure_ascii=False)}\n"
             f"candidates={json.dumps(candidates_payload, ensure_ascii=False)}\n"
             f"route_options={json.dumps(route_options_payload, ensure_ascii=False)}\n"
             "ルール:\n"
@@ -702,6 +745,10 @@ class TripService:
             "- 徒歩以外で、selected_transport_types に含まれない移動手段は絶対に使わない\n"
             "- transport は route_options にある候補を優先して使う\n"
             "- route_options が不足する場合も、徒歩以外で selected_transport_types に無い手段は使わない\n"
+            "- must_visit_places がある場合は、実現可能な範囲で優先して組み込む\n"
+            "- lodging_notes は各日の夜の帰着や宿泊候補として尊重する\n"
+            "- additional_request_comment に書かれた希望や制約を優先する\n"
+            "- selected_companion_names は同行者コンテキストとして扱い、二人旅やグループ旅行らしい無理のないプランにする\n"
         )
 
     def _parse_selected_transport_types(self, raw_value: Optional[str]) -> list[str]:

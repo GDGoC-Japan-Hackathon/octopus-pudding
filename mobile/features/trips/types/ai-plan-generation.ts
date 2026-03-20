@@ -4,6 +4,10 @@ export type CreateAiPlanGenerationRequest = {
   provider?: string;
   prompt_version?: string;
   run_async?: boolean;
+  must_visit_places?: string[];
+  lodging_notes?: string[];
+  additional_request_comment?: string;
+  selected_companion_names?: string[];
 };
 
 export type AiPlanGenerationResponse = {

@@ -21,6 +21,7 @@ type ParticipantCountFieldProps = {
   participantCount: string;
   onChangeParticipantCount: (value: string) => void;
   label?: string;
+  iconName?: keyof typeof MaterialIcons.glyphMap;
   required?: boolean;
   maxParticipantCount?: number;
   style?: StyleProp<ViewStyle>;
@@ -32,6 +33,7 @@ type ScheduleFieldProps = {
   onChangeStartDate: (value: string) => void;
   onChangeEndDate: (value: string) => void;
   label?: string;
+  iconName?: keyof typeof MaterialIcons.glyphMap;
   required?: boolean;
   maxTripDays?: number;
   style?: StyleProp<ViewStyle>;
@@ -75,11 +77,22 @@ function subtractDays(base: Date, days: number) {
   return addDays(base, -days);
 }
 
-function FieldLabel({ label, required = false }: { label: string; required?: boolean }) {
+function FieldLabel({
+  label,
+  required = false,
+  iconName,
+}: {
+  label: string;
+  required?: boolean;
+  iconName?: keyof typeof MaterialIcons.glyphMap;
+}) {
   return (
     <View style={styles.fieldLabelRow}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      {required ? <Text style={styles.requiredMark}>※</Text> : null}
+      {iconName ? <MaterialIcons name={iconName} size={16} color="#EC5B13" style={styles.fieldLabelIcon} /> : null}
+      <View style={styles.fieldLabelTextWrap}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        {required ? <Text style={styles.requiredMark}>※</Text> : null}
+      </View>
     </View>
   );
 }
@@ -88,6 +101,7 @@ export function ParticipantCountField({
   participantCount,
   onChangeParticipantCount,
   label = '人数',
+  iconName,
   required = false,
   maxParticipantCount,
   style,
@@ -107,7 +121,7 @@ export function ParticipantCountField({
 
   return (
     <View style={style}>
-      <FieldLabel label={label} required={required} />
+      <FieldLabel label={label} required={required} iconName={iconName} />
       <View style={styles.stepperWrap}>
         <Pressable
           style={[styles.stepperButton, participantCountNumber <= 1 ? styles.stepperButtonDisabled : null]}
@@ -148,6 +162,7 @@ export function ScheduleField({
   onChangeStartDate,
   onChangeEndDate,
   label = '日程',
+  iconName,
   required = false,
   maxTripDays,
   style,
@@ -299,10 +314,9 @@ export function ScheduleField({
 
   return (
     <View style={style}>
-      <FieldLabel label={label} required={required} />
+      <FieldLabel label={label} required={required} iconName={iconName} />
       <Pressable style={styles.scheduleInput} onPress={openSchedulePicker}>
         <View style={styles.scheduleInputBody}>
-          <MaterialIcons name="calendar-month" size={20} color="#F97316" />
           <View style={styles.scheduleTextWrap}>
             <Text
               style={[
@@ -312,7 +326,6 @@ export function ScheduleField({
             >
               {scheduleLabel}
             </Text>
-            <Text style={styles.scheduleHelperText}>タップしてカレンダーで選択</Text>
           </View>
         </View>
         <MaterialIcons name="chevron-right" size={20} color="#94A3B8" />
@@ -376,6 +389,14 @@ const styles = StyleSheet.create({
   fieldLabelRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    gap: 6,
+  },
+  fieldLabelIcon: {
+    marginTop: 1,
+  },
+  fieldLabelTextWrap: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 2,
   },
   fieldLabel: {
@@ -389,7 +410,7 @@ const styles = StyleSheet.create({
     lineHeight: 12,
     fontWeight: '700',
     color: '#DC2626',
-    marginTop: -1,
+    marginTop: -3,
   },
   scheduleInput: {
     marginTop: 10,

@@ -268,7 +268,20 @@ export default function CreateGeneratingScreen() {
         setMemberStepState(hasMemberError ? 'failed' : 'done');
 
         setAiStepState('active');
-        const aiGeneration = await createAiPlanGeneration(created.trip.id, { run_async: false });
+        const mustVisitPlaces = draft.formValues.mustVisitPlacesText
+          .split(/[,\n、]/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+        const lodgingNotes = draft.formValues.accommodationNotesByDay
+          .map((item) => item.trim())
+          .filter(Boolean);
+        const aiGeneration = await createAiPlanGeneration(created.trip.id, {
+          run_async: false,
+          must_visit_places: mustVisitPlaces,
+          lodging_notes: lodgingNotes,
+          additional_request_comment: draft.formValues.additionalRequestComment.trim() || undefined,
+          selected_companion_names: draft.selectedCompanionNames,
+        });
         setAiStepState(aiGeneration.status === 'failed' ? 'failed' : 'done');
 
         clearCreateTripDraft();

@@ -10,6 +10,9 @@ export type CreateTripFormValues = {
   atmosphere: string;
   recommendationCategories: string[];
   transportTypes: string[];
+  mustVisitPlacesText: string;
+  accommodationNotesByDay: string[];
+  additionalRequestComment: string;
 };
 
 export type CreateTripValidationResult =
