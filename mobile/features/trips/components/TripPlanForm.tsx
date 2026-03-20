@@ -434,7 +434,7 @@ export function TripPlanForm({
         </View>
 
         <View style={styles.sectionBlock}>
-          <FieldLabel label="カテゴリ" iconName="category" />
+          <FieldLabel label="カテゴリ（複数選択可）" iconName="category" />
           <View style={styles.wrapRow}>
             {RECOMMEND_CATEGORY_OPTIONS.map((option) => {
               const selected = fields.recommendationCategories.includes(option);
@@ -639,15 +639,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#FFF7ED',
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: '#FED7AA',
+    borderColor: '#E2E8F0',
   },
   inlineActionButtonDisabled: {
     opacity: 0.7,
   },
   inlineActionText: {
-    color: '#0F172A',
+    color: '#475569',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -749,12 +749,12 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   secondaryActiveChip: {
-    backgroundColor: '#E0F2FE',
+    backgroundColor: '#EC5B13',
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: '#EC5B13',
   },
   secondaryActiveChipText: {
-    color: '#0284C7',
+    color: '#FFFFFF',
   },
   pillChipText: {
     fontSize: 13,

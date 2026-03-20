@@ -436,8 +436,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   scheduleValueText: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '400',
     color: '#0F172A',
   },
   schedulePlaceholderText: {
