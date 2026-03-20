@@ -31,15 +31,11 @@ def _to_aggregate_response(aggregate) -> TripAggregateResponse:
     return TripAggregateResponse(
         trip=TripResponse.model_validate(aggregate.trip),
         preference=(
-            None
-            if aggregate.preference is None
-            else TripPreferenceResponse.model_validate(aggregate.preference)
+            None if aggregate.preference is None else TripPreferenceResponse.model_validate(aggregate.preference)
         ),
         members=[TripMemberResponse.model_validate(member) for member in aggregate.members],
         days=[TripDayResponse.model_validate(day) for day in aggregate.days],
-        itinerary_items=[
-            ItineraryItemResponse.model_validate(item) for item in aggregate.itinerary_items
-        ],
+        itinerary_items=[ItineraryItemResponse.model_validate(item) for item in aggregate.itinerary_items],
     )
 
 
@@ -76,6 +72,8 @@ async def create_trip(
             companions=payload.preference.companions,
             budget=payload.preference.budget,
             transport_type=payload.preference.transport_type,
+            must_visit_places_text=payload.preference.must_visit_places_text,
+            additional_request_comment=payload.preference.additional_request_comment,
         )
 
     try:

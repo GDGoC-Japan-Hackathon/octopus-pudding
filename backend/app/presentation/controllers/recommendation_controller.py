@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.services.trip_service import build_trip_recommendation_comment
 from app.domain.entities.user import User
 from app.infrastructure.database.base import get_db
 from app.infrastructure.database.models import (
@@ -12,7 +13,6 @@ from app.infrastructure.database.models import (
     TripPreferenceModel,
     UserModel,
 )
-from app.application.services.trip_service import build_trip_recommendation_comment
 from app.presentation.dependencies.auth import get_current_user
 from app.presentation.dto.recommendation_dto import (
     RecommendationCloneRequest,
@@ -91,7 +91,9 @@ def _to_timeline_item_response(item: ItineraryItemModel) -> RecommendationTimeli
         ),
         item_type=item.item_type or "place",
         meta_label=_format_transport_meta(item.travel_minutes, item.distance_meters) if is_transport else None,
-        icon=_timeline_icon_from_transport_mode(item.transport_mode) if is_transport else _timeline_icon_from_category(item.category),
+        icon=_timeline_icon_from_transport_mode(item.transport_mode)
+        if is_transport
+        else _timeline_icon_from_category(item.category),
         line_name=item.line_name,
         vehicle_type=item.vehicle_type,
         departure_stop_name=item.departure_stop_name,
@@ -114,8 +116,7 @@ async def clone_recommendation(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid clone mode")
 
     result = await db.execute(
-        select(TripModel)
-        .where(TripModel.id == recommendation_id, TripModel.is_public.is_(True))
+        select(TripModel).where(TripModel.id == recommendation_id, TripModel.is_public.is_(True))
     )
     source_trip = result.scalar_one_or_none()
     if source_trip is None:
@@ -142,13 +143,13 @@ async def clone_recommendation(
         end_date=source_trip.end_date,
         participant_count=source_trip.participant_count,
         source_trip_id=recommendation_id,
-            counts_as_saved_recommendation=payload.mode == "use",
-            is_public=False,
-            cover_image_url=source_trip.cover_image_url,
-            recommendation_comment=source_trip.recommendation_comment,
-            recommendation_categories=source_trip.recommendation_categories,
-            save_count=0,
-            status=source_trip.status,
+        counts_as_saved_recommendation=payload.mode == "use",
+        is_public=False,
+        cover_image_url=source_trip.cover_image_url,
+        recommendation_comment=source_trip.recommendation_comment,
+        recommendation_categories=source_trip.recommendation_categories,
+        save_count=0,
+        status=source_trip.status,
     )
     db.add(cloned_trip)
     await db.flush()
@@ -168,6 +169,8 @@ async def clone_recommendation(
                 companions=source_preference.companions,
                 budget=source_preference.budget,
                 transport_type=source_preference.transport_type,
+                must_visit_places_text=source_preference.must_visit_places_text,
+                additional_request_comment=source_preference.additional_request_comment,
             )
         )
 
@@ -192,6 +195,7 @@ async def clone_recommendation(
             trip_id=cloned_trip.id,
             day_number=source_day.day_number,
             date=source_day.date,
+            lodging_note=source_day.lodging_note,
         )
         db.add(cloned_day)
         await db.flush()
@@ -368,14 +372,8 @@ async def get_recommendation_detail(
                 recommendation_categories=trip.recommendation_categories or [],
             )
         ),
-        budget=(
-            f"¥{preference.budget:,}" if preference and preference.budget is not None else "未設定"
-        ),
-        move_time=(
-            f"{len(days)}日間"
-            if not items_by_day_id
-            else f"{len(days)}日間"
-        ),
+        budget=(f"¥{preference.budget:,}" if preference and preference.budget is not None else "未設定"),
+        move_time=(f"{len(days)}日間" if not items_by_day_id else f"{len(days)}日間"),
         is_saved_by_me=recommendation_id in saved_trip_map,
         saved_trip_id=saved_trip_map.get(recommendation_id),
         days=[

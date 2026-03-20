@@ -14,12 +14,20 @@ from app.domain.entities.trip import (
     ReplanSession,
     Trip,
     TripAggregate,
+    TripAtmosphere,
     TripDay,
     TripMember,
     TripPreference,
 )
 from app.domain.repositories.trip_repository import TripRepository
-from app.infrastructure.external import GeminiClient, GooglePlacesClient, PlaceCandidate, RouteOption, RouteStep, RoutesClient
+from app.infrastructure.external import (
+    GeminiClient,
+    GooglePlacesClient,
+    PlaceCandidate,
+    RouteOption,
+    RoutesClient,
+    RouteStep,
+)
 from app.shared.exceptions import (
     AiPlanGenerationNotFoundError,
     IncidentNotFoundError,
@@ -119,15 +127,14 @@ class TripService:
         if trip.participant_count < 1:
             raise ValueError("participant_count must be greater than or equal to 1")
         if trip.participant_count > self.MAX_PARTICIPANT_COUNT:
-            raise ValueError(
-                f"participant_count must be less than or equal to {self.MAX_PARTICIPANT_COUNT}"
-            )
+            raise ValueError(f"participant_count must be less than or equal to {self.MAX_PARTICIPANT_COUNT}")
         if (trip.end_date - trip.start_date).days + 1 > self.MAX_TRIP_DAYS:
             raise ValueError(f"trip duration must be less than or equal to {self.MAX_TRIP_DAYS} days")
         if trip.save_count < 0:
             raise ValueError("save_count must be greater than or equal to 0")
         invalid_categories = [
-            category for category in trip.recommendation_categories
+            category
+            for category in trip.recommendation_categories
             if category not in self.ALLOWED_RECOMMENDATION_CATEGORIES
         ]
         if invalid_categories:
@@ -160,9 +167,7 @@ class TripService:
             if kwargs["participant_count"] < 1:
                 raise ValueError("participant_count must be greater than or equal to 1")
         if next_participant_count > self.MAX_PARTICIPANT_COUNT:
-            raise ValueError(
-                f"participant_count must be less than or equal to {self.MAX_PARTICIPANT_COUNT}"
-            )
+            raise ValueError(f"participant_count must be less than or equal to {self.MAX_PARTICIPANT_COUNT}")
         if (next_end_date - next_start_date).days + 1 > self.MAX_TRIP_DAYS:
             raise ValueError(f"trip duration must be less than or equal to {self.MAX_TRIP_DAYS} days")
         if "save_count" in kwargs and kwargs["save_count"] is not None:
@@ -173,7 +178,8 @@ class TripService:
                 raise ValueError("status must be one of planned, ongoing, completed")
         if "recommendation_categories" in kwargs and kwargs["recommendation_categories"] is not None:
             invalid_categories = [
-                category for category in kwargs["recommendation_categories"]
+                category
+                for category in kwargs["recommendation_categories"]
                 if category not in self.ALLOWED_RECOMMENDATION_CATEGORIES
             ]
             if invalid_categories:
@@ -193,6 +199,12 @@ class TripService:
             updated = await self.trip_repository.update_trip(trip)
         if updated is None:
             raise TripNotFoundError(f"Trip with ID {trip_id} not found")
+        if "start_date" in kwargs or "end_date" in kwargs:
+            await self._sync_trip_days_to_range(
+                trip_id=updated.id,
+                start_date=updated.start_date,
+                end_date=updated.end_date,
+            )
         return updated
 
     async def delete_my_trip(self, user_id: int, trip_id: int) -> bool:
@@ -206,10 +218,47 @@ class TripService:
         self,
         user_id: int,
         trip_id: int,
-        preference: TripPreference,
+        atmosphere,
+        *,
+        companions: Optional[str] = None,
+        budget: Optional[int] = None,
+        transport_type: Optional[str] = None,
+        must_visit_places_text: Optional[str] = None,
+        additional_request_comment: Optional[str] = None,
+        fields_set: Optional[set[str]] = None,
     ) -> TripPreference:
-        await self.get_my_trip_detail(user_id=user_id, trip_id=trip_id)
-        preference.trip_id = trip_id
+        aggregate = await self.get_my_trip_detail(user_id=user_id, trip_id=trip_id)
+        current = aggregate.preference
+        preference = TripPreference(
+            id=current.id if current is not None else None,
+            trip_id=trip_id,
+            atmosphere=atmosphere,
+            companions=current.companions if current is not None else None,
+            budget=current.budget if current is not None else None,
+            transport_type=current.transport_type if current is not None else None,
+            must_visit_places_text=(current.must_visit_places_text if current is not None else None),
+            additional_request_comment=(current.additional_request_comment if current is not None else None),
+        )
+
+        writable_fields = {
+            "companions",
+            "budget",
+            "transport_type",
+            "must_visit_places_text",
+            "additional_request_comment",
+        }
+        effective_fields = writable_fields if fields_set is None else writable_fields.intersection(fields_set)
+        if "companions" in effective_fields:
+            preference.companions = companions
+        if "budget" in effective_fields:
+            preference.budget = budget
+        if "transport_type" in effective_fields:
+            preference.transport_type = transport_type
+        if "must_visit_places_text" in effective_fields:
+            preference.must_visit_places_text = must_visit_places_text
+        if "additional_request_comment" in effective_fields:
+            preference.additional_request_comment = additional_request_comment
+
         return await self.trip_repository.upsert_preference(preference)
 
     async def add_my_member(
@@ -241,9 +290,7 @@ class TripService:
         await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
         member = await self.trip_repository.get_member(trip_id=trip_id, user_id=member_user_id)
         if member is None:
-            raise TripNotFoundError(
-                f"Trip member user_id={member_user_id} not found in trip {trip_id}"
-            )
+            raise TripNotFoundError(f"Trip member user_id={member_user_id} not found in trip {trip_id}")
 
         if role is not None:
             member.role = role
@@ -252,18 +299,14 @@ class TripService:
 
         updated_member = await self.trip_repository.update_member(member)
         if updated_member is None:
-            raise TripNotFoundError(
-                f"Trip member user_id={member_user_id} not found in trip {trip_id}"
-            )
+            raise TripNotFoundError(f"Trip member user_id={member_user_id} not found in trip {trip_id}")
         return updated_member
 
     async def delete_my_member(self, owner_user_id: int, trip_id: int, member_user_id: int) -> bool:
         await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
         deleted = await self.trip_repository.delete_member(trip_id=trip_id, user_id=member_user_id)
         if not deleted:
-            raise TripNotFoundError(
-                f"Trip member user_id={member_user_id} not found in trip {trip_id}"
-            )
+            raise TripNotFoundError(f"Trip member user_id={member_user_id} not found in trip {trip_id}")
         return True
 
     async def add_my_day(
@@ -272,6 +315,7 @@ class TripService:
         trip_id: int,
         day_number: int,
         day_date: date | None,
+        lodging_note: str | None = None,
     ) -> TripDay:
         await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
         day = TripDay(
@@ -279,6 +323,7 @@ class TripService:
             trip_id=trip_id,
             day_number=day_number,
             date=day_date,
+            lodging_note=lodging_note,
         )
         return await self.trip_repository.create_day(day)
 
@@ -289,6 +334,9 @@ class TripService:
         day_id: int,
         day_number: int | None = None,
         day_date: date | None = None,
+        lodging_note: str | None = None,
+        apply_day_date: bool = False,
+        apply_lodging_note: bool = False,
     ) -> TripDay:
         await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
         day = await self.trip_repository.get_day(day_id)
@@ -297,8 +345,10 @@ class TripService:
 
         if day_number is not None:
             day.day_number = day_number
-        if day_date is not None:
+        if apply_day_date:
             day.date = day_date
+        if apply_lodging_note:
+            day.lodging_note = lodging_note
 
         updated_day = await self.trip_repository.update_day(day)
         if updated_day is None:
@@ -346,9 +396,7 @@ class TripService:
 
         item = await self.trip_repository.get_item(item_id)
         if item is None or item.trip_day_id != day_id:
-            raise ItineraryItemNotFoundError(
-                f"Itinerary item with ID {item_id} not found in day {day_id}"
-            )
+            raise ItineraryItemNotFoundError(f"Itinerary item with ID {item_id} not found in day {day_id}")
 
         for key, value in kwargs.items():
             if value is not None and hasattr(item, key):
@@ -356,9 +404,7 @@ class TripService:
 
         updated_item = await self.trip_repository.update_item(item)
         if updated_item is None:
-            raise ItineraryItemNotFoundError(
-                f"Itinerary item with ID {item_id} not found in day {day_id}"
-            )
+            raise ItineraryItemNotFoundError(f"Itinerary item with ID {item_id} not found in day {day_id}")
         return updated_item
 
     async def delete_my_item(self, owner_user_id: int, trip_id: int, day_id: int, item_id: int) -> bool:
@@ -369,15 +415,11 @@ class TripService:
 
         item = await self.trip_repository.get_item(item_id)
         if item is None or item.trip_day_id != day_id:
-            raise ItineraryItemNotFoundError(
-                f"Itinerary item with ID {item_id} not found in day {day_id}"
-            )
+            raise ItineraryItemNotFoundError(f"Itinerary item with ID {item_id} not found in day {day_id}")
 
         deleted = await self.trip_repository.delete_item(item_id)
         if not deleted:
-            raise ItineraryItemNotFoundError(
-                f"Itinerary item with ID {item_id} not found in day {day_id}"
-            )
+            raise ItineraryItemNotFoundError(f"Itinerary item with ID {item_id} not found in day {day_id}")
         return True
 
     async def create_my_incident(
@@ -407,9 +449,7 @@ class TripService:
         if session.incident_id is not None:
             incident = await self.trip_repository.get_incident(session.incident_id)
             if incident is None or incident.trip_id != trip_id:
-                raise IncidentNotFoundError(
-                    f"Incident with ID {session.incident_id} not found in trip {trip_id}"
-                )
+                raise IncidentNotFoundError(f"Incident with ID {session.incident_id} not found in trip {trip_id}")
 
         return await self.trip_repository.create_replan_session(session, items)
 
@@ -422,9 +462,7 @@ class TripService:
         await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
         aggregate = await self.trip_repository.get_replan_aggregate(session_id)
         if aggregate is None or aggregate.session.trip_id != trip_id:
-            raise ReplanSessionNotFoundError(
-                f"Replan session with ID {session_id} not found in trip {trip_id}"
-            )
+            raise ReplanSessionNotFoundError(f"Replan session with ID {session_id} not found in trip {trip_id}")
         return aggregate
 
     async def start_my_ai_plan_generation(
@@ -439,13 +477,70 @@ class TripService:
         additional_request_comment: Optional[str] = None,
         selected_companion_names: Optional[list[str]] = None,
     ) -> AiPlanGeneration:
-        await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+        generation_input = {
+            "must_visit_places": [],
+            "lodging_notes": [],
+            "additional_request_comment": None,
+            "selected_companion_names": [],
+        }
+
+        aggregate = await self.get_my_trip_detail(user_id=owner_user_id, trip_id=trip_id)
+        days = await self._sync_trip_days_to_range(
+            trip_id=trip_id,
+            start_date=aggregate.trip.start_date,
+            end_date=aggregate.trip.end_date,
+        )
+
+        normalized_must_visit_places = _normalize_generation_text_items(must_visit_places)
+        normalized_lodging_notes = _normalize_generation_text_items(lodging_notes)
+        normalized_additional_comment = (additional_request_comment or "").strip() or None
+
+        await self.upsert_my_preference(
+            user_id=owner_user_id,
+            trip_id=trip_id,
+            atmosphere=(
+                aggregate.preference.atmosphere if aggregate.preference is not None else TripAtmosphere.RELAXED
+            ),
+            must_visit_places_text=("\n".join(normalized_must_visit_places) or None),
+            additional_request_comment=normalized_additional_comment,
+            fields_set={"must_visit_places_text", "additional_request_comment"},
+        )
+
+        for day_index, day in enumerate(days):
+            lodging_note = normalized_lodging_notes[day_index] if day_index < len(normalized_lodging_notes) else None
+            await self.trip_repository.update_day(
+                TripDay(
+                    id=day.id,
+                    trip_id=day.trip_id,
+                    day_number=day.day_number,
+                    date=day.date,
+                    lodging_note=lodging_note,
+                )
+            )
+
+        refreshed_aggregate = await self.trip_repository.get_trip_aggregate(trip_id)
+        refreshed_preference = (
+            refreshed_aggregate.preference if refreshed_aggregate is not None else aggregate.preference
+        )
+        refreshed_days = refreshed_aggregate.days if refreshed_aggregate is not None else days
+        persisted_companion_names = await self.trip_repository.list_member_names_by_trip(
+            trip_id,
+            exclude_user_id=owner_user_id,
+        )
+        if not persisted_companion_names:
+            persisted_companion_names = _normalize_generation_text_items(selected_companion_names)
 
         generation_input = {
-            "must_visit_places": _normalize_generation_text_items(must_visit_places),
-            "lodging_notes": _normalize_generation_text_items(lodging_notes),
-            "additional_request_comment": (additional_request_comment or "").strip() or None,
-            "selected_companion_names": _normalize_generation_text_items(selected_companion_names),
+            "must_visit_places": _normalize_generation_text_items(
+                (refreshed_preference.must_visit_places_text or "").splitlines()
+                if refreshed_preference is not None and refreshed_preference.must_visit_places_text
+                else []
+            ),
+            "lodging_notes": _normalize_generation_text_items([day.lodging_note or "" for day in refreshed_days]),
+            "additional_request_comment": (
+                refreshed_preference.additional_request_comment if refreshed_preference is not None else None
+            ),
+            "selected_companion_names": persisted_companion_names,
         }
 
         generation = AiPlanGeneration(
@@ -458,7 +553,7 @@ class TripService:
         created = await self.trip_repository.create_ai_plan_generation(generation)
 
         if run_async and created.id is not None:
-            asyncio.create_task(self.run_ai_plan_generation_in_background(created.id))
+            asyncio.create_task(self.run_ai_plan_generation_in_background(created.id, generation_input))
         elif created.id is not None:
             created = await self.execute_ai_plan_generation(created.id, generation_input=generation_input)
 
@@ -479,7 +574,10 @@ class TripService:
         return generation
 
     @staticmethod
-    async def run_ai_plan_generation_in_background(generation_id: int) -> None:
+    async def run_ai_plan_generation_in_background(
+        generation_id: int,
+        generation_input: Optional[dict] = None,
+    ) -> None:
         """Run generation with a fresh DB session so request lifecycle does not interfere."""
         from app.infrastructure.database.base import SessionLocal
         from app.infrastructure.repositories.trip_repository_impl import TripRepositoryImpl
@@ -487,7 +585,7 @@ class TripService:
         async with SessionLocal() as db:
             repo = TripRepositoryImpl(db)
             service = TripService(repo)
-            await service.execute_ai_plan_generation(generation_id)
+            await service.execute_ai_plan_generation(generation_id, generation_input=generation_input)
 
     async def execute_ai_plan_generation(
         self,
@@ -496,9 +594,7 @@ class TripService:
     ) -> AiPlanGeneration:
         generation = await self.trip_repository.get_ai_plan_generation(generation_id)
         if generation is None:
-            raise AiPlanGenerationNotFoundError(
-                f"AI plan generation with ID {generation_id} not found"
-            )
+            raise AiPlanGenerationNotFoundError(f"AI plan generation with ID {generation_id} not found")
         if generation.status in {"running", "succeeded"}:
             return generation
 
@@ -595,23 +691,43 @@ class TripService:
         start_date: date,
         end_date: date,
     ) -> list[TripDay]:
-        days = await self.trip_repository.list_days_by_trip(trip_id)
-        if days:
-            return days
+        return await self._sync_trip_days_to_range(trip_id, start_date, end_date)
 
+    async def _sync_trip_days_to_range(
+        self,
+        trip_id: int,
+        start_date: date,
+        end_date: date,
+    ) -> list[TripDay]:
         total_days = (end_date - start_date).days + 1
         if total_days <= 0:
             total_days = 1
 
-        for index in range(total_days):
-            await self.trip_repository.create_day(
-                TripDay(
-                    id=None,
-                    trip_id=trip_id,
-                    day_number=index + 1,
-                    date=start_date + timedelta(days=index),
+        existing_days = await self.trip_repository.list_days_by_trip(trip_id)
+        existing_by_number = {day.day_number: day for day in existing_days}
+
+        for day_number in range(1, total_days + 1):
+            target_date = start_date + timedelta(days=day_number - 1)
+            existing = existing_by_number.get(day_number)
+            if existing is None:
+                await self.trip_repository.create_day(
+                    TripDay(
+                        id=None,
+                        trip_id=trip_id,
+                        day_number=day_number,
+                        date=target_date,
+                        lodging_note=None,
+                    )
                 )
-            )
+                continue
+            if existing.date != target_date:
+                existing.date = target_date
+                await self.trip_repository.update_day(existing)
+
+        for existing in existing_days:
+            if existing.day_number > total_days and existing.id is not None:
+                await self.trip_repository.delete_day(existing.id)
+
         return await self.trip_repository.list_days_by_trip(trip_id)
 
     async def _collect_place_candidates(
@@ -688,11 +804,12 @@ class TripService:
     ) -> str:
         generation_input = generation_input or {}
         days_payload = [
-            {"day_number": d.day_number, "date": d.date.isoformat() if d.date is not None else None}
-            for d in days
+            {"day_number": d.day_number, "date": d.date.isoformat() if d.date is not None else None} for d in days
         ]
         candidates_payload = [candidate.to_dict() for candidate in place_candidates]
-        selected_transport_types = self._parse_selected_transport_types(preference.transport_type if preference is not None else None)
+        selected_transport_types = self._parse_selected_transport_types(
+            preference.transport_type if preference is not None else None
+        )
         route_options_payload = [
             self._normalize_route_option_dict(route_option.to_dict())
             for route_option in self._filter_route_options_by_preference(route_options, selected_transport_types)
@@ -713,13 +830,13 @@ class TripService:
         additional_request_comment = (generation_input.get("additional_request_comment") or "").strip() or None
         return (
             "旅行日程を最適化してください。必ずJSONオブジェクトのみを返してください。\n"
-            "フォーマット: {\"days\": [{\"day_number\": 1, \"items\": ["
-            "{\"item_type\": \"place\", \"name\": \"\", \"category\": \"\", \"latitude\": 0, "
-            "\"longitude\": 0, \"start_time\": \"09:00\", \"end_time\": \"10:30\", "
-            "\"estimated_cost\": 0, \"notes\": \"\"}, "
-            "{\"item_type\": \"transport\", \"name\": \"徒歩で移動\", \"transport_mode\": \"WALK\", "
-            "\"travel_minutes\": 15, \"distance_meters\": 1200, \"from_name\": \"A\", \"to_name\": \"B\", "
-            "\"start_time\": \"10:30\", \"end_time\": \"10:45\", \"notes\": \"徒歩で移動 / 約15分 / 約1.2km\"}"
+            'フォーマット: {"days": [{"day_number": 1, "items": ['
+            '{"item_type": "place", "name": "", "category": "", "latitude": 0, '
+            '"longitude": 0, "start_time": "09:00", "end_time": "10:30", '
+            '"estimated_cost": 0, "notes": ""}, '
+            '{"item_type": "transport", "name": "徒歩で移動", "transport_mode": "WALK", '
+            '"travel_minutes": 15, "distance_meters": 1200, "from_name": "A", "to_name": "B", '
+            '"start_time": "10:30", "end_time": "10:45", "notes": "徒歩で移動 / 約15分 / 約1.2km"}'
             "]}]}\n"
             f"trip={json.dumps({'origin': trip.origin, 'destination': trip.destination}, ensure_ascii=False)}\n"
             f"days={json.dumps(days_payload, ensure_ascii=False)}\n"
@@ -824,7 +941,11 @@ class TripService:
         days: list[TripDay],
         place_candidates: list[PlaceCandidate],
     ) -> list[RouteOption]:
-        candidates = [candidate for candidate in place_candidates if candidate.latitude is not None and candidate.longitude is not None]
+        candidates = [
+            candidate
+            for candidate in place_candidates
+            if candidate.latitude is not None and candidate.longitude is not None
+        ]
         candidates = candidates[: self.MAX_ROUTE_CANDIDATES]
         if len(candidates) < 2:
             return []
@@ -857,7 +978,9 @@ class TripService:
 
         results = await asyncio.gather(
             *[
-                route_client.compute_route_options(origin=origin, destination=destination, departure_time=departure_time)
+                route_client.compute_route_options(
+                    origin=origin, destination=destination, departure_time=departure_time
+                )
                 for origin, destination in pair_candidates
             ],
             return_exceptions=True,
@@ -893,8 +1016,7 @@ class TripService:
 
         if any(by_day.values()):
             return {
-                day_number: self._inject_transport_items(items, route_options)
-                for day_number, items in by_day.items()
+                day_number: self._inject_transport_items(items, route_options) for day_number, items in by_day.items()
             }
 
         # Fallback: evenly assign fetched candidates.
@@ -918,10 +1040,7 @@ class TripService:
                     "notes": candidate.address,
                 }
             )
-        return {
-            day_number: self._inject_transport_items(items, route_options)
-            for day_number, items in by_day.items()
-        }
+        return {day_number: self._inject_transport_items(items, route_options) for day_number, items in by_day.items()}
 
     def _build_generated_itinerary_items(
         self,
@@ -1011,11 +1130,7 @@ class TripService:
         self,
         itinerary_items: list[ItineraryItem],
     ) -> Optional[ItineraryItem]:
-        place_items = [
-            item
-            for item in itinerary_items
-            if item.item_type == "place" and item.name
-        ]
+        place_items = [item for item in itinerary_items if item.item_type == "place" and item.name]
         if not place_items:
             return None
 
@@ -1041,14 +1156,16 @@ class TripService:
         search_pool = photo_candidates or candidates
 
         exact_matches = [
-            candidate for candidate in search_pool
+            candidate
+            for candidate in search_pool
             if self._normalize_place_name(candidate.name) == normalized_item_name
         ]
         if exact_matches:
             return self._pick_best_place_candidate(item, exact_matches)
 
         partial_matches = [
-            candidate for candidate in search_pool
+            candidate
+            for candidate in search_pool
             if normalized_item_name in self._normalize_place_name(candidate.name)
             or self._normalize_place_name(candidate.name) in normalized_item_name
         ]
@@ -1107,7 +1224,7 @@ class TripService:
         lon_scale = 91_000
         lat_delta = (origin_latitude - destination_latitude) * lat_scale
         lon_delta = (origin_longitude - destination_longitude) * lon_scale
-        return (lat_delta ** 2 + lon_delta ** 2) ** 0.5
+        return (lat_delta**2 + lon_delta**2) ** 0.5
 
     def _build_datetime(self, day_date: Optional[date], value: Optional[str]) -> Optional[datetime]:
         if day_date is None or value is None:
@@ -1129,13 +1246,18 @@ class TripService:
             return None
 
     def _estimate_distance_meters(self, origin: PlaceCandidate, destination: PlaceCandidate) -> float:
-        if origin.latitude is None or origin.longitude is None or destination.latitude is None or destination.longitude is None:
+        if (
+            origin.latitude is None
+            or origin.longitude is None
+            or destination.latitude is None
+            or destination.longitude is None
+        ):
             return float("inf")
         lat_scale = 111_000
         lon_scale = 91_000
         lat_delta = (origin.latitude - destination.latitude) * lat_scale
         lon_delta = (origin.longitude - destination.longitude) * lon_scale
-        return (lat_delta ** 2 + lon_delta ** 2) ** 0.5
+        return (lat_delta**2 + lon_delta**2) ** 0.5
 
     def _inject_transport_items(
         self,
@@ -1166,7 +1288,9 @@ class TripService:
                 continue
             option = self._pick_best_route_option(route_map.get((str(current_name), str(next_name)), []))
             if option is not None:
-                injected.append(self._route_option_to_item_payload(option, item.get("end_time"), next_item.get("start_time")))
+                injected.append(
+                    self._route_option_to_item_payload(option, item.get("end_time"), next_item.get("start_time"))
+                )
                 continue
             injected.append(
                 self._build_fallback_transport_item_payload(
@@ -1216,7 +1340,9 @@ class TripService:
             "item_type": "transport",
             "name": f"{mode_label}で移動",
             "category": "transport",
-            "transport_mode": option.travel_mode if option.travel_mode == "WALK" else option.transit_subtype or "TRAIN",
+            "transport_mode": option.travel_mode
+            if option.travel_mode == "WALK"
+            else option.transit_subtype or "TRAIN",
             "travel_minutes": option.duration_minutes,
             "distance_meters": option.distance_meters,
             "from_name": option.from_name,
@@ -1456,7 +1582,9 @@ class TripService:
                 )
             if end_time:
                 cursor = end_time
-            payloads.append(self._route_step_to_item_payload(step, start_time, end_time, origin_name, destination_name))
+            payloads.append(
+                self._route_step_to_item_payload(step, start_time, end_time, origin_name, destination_name)
+            )
         logger.info(
             "TripService route step payloads built: origin=%s destination=%s payloads=%s line_names=%s",
             origin_name,

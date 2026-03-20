@@ -43,6 +43,7 @@ async def create_trip_day(
             trip_id=trip_id,
             day_number=payload.day_number,
             day_date=payload.date,
+            lodging_note=payload.lodging_note,
         )
         return TripDayResponse.model_validate(day)
     except TripNotFoundError as e:
@@ -66,6 +67,9 @@ async def update_trip_day(
             day_id=day_id,
             day_number=payload.day_number,
             day_date=payload.date,
+            lodging_note=payload.lodging_note,
+            apply_day_date="date" in payload.model_fields_set,
+            apply_lodging_note="lodging_note" in payload.model_fields_set,
         )
         return TripDayResponse.model_validate(day)
     except TripNotFoundError as e:
