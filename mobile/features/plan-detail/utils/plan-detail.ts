@@ -5,6 +5,7 @@ import {
 } from '@/features/trips/types/trip-detail';
 import { type CreateAiPlanGenerationRequest } from '@/features/trips/types/ai-plan-generation';
 import { getApiErrorMessage } from '@/lib/api/client';
+import * as Location from 'expo-location';
 
 import { type PlanDetailDay, type PlanDetailTimelineItem, type PlanDetailViewModel } from '@/features/plan-detail/types';
 import { type TripStatus } from '@/features/trips/types/trip-status';
@@ -41,12 +42,37 @@ export function getAiGenerationErrorMessage(error: unknown): string {
   });
 }
 
-export function buildAiGenerationRequestFromAggregate(
+async function geocodeToLatLng(label: string, fieldLabel: string) {
+  const query = label.trim();
+  if (!query) {
+    throw new Error(`${fieldLabel}が未入力です。`);
+  }
+  const results = await Location.geocodeAsync(query);
+  const top = results[0];
+  if (!top) {
+    throw new Error(`${fieldLabel}の座標を特定できませんでした。入力を確認してください。`);
+  }
+  return {
+    latitude: top.latitude,
+    longitude: top.longitude,
+  };
+}
+
+export async function buildAiGenerationRequestFromAggregate(
   aggregate: TripDetailAggregateResponse,
   overrides: Partial<CreateAiPlanGenerationRequest> = {}
-): CreateAiPlanGenerationRequest {
+): Promise<CreateAiPlanGenerationRequest> {
   const sortedDays = [...aggregate.days].sort((a, b) => a.day_number - b.day_number);
+  const [origin, destination] = await Promise.all([
+    geocodeToLatLng(aggregate.trip.origin, '出発地'),
+    geocodeToLatLng(aggregate.trip.destination, '目的地'),
+  ]);
+  const lodgingLabel = sortedDays.find((day) => day.lodging_note?.trim())?.lodging_note?.trim();
+  const lodging = lodgingLabel ? await geocodeToLatLng(lodgingLabel, '宿泊地') : undefined;
   return {
+    origin,
+    destination,
+    lodging,
     run_async: false,
     must_visit_places: (aggregate.preference?.must_visit_places_text ?? '')
       .split(/[\n,、]/)

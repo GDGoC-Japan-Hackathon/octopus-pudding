@@ -130,12 +130,13 @@ export default function PlanDetailScreen() {
       const regenerationKey = mode === 'full' ? 'full' : `${mode}:${targetItemId}`;
       try {
         setActiveRegenerationKey(regenerationKey);
+        const generationRequest = await buildAiGenerationRequestFromAggregate(aggregate, {
+          regeneration_mode: mode,
+          target_item_id: targetItemId,
+        });
         const response = await createAiPlanGeneration(
           tripId,
-          buildAiGenerationRequestFromAggregate(aggregate, {
-            regeneration_mode: mode,
-            target_item_id: targetItemId,
-          })
+          generationRequest
         );
 
         if (response.status === 'failed') {
