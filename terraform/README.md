@@ -23,6 +23,14 @@ terraform validate
 terraform plan -var-file=terraform.tfvars
 ```
 
+```bash
+# plan結果を保存
+terraform plan -var-file=terraform.tfvars -out=tfplan
+
+# plan結果を適用
+terraform apply tfplan
+```
+
 ### prod
 
 ```bash
@@ -32,6 +40,14 @@ cp terraform.tfvars.example terraform.tfvars
 terraform init -backend-config=backend.hcl
 terraform validate
 terraform plan -var-file=terraform.tfvars
+```
+
+```bash
+# plan結果を保存
+terraform plan -var-file=terraform.tfvars -out=tfplan
+
+# plan結果を適用
+terraform apply tfplan
 ```
 
 ## 重要事項

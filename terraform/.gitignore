@@ -14,3 +14,7 @@ backend.hcl
 # Lock file (ignored for this bootstrap phase)
 .terraform.lock.hcl
 **/.terraform.lock.hcl
+
+# Terraform plan files
+tfplan
+*.tfplan
