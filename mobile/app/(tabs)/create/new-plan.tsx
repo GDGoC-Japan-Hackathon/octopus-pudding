@@ -1,12 +1,12 @@
-import { useRouter } from 'expo-router';
-import { Alert } from 'react-native';
 import { TripPlanForm, type TripPlanFormSubmitPayload } from '@/features/trips/components/TripPlanForm';
+import { validateAndBuildCreateTripPayload } from '@/features/trips/utils/create-trip';
 import {
   clearCreateTripDraft,
   getCreateTripDraft,
   setCreateTripDraft,
 } from '@/features/trips/utils/create-trip-draft';
-import { validateAndBuildCreateTripPayload } from '@/features/trips/utils/create-trip';
+import { useRouter } from 'expo-router';
+import { Alert } from 'react-native';
 
 export default function CreateNewPlanScreen() {
   const router = useRouter();
@@ -15,7 +15,6 @@ export default function CreateNewPlanScreen() {
   async function handleSubmit({
     formValues,
     selectedCompanionUserIds,
-    selectedCompanionNames,
   }: TripPlanFormSubmitPayload) {
     const validation = validateAndBuildCreateTripPayload(formValues);
     if (!validation.ok) {
@@ -26,7 +25,6 @@ export default function CreateNewPlanScreen() {
     setCreateTripDraft({
       formValues,
       selectedCompanionUserIds,
-      selectedCompanionNames,
     });
     router.push('/create/generating');
   }

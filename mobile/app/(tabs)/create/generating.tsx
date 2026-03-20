@@ -11,6 +11,7 @@ import { createTrip } from '@/features/trips/api/create-trip';
 import { addTripMember } from '@/features/trips/api/trip-members';
 import { validateAndBuildCreateTripPayload } from '@/features/trips/utils/create-trip';
 import { clearCreateTripDraft, getCreateTripDraft } from '@/features/trips/utils/create-trip-draft';
+import { buildAiGenerationRequestFromForm } from '@/features/trips/utils/trip-plan-form';
 
 type GenerationState = 'creating' | 'completed' | 'failed';
 type StepState = 'pending' | 'active' | 'done' | 'failed';
@@ -268,20 +269,10 @@ export default function CreateGeneratingScreen() {
         setMemberStepState(hasMemberError ? 'failed' : 'done');
 
         setAiStepState('active');
-        const mustVisitPlaces = draft.formValues.mustVisitPlacesText
-          .split(/[,\n、]/)
-          .map((item) => item.trim())
-          .filter(Boolean);
-        const lodgingNotes = draft.formValues.accommodationNotesByDay
-          .map((item) => item.trim())
-          .filter(Boolean);
-        const aiGeneration = await createAiPlanGeneration(created.trip.id, {
-          run_async: false,
-          must_visit_places: mustVisitPlaces,
-          lodging_notes: lodgingNotes,
-          additional_request_comment: draft.formValues.additionalRequestComment.trim() || undefined,
-          selected_companion_names: draft.selectedCompanionNames,
-        });
+        const aiGeneration = await createAiPlanGeneration(
+          created.trip.id,
+          buildAiGenerationRequestFromForm(draft.formValues)
+        );
         setAiStepState(aiGeneration.status === 'failed' ? 'failed' : 'done');
 
         clearCreateTripDraft();

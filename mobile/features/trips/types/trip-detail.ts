@@ -4,6 +4,7 @@ import { type TripStatus } from '@/features/trips/types/trip-status';
 export type TripDetailResponse = {
   id: number;
   user_id: number;
+  source_trip_id?: number | null;
   origin: string;
   destination: string;
   start_date: string;
@@ -23,6 +24,8 @@ export type TripDetailPreferenceResponse = {
   companions?: string | null;
   budget?: number | null;
   transport_type?: string | null;
+  must_visit_places_text?: string | null;
+  additional_request_comment?: string | null;
   created_at?: string | null;
 };
 
@@ -41,6 +44,7 @@ export type TripDetailDayResponse = {
   trip_id: number;
   day_number: number;
   date?: string | null;
+  lodging_note?: string | null;
   created_at?: string | null;
 };
 

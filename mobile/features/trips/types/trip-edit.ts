@@ -26,6 +26,8 @@ export type TripPreferenceResponse = {
   companions?: string | null;
   budget?: number | null;
   transport_type?: string | null;
+  must_visit_places_text?: string | null;
+  additional_request_comment?: string | null;
   created_at?: string | null;
 };
 
@@ -34,6 +36,7 @@ export type TripDayResponse = {
   trip_id: number;
   day_number: number;
   date?: string | null;
+  lodging_note?: string | null;
   created_at?: string | null;
 };
 
@@ -84,6 +87,8 @@ export type UpsertTripPreferenceRequest = {
   companions?: string;
   budget?: number;
   transport_type?: string;
+  must_visit_places_text?: string | null;
+  additional_request_comment?: string | null;
 };
 
 export type CreateTripDayRequest = {

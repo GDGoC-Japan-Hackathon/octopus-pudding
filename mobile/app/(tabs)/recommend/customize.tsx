@@ -1,19 +1,19 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 import { BackButton } from '@/components/back-button';
 import { confirmRecommendTripSave } from '@/features/recommend/api/confirm-recommend-trip-save';
-import { deleteTrip } from '@/features/trips/api/delete-trip';
+import { AppHeader } from '@/features/travel/components/AppHeader';
 import { createAiPlanGeneration } from '@/features/trips/api/ai-plan-generation';
+import { deleteTrip } from '@/features/trips/api/delete-trip';
 import { getTripDetail } from '@/features/trips/api/get-trip-detail';
 import { addTripMember, removeTripMember } from '@/features/trips/api/trip-members';
 import { updateTrip } from '@/features/trips/api/update-trip';
 import { upsertTripPreference } from '@/features/trips/api/upsert-trip-preference';
 import { TripPlanForm, type TripPlanFormSubmitPayload } from '@/features/trips/components/TripPlanForm';
 import { type TripDetailAggregateResponse } from '@/features/trips/types/trip-detail';
-import { buildAiGenerationRequestFromForm, buildTripPlanFormValues } from '@/features/trips/utils/trip-plan-form';
 import { validateAndBuildCreateTripPayload } from '@/features/trips/utils/create-trip';
-import { AppHeader } from '@/features/travel/components/AppHeader';
+import { buildAiGenerationRequestFromForm, buildTripPlanFormValues } from '@/features/trips/utils/trip-plan-form';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 
 async function syncTripMembers(tripId: number, currentUserIds: number[], nextUserIds: number[]) {
   const currentSet = new Set(currentUserIds);
@@ -102,7 +102,6 @@ export default function RecommendCustomizeScreen() {
   async function handleSubmit({
     formValues,
     selectedCompanionUserIds,
-    selectedCompanionNames,
   }: TripPlanFormSubmitPayload) {
     if (!detail) {
       return;
@@ -130,6 +129,8 @@ export default function RecommendCustomizeScreen() {
       atmosphere: payload.preference.atmosphere,
       budget: payload.preference.budget,
       transport_type: payload.preference.transport_type,
+      must_visit_places_text: formValues.mustVisitPlacesText.trim() || null,
+      additional_request_comment: formValues.additionalRequestComment.trim() || null,
     });
 
     const currentMemberUserIds = detail.members
@@ -139,7 +140,7 @@ export default function RecommendCustomizeScreen() {
 
     const generation = await createAiPlanGeneration(
       tripId,
-      buildAiGenerationRequestFromForm(formValues, selectedCompanionNames)
+      buildAiGenerationRequestFromForm(formValues)
     );
 
     if (generation.status === 'failed') {

@@ -23,7 +23,6 @@ import { type CreateTripFormValues } from '@/features/trips/utils/create-trip';
 type TripPlanFormSubmitPayload = {
   formValues: CreateTripFormValues;
   selectedCompanionUserIds: number[];
-  selectedCompanionNames: string[];
 };
 
 type TripPlanFormProps = {
@@ -115,22 +114,6 @@ export function TripPlanForm({
   }, [fields.participantCount]);
 
   const maxSelectableCompanions = Math.max(0, participantCount - 1);
-
-  const selectedCompanionNameMap = useMemo(() => {
-    const names = new Map<number, string>();
-    for (const friend of friends) {
-      names.set(friend.user.id, friend.user.username);
-    }
-    return names;
-  }, [friends]);
-
-  const selectedCompanionNames = useMemo(
-    () =>
-      selectedCompanionUserIds
-        .map((id) => selectedCompanionNameMap.get(id))
-        .filter((value): value is string => Boolean(value)),
-    [selectedCompanionNameMap, selectedCompanionUserIds]
-  );
 
   const tripDays = useMemo(() => {
     if (!fields.startDate || !fields.endDate) {
@@ -271,12 +254,11 @@ export function TripPlanForm({
       await onSubmit({
         formValues: cloneFormValues(fields),
         selectedCompanionUserIds,
-        selectedCompanionNames,
       });
     } finally {
       setIsSubmitting(false);
     }
-  }, [fields, isSubmitting, onSubmit, selectedCompanionNames, selectedCompanionUserIds]);
+  }, [fields, isSubmitting, onSubmit, selectedCompanionUserIds]);
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.contentContainer}>
