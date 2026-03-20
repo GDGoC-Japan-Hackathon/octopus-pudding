@@ -679,6 +679,7 @@ class TripService:
                 normalized_plan=normalized,
             )
             transit_step_count, transit_line_count = self._count_transit_transport_items(normalized)
+            transport_diagnostics = self._count_transport_diagnostics(normalized)
             generated_items = self._build_generated_itinerary_items(days=days, normalized_plan=normalized)
             inserted_count = await self.trip_repository.replace_items_by_trip(aggregate.trip.id, generated_items)
             if not aggregate.trip.recommendation_comment:
@@ -704,6 +705,9 @@ class TripService:
                     "inserted_items": inserted_count,
                     "transit_step_items": transit_step_count,
                     "transit_line_items": transit_line_count,
+                    "transit_attempted_pairs": transport_diagnostics["attempted_pairs"],
+                    "transit_succeeded_pairs": transport_diagnostics["transit_pairs"],
+                    "drive_fallback_pairs": transport_diagnostics["drive_pairs"],
                     "cover_image_updated": cover_image_updated,
                     "fallback_used": fallback_used,
                     "fallback_reason": fallback_reason,
@@ -1799,12 +1803,27 @@ class TripService:
         origin_name: str,
         destination_name: str,
     ) -> dict:
-        mode_label = "徒歩" if step.travel_mode == "WALK" else "バス" if step.transit_subtype == "BUS" else "電車"
+        mode_label = (
+            "徒歩"
+            if step.travel_mode == "WALK"
+            else "車"
+            if step.travel_mode == "DRIVE"
+            else "バス"
+            if step.transit_subtype == "BUS"
+            else "電車"
+        )
+        transport_mode = (
+            "WALK"
+            if step.travel_mode == "WALK"
+            else "CAR"
+            if step.travel_mode == "DRIVE"
+            else step.transit_subtype or "TRAIN"
+        )
         return {
             "item_type": "transport",
             "name": f"{mode_label}で移動",
             "category": "transport",
-            "transport_mode": step.travel_mode if step.travel_mode == "WALK" else step.transit_subtype or "TRAIN",
+            "transport_mode": transport_mode,
             "travel_minutes": step.duration_minutes,
             "distance_meters": step.distance_meters,
             "from_name": step.from_name or origin_name,
@@ -1832,6 +1851,26 @@ class TripService:
                 if item.get("line_name"):
                     line_count += 1
         return transit_count, line_count
+
+    def _count_transport_diagnostics(self, normalized_plan: dict[int, list[dict]]) -> dict[str, int]:
+        attempted_pairs = 0
+        transit_pairs = 0
+        drive_pairs = 0
+        for items in normalized_plan.values():
+            for item in items:
+                if item.get("item_type") != "transport":
+                    continue
+                attempted_pairs += 1
+                mode = str(item.get("transport_mode") or "").upper()
+                if mode in {"BUS", "TRAIN"}:
+                    transit_pairs += 1
+                elif mode == "CAR":
+                    drive_pairs += 1
+        return {
+            "attempted_pairs": attempted_pairs,
+            "transit_pairs": transit_pairs,
+            "drive_pairs": drive_pairs,
+        }
 
     def _enforce_plan_constraints(
         self,

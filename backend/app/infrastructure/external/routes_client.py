@@ -6,7 +6,7 @@ from typing import Optional
 from urllib import error, request
 import logging
 
-from app.infrastructure.external.google_places_client import PlaceCandidate
+from app.infrastructure.external.google_places_client import GooglePlacesClient, PlaceCandidate
 from app.shared.config import settings
 
 logger = logging.getLogger(__name__)
@@ -153,9 +153,23 @@ class RoutesClient:
             ),
         )
         candidates = [steps for steps in (bus_steps, train_steps) if steps]
-        if not candidates:
-            return []
-        return min(candidates, key=self._total_step_minutes)
+        if candidates:
+            return min(candidates, key=self._total_step_minutes)
+
+        anchored_steps = await self._compute_route_steps_via_transit_hubs(
+            origin=origin,
+            destination=destination,
+            departure_time=departure,
+        )
+        if anchored_steps:
+            return anchored_steps
+
+        drive_steps = await asyncio.to_thread(
+            self._compute_route_drive_sync,
+            origin,
+            destination,
+        )
+        return drive_steps
 
     def _compute_route_sync(
         self,
@@ -385,6 +399,163 @@ class RoutesClient:
         )
         return self._extract_route_steps(route, origin.name, destination.name)
 
+    async def _compute_route_steps_via_transit_hubs(
+        self,
+        origin: PlaceCandidate,
+        destination: PlaceCandidate,
+        departure_time: datetime,
+    ) -> list[RouteStep]:
+        origin_hub, destination_hub = await asyncio.gather(
+            self._search_transit_hub_near(origin),
+            self._search_transit_hub_near(destination),
+        )
+        if origin_hub is None or destination_hub is None:
+            logger.info(
+                "RoutesClient transit hub fallback skipped: origin=%s destination=%s origin_hub=%s destination_hub=%s",
+                origin.name,
+                destination.name,
+                bool(origin_hub),
+                bool(destination_hub),
+            )
+            return []
+
+        hub_steps = await asyncio.to_thread(
+            self._compute_route_steps_sync,
+            origin_hub,
+            destination_hub,
+            departure_time,
+            None,
+        )
+        if not hub_steps:
+            return []
+
+        prefix = await asyncio.to_thread(
+            self._compute_route_drive_sync,
+            origin,
+            origin_hub,
+        )
+        suffix = await asyncio.to_thread(
+            self._compute_route_drive_sync,
+            destination_hub,
+            destination,
+        )
+        logger.info(
+            "RoutesClient transit hub fallback used: origin=%s destination=%s origin_hub=%s destination_hub=%s steps=%s",
+            origin.name,
+            destination.name,
+            origin_hub.name,
+            destination_hub.name,
+            len(hub_steps),
+        )
+        return prefix + hub_steps + suffix
+
+    async def _search_transit_hub_near(self, place: PlaceCandidate) -> Optional[PlaceCandidate]:
+        if place.latitude is None or place.longitude is None:
+            return None
+        places_client = GooglePlacesClient()
+        base = f"{place.latitude:.5f},{place.longitude:.5f}"
+        queries = [f"{base} 駅", f"{base} バス停"]
+        nearest: Optional[PlaceCandidate] = None
+        nearest_distance = float("inf")
+        for query in queries:
+            try:
+                candidates = await places_client.search_text(query=query, max_results=3)
+            except Exception:
+                continue
+            for candidate in candidates:
+                if candidate.latitude is None or candidate.longitude is None:
+                    continue
+                distance = self._coordinate_distance_meters(
+                    place.latitude,
+                    place.longitude,
+                    candidate.latitude,
+                    candidate.longitude,
+                )
+                if distance < nearest_distance:
+                    nearest = candidate
+                    nearest_distance = distance
+        if nearest is None:
+            return None
+        if nearest_distance > 20_000:
+            return None
+        return nearest
+
+    def _compute_route_drive_sync(
+        self,
+        origin: PlaceCandidate,
+        destination: PlaceCandidate,
+    ) -> list[RouteStep]:
+        payload: dict = {
+            "origin": {
+                "location": {
+                    "latLng": {
+                        "latitude": origin.latitude,
+                        "longitude": origin.longitude,
+                    }
+                }
+            },
+            "destination": {
+                "location": {
+                    "latLng": {
+                        "latitude": destination.latitude,
+                        "longitude": destination.longitude,
+                    }
+                }
+            },
+            "travelMode": "DRIVE",
+            "languageCode": settings.google_places_language_code,
+            "regionCode": settings.google_places_region_code,
+            "units": "METRIC",
+        }
+        body = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": self.api_key,
+            "X-Goog-FieldMask": (
+                "routes.duration,"
+                "routes.distanceMeters"
+            ),
+        }
+        req = request.Request(self.endpoint, data=body, headers=headers, method="POST")
+        try:
+            with request.urlopen(req, timeout=20) as resp:
+                raw = resp.read().decode("utf-8")
+        except Exception:
+            logger.exception(
+                "RoutesClient drive request failed: origin=%s destination=%s",
+                origin.name,
+                destination.name,
+            )
+            return []
+
+        response = json.loads(raw)
+        routes = response.get("routes", []) or []
+        if not routes:
+            logger.warning(
+                "RoutesClient drive response empty: origin=%s destination=%s",
+                origin.name,
+                destination.name,
+            )
+            return []
+        route = routes[0]
+        step = RouteStep(
+            travel_mode="DRIVE",
+            transit_subtype=None,
+            duration_minutes=self._duration_to_minutes(route.get("duration")),
+            distance_meters=route.get("distanceMeters") if isinstance(route.get("distanceMeters"), int) else None,
+            from_name=origin.name,
+            to_name=destination.name,
+            notes="車で移動",
+        )
+        logger.info(
+            "RoutesClient drive fallback used: origin=%s destination=%s duration=%s distance=%s",
+            origin.name,
+            destination.name,
+            step.duration_minutes,
+            step.distance_meters,
+        )
+        return [step]
+
     @staticmethod
     def _duration_to_minutes(value: Optional[str]) -> Optional[int]:
         if not value or not isinstance(value, str) or not value.endswith("s"):
@@ -556,6 +727,8 @@ class RoutesClient:
     def _map_step_mode(travel_mode: Optional[str], vehicle_type: Optional[str]) -> tuple[str, Optional[str]]:
         if travel_mode == "WALK":
             return "WALK", None
+        if travel_mode == "DRIVE":
+            return "DRIVE", None
         lowered = (vehicle_type or "").lower()
         if "bus" in lowered:
             return "TRANSIT", "BUS"
@@ -581,3 +754,16 @@ class RoutesClient:
         for step in steps:
             total += step.duration_minutes or 0
         return total
+
+    @staticmethod
+    def _coordinate_distance_meters(
+        lat1: float,
+        lon1: float,
+        lat2: float,
+        lon2: float,
+    ) -> float:
+        lat_scale = 111_000
+        lon_scale = 91_000
+        lat_delta = (lat1 - lat2) * lat_scale
+        lon_delta = (lon1 - lon2) * lon_scale
+        return (lat_delta**2 + lon_delta**2) ** 0.5
