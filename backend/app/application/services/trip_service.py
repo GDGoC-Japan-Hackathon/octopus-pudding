@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from app.domain.entities.trip import (
@@ -25,7 +25,6 @@ from app.infrastructure.external import (
     GooglePlacesClient,
     PlaceCandidate,
     RouteOption,
-    RoutesClient,
     RouteStep,
 )
 from app.shared.exceptions import (
@@ -124,6 +123,7 @@ class TripService:
     MAX_TRIP_DAYS = 3
     MAX_ROUTE_CANDIDATES = 8
     MAX_NEAREST_DESTINATIONS_PER_CANDIDATE = 3
+    ROUTE_ESTIMATION_BATCH_SIZE = 6
     ACTIVITY_START_TIME = "09:00"
     ACTIVITY_END_TIME = "22:00"
     LOCAL_DESTINATION_RADIUS_METERS = 80_000
@@ -735,10 +735,14 @@ class TripService:
                 incident_type=(generation_input or {}).get("incident_type"),
                 adjustment_policies=(generation_input or {}).get("adjustment_policies"),
             )
-            route_options = await self._collect_route_options(
+            selected_transport_types = self._parse_selected_transport_types(
+                aggregate.preference.transport_type if aggregate.preference is not None else None
+            )
+            route_options, route_estimation_diagnostics = await self._collect_route_options(
                 trip=aggregate.trip,
                 days=days,
                 place_candidates=place_candidates,
+                selected_transport_types=selected_transport_types,
             )
             fallback_used = False
             fallback_reason: str | None = None
@@ -763,13 +767,9 @@ class TripService:
                 destination=aggregate.trip.destination,
                 destination_location=(generation_input or {}).get("destination"),
             )
-            normalized, route_diagnostics = await self._rebuild_transport_items_from_routes(
-                trip=aggregate.trip,
-                days=days,
+            normalized = self._apply_incident_plan_adjustments(
                 normalized_plan=normalized,
-                place_candidates=place_candidates,
-                origin_location=(generation_input or {}).get("origin"),
-                destination_location=(generation_input or {}).get("destination"),
+                generation_input=generation_input,
             )
             normalized = self._apply_incident_plan_adjustments(
                 normalized_plan=normalized,
@@ -780,6 +780,7 @@ class TripService:
                 days=days,
                 normalized_plan=normalized,
             )
+            route_diagnostics = self._count_transport_diagnostics(normalized)
             regeneration_mode = self._normalize_regeneration_mode((generation_input or {}).get("regeneration_mode"))
             transit_step_count, transit_line_count = self._count_transit_transport_items(normalized)
             generated_items = self._build_generated_itinerary_items(days=days, normalized_plan=normalized)
@@ -818,16 +819,15 @@ class TripService:
                     "adjustment_policies": (generation_input or {}).get("adjustment_policies") or [],
                     "transit_step_items": transit_step_count,
                     "transit_line_items": transit_line_count,
-                    "transit_attempted_pairs": route_diagnostics.get("transit_attempted_pairs", 0),
-                    "transit_succeeded_pairs": route_diagnostics.get("transit_succeeded_pairs", 0),
-                    "transit_empty_pairs": route_diagnostics.get("transit_empty_pairs", 0),
-                    "transit_timeout_pairs": route_diagnostics.get("transit_timeout_pairs", 0),
-                    "transit_exception_pairs": route_diagnostics.get("transit_exception_pairs", 0),
-                    "transit_fallback_info_pairs": route_diagnostics.get("transit_fallback_info_pairs", 0),
-                    "empty_pairs": route_diagnostics.get("transit_empty_pairs", 0),
-                    "timeout_pairs": route_diagnostics.get("transit_timeout_pairs", 0),
-                    "walk_fallback_pairs": route_diagnostics.get("walk_fallback_pairs", 0),
-                    "drive_fallback_pairs": route_diagnostics.get("drive_fallback_pairs", 0),
+                    "route_batches_total": route_estimation_diagnostics.get("route_batches_total", 0),
+                    "route_batches_failed": route_estimation_diagnostics.get("route_batches_failed", 0),
+                    "route_estimated_pairs": route_estimation_diagnostics.get("route_estimated_pairs", 0),
+                    "route_fallback_pairs": route_estimation_diagnostics.get("route_fallback_pairs", 0),
+                    "route_invalid_pairs": route_estimation_diagnostics.get("route_invalid_pairs", 0),
+                    "transport_attempted_pairs": route_diagnostics.get("attempted_pairs", 0),
+                    "transport_transit_pairs": route_diagnostics.get("transit_pairs", 0),
+                    "transport_walk_pairs": route_diagnostics.get("walk_pairs", 0),
+                    "transport_car_pairs": route_diagnostics.get("drive_pairs", 0),
                     "cover_image_updated": cover_image_updated,
                     "fallback_used": fallback_used,
                     "fallback_reason": fallback_reason,
@@ -935,10 +935,7 @@ class TripService:
         grouped: dict[int, list[ItineraryItem]] = {}
         for item in items:
             grouped.setdefault(item.trip_day_id, []).append(item)
-        return {
-            day_id: sorted(values, key=self._itinerary_item_sort_key)
-            for day_id, values in grouped.items()
-        }
+        return {day_id: sorted(values, key=self._itinerary_item_sort_key) for day_id, values in grouped.items()}
 
     def _itinerary_item_sort_key(self, item: ItineraryItem) -> tuple[int, float, int]:
         sequence = item.sequence or 9999
@@ -953,7 +950,9 @@ class TripService:
         generated_day_items: list[ItineraryItem],
         target_item_id: int,
     ) -> list[ItineraryItem]:
-        target_index = next((index for index, item in enumerate(existing_day_items) if item.id == target_item_id), None)
+        target_index = next(
+            (index for index, item in enumerate(existing_day_items) if item.id == target_item_id), None
+        )
         if target_index is None:
             raise ItineraryItemNotFoundError(f"Itinerary item with ID {target_item_id} not found")
 
@@ -977,12 +976,23 @@ class TripService:
         generated_day_items: list[ItineraryItem],
         target_item_id: int,
     ) -> list[ItineraryItem]:
-        target_index = next((index for index, item in enumerate(existing_day_items) if item.id == target_item_id), None)
+        target_index = next(
+            (index for index, item in enumerate(existing_day_items) if item.id == target_item_id), None
+        )
         if target_index is None:
             raise ItineraryItemNotFoundError(f"Itinerary item with ID {target_item_id} not found")
 
-        remove_start = target_index - 1 if target_index > 0 and existing_day_items[target_index - 1].item_type == "transport" else target_index
-        remove_end = target_index + 1 if target_index + 1 < len(existing_day_items) and existing_day_items[target_index + 1].item_type == "transport" else target_index
+        remove_start = (
+            target_index - 1
+            if target_index > 0 and existing_day_items[target_index - 1].item_type == "transport"
+            else target_index
+        )
+        remove_end = (
+            target_index + 1
+            if target_index + 1 < len(existing_day_items)
+            and existing_day_items[target_index + 1].item_type == "transport"
+            else target_index
+        )
 
         replacement_block = self._select_generated_replacement_block(
             generated_day_items=generated_day_items,
@@ -1042,14 +1052,26 @@ class TripService:
 
         def replacement_sort_key(item: ItineraryItem) -> tuple[float, int]:
             return (
-                abs(self._sortable_datetime_value(item.start_time) - self._sortable_datetime_value(target_item.start_time)),
+                abs(
+                    self._sortable_datetime_value(item.start_time)
+                    - self._sortable_datetime_value(target_item.start_time)
+                ),
                 item.sequence or 9999,
             )
 
         chosen_item = min(candidate_pool, key=replacement_sort_key)
         chosen_index = generated_day_items.index(chosen_item)
-        block_start = chosen_index - 1 if chosen_index > 0 and generated_day_items[chosen_index - 1].item_type == "transport" else chosen_index
-        block_end = chosen_index + 1 if chosen_index + 1 < len(generated_day_items) and generated_day_items[chosen_index + 1].item_type == "transport" else chosen_index
+        block_start = (
+            chosen_index - 1
+            if chosen_index > 0 and generated_day_items[chosen_index - 1].item_type == "transport"
+            else chosen_index
+        )
+        block_end = (
+            chosen_index + 1
+            if chosen_index + 1 < len(generated_day_items)
+            and generated_day_items[chosen_index + 1].item_type == "transport"
+            else chosen_index
+        )
         return list(generated_day_items[block_start : block_end + 1])
 
     def _resequence_itinerary_items(
@@ -1192,8 +1214,12 @@ class TripService:
         if len(with_coordinates) < 4:
             return candidates[:max_candidates]
 
-        center_lat = sum(item.latitude for item in with_coordinates if item.latitude is not None) / len(with_coordinates)
-        center_lon = sum(item.longitude for item in with_coordinates if item.longitude is not None) / len(with_coordinates)
+        center_lat = sum(item.latitude for item in with_coordinates if item.latitude is not None) / len(
+            with_coordinates
+        )
+        center_lon = sum(item.longitude for item in with_coordinates if item.longitude is not None) / len(
+            with_coordinates
+        )
 
         filtered: list[PlaceCandidate] = []
         for item in candidates:
@@ -1398,7 +1424,9 @@ class TripService:
             raise ValueError(f"{field_label}の入力を確認してください。")
         if len(set(lower_text)) == 1 and len(lower_text) >= 3:
             raise ValueError(f"{field_label}の入力を確認してください。")
-        if len(text) < 2 and not any(marker in text for marker in ("駅", "空港", "市", "区", "町", "村", "県", "都", "府")):
+        if len(text) < 2 and not any(
+            marker in text for marker in ("駅", "空港", "市", "区", "町", "村", "県", "都", "府")
+        ):
             raise ValueError(f"{field_label}の入力を確認してください。")
 
     def _parse_selected_transport_types(self, raw_value: Optional[str]) -> list[str]:
@@ -1473,27 +1501,27 @@ class TripService:
         trip: Trip,
         days: list[TripDay],
         place_candidates: list[PlaceCandidate],
-    ) -> list[RouteOption]:
+        selected_transport_types: list[str],
+    ) -> tuple[list[RouteOption], dict[str, int]]:
         candidates = [
-            candidate
-            for candidate in place_candidates
-            if isinstance(candidate.name, str) and candidate.name.strip()
+            candidate for candidate in place_candidates if isinstance(candidate.name, str) and candidate.name.strip()
         ]
         candidates = candidates[: self.MAX_ROUTE_CANDIDATES]
         if len(candidates) < 2:
-            return []
-
-        departure_date = days[0].date if days and days[0].date is not None else trip.start_date
-        local_departure_time = datetime.combine(departure_date, time(9, 0)).replace(tzinfo=ZoneInfo("Asia/Tokyo"))
-        departure_time = local_departure_time.astimezone(timezone.utc)
-        route_client = RoutesClient()
+            return [], {
+                "route_batches_total": 0,
+                "route_batches_failed": 0,
+                "route_estimated_pairs": 0,
+                "route_fallback_pairs": 0,
+                "route_invalid_pairs": 0,
+            }
 
         pair_candidates: list[tuple[str, str]] = []
         seen_pairs: set[tuple[str, str]] = set()
         for origin in candidates:
-            nearest_destinations = [
-                destination for destination in candidates if destination.name != origin.name
-            ][: self.MAX_NEAREST_DESTINATIONS_PER_CANDIDATE]
+            nearest_destinations = [destination for destination in candidates if destination.name != origin.name][
+                : self.MAX_NEAREST_DESTINATIONS_PER_CANDIDATE
+            ]
             for destination in nearest_destinations:
                 key = (
                     origin.name,
@@ -1504,20 +1532,263 @@ class TripService:
                 seen_pairs.add(key)
                 pair_candidates.append((origin.name, destination.name))
 
-        results = await asyncio.gather(
-            *[
-                route_client.compute_route_options(
-                    origin=origin, destination=destination, departure_time=departure_time
-                )
-                for origin, destination in pair_candidates
-            ],
-            return_exceptions=True,
+        estimated_route_options, estimate_diagnostics = await self._estimate_route_options_with_gemini(
+            trip=trip,
+            pair_candidates=pair_candidates,
+            place_candidates=candidates,
+            selected_transport_types=selected_transport_types,
         )
+        route_option_map: dict[tuple[str, str], RouteOption] = {
+            (option.from_name, option.to_name): option for option in estimated_route_options
+        }
+
+        fallback_pairs = 0
         route_options: list[RouteOption] = []
-        for result in results:
-            if isinstance(result, list):
-                route_options.extend(result)
-        return route_options
+        for origin, destination in pair_candidates:
+            existing = route_option_map.get((origin, destination))
+            if existing is not None:
+                route_options.append(existing)
+                continue
+            route_options.append(
+                self._fallback_route_option_from_pair(
+                    origin_name=origin,
+                    destination_name=destination,
+                    candidate_map={candidate.name: candidate for candidate in candidates},
+                )
+            )
+            fallback_pairs += 1
+
+        estimated_pairs = max(len(route_options) - fallback_pairs, 0)
+        return route_options, {
+            "route_batches_total": estimate_diagnostics.get("route_batches_total", 0),
+            "route_batches_failed": estimate_diagnostics.get("route_batches_failed", 0),
+            "route_estimated_pairs": estimated_pairs,
+            "route_fallback_pairs": fallback_pairs,
+            "route_invalid_pairs": estimate_diagnostics.get("route_invalid_pairs", 0),
+        }
+
+    async def _estimate_route_options_with_gemini(
+        self,
+        *,
+        trip: Trip,
+        pair_candidates: list[tuple[str, str]],
+        place_candidates: list[PlaceCandidate],
+        selected_transport_types: list[str],
+    ) -> tuple[list[RouteOption], dict[str, int]]:
+        if not pair_candidates:
+            return [], {
+                "route_batches_total": 0,
+                "route_batches_failed": 0,
+                "route_invalid_pairs": 0,
+            }
+        candidate_map = {candidate.name: candidate for candidate in place_candidates}
+        allowed_modes = self._resolve_allowed_transport_modes(selected_transport_types)
+        gemini_client = GeminiClient()
+        batches_total = 0
+        batches_failed = 0
+        invalid_pairs = 0
+        route_options: list[RouteOption] = []
+        seen: set[tuple[str, str]] = set()
+        for batch_pairs in self._chunk_route_pairs(pair_candidates, self.ROUTE_ESTIMATION_BATCH_SIZE):
+            batches_total += 1
+            batch_names = {name for pair in batch_pairs for name in pair}
+            batch_candidate_map = {name: candidate_map[name] for name in batch_names if name in candidate_map}
+            prompt = self._build_route_estimation_prompt(
+                trip=trip,
+                pair_candidates=batch_pairs,
+                candidate_map=batch_candidate_map,
+                selected_transport_types=selected_transport_types,
+            )
+            try:
+                payload = await gemini_client.generate_json(prompt=prompt, temperature=0.1)
+            except Exception:  # noqa: BLE001
+                batches_failed += 1
+                invalid_pairs += len(batch_pairs)
+                logger.exception("TripService route estimation failed: Gemini batch request exception")
+                continue
+
+            if not isinstance(payload, dict):
+                batches_failed += 1
+                invalid_pairs += len(batch_pairs)
+                continue
+            raw_pairs = payload.get("pairs")
+            if not isinstance(raw_pairs, list):
+                batches_failed += 1
+                invalid_pairs += len(batch_pairs)
+                continue
+
+            batch_expected = set(batch_pairs)
+            batch_estimated: set[tuple[str, str]] = set()
+            for raw_pair in raw_pairs:
+                option = self._build_route_option_from_estimate(
+                    raw_pair=raw_pair,
+                    candidate_map=batch_candidate_map,
+                    allowed_modes=allowed_modes,
+                )
+                if option is None:
+                    invalid_pairs += 1
+                    continue
+                key = (option.from_name, option.to_name)
+                batch_estimated.add(key)
+                if key in seen:
+                    continue
+                seen.add(key)
+                route_options.append(option)
+
+            missing_pairs = batch_expected - batch_estimated
+            invalid_pairs += len(missing_pairs)
+
+        return route_options, {
+            "route_batches_total": batches_total,
+            "route_batches_failed": batches_failed,
+            "route_invalid_pairs": invalid_pairs,
+        }
+
+    @staticmethod
+    def _chunk_route_pairs(
+        pair_candidates: list[tuple[str, str]],
+        batch_size: int,
+    ) -> list[list[tuple[str, str]]]:
+        safe_batch_size = max(batch_size, 1)
+        return [
+            pair_candidates[index : index + safe_batch_size]
+            for index in range(0, len(pair_candidates), safe_batch_size)
+        ]
+
+    def _build_route_estimation_prompt(
+        self,
+        *,
+        trip: Trip,
+        pair_candidates: list[tuple[str, str]],
+        candidate_map: dict[str, PlaceCandidate],
+        selected_transport_types: list[str],
+    ) -> str:
+        candidate_payload = [
+            {
+                "name": name,
+                "address": candidate.address,
+                "category": candidate.category,
+                "latitude": candidate.latitude,
+                "longitude": candidate.longitude,
+            }
+            for name, candidate in candidate_map.items()
+        ]
+        pair_payload = [{"from_name": origin, "to_name": destination} for origin, destination in pair_candidates]
+        return (
+            "以下の地点ペアの移動推定を行い、JSONのみ返してください。\n"
+            'フォーマット: {"pairs": [{"from_name": "", "to_name": "", "transport_mode": "WALK|TRAIN|BUS|CAR", '
+            '"travel_minutes": 0, "distance_meters": 0, "notes": "", "confidence": 0.0}]}\n'
+            f"trip={json.dumps({'origin': trip.origin, 'destination': trip.destination}, ensure_ascii=False)}\n"
+            f"selected_transport_types={json.dumps(selected_transport_types, ensure_ascii=False)}\n"
+            f"candidates={json.dumps(candidate_payload, ensure_ascii=False)}\n"
+            f"pairs={json.dumps(pair_payload, ensure_ascii=False)}\n"
+            "ルール:\n"
+            "- pairs に渡した全ペアを返す\n"
+            "- from_name/to_name は必ず pairs 内の値だけを使う\n"
+            "- transport_mode は WALK/TRAIN/BUS/CAR のみ\n"
+            "- selected_transport_types に含まれない手段は使わない（WALKは常に許可）\n"
+            "- WALK で 60分を超える値は返さない\n"
+            "- travel_minutes は正の整数、distance_meters は正の整数\n"
+            "- 不確実な場合は confidence を下げる\n"
+        )
+
+    def _build_route_option_from_estimate(
+        self,
+        *,
+        raw_pair: Any,
+        candidate_map: dict[str, PlaceCandidate],
+        allowed_modes: set[str],
+    ) -> Optional[RouteOption]:
+        if not isinstance(raw_pair, dict):
+            return None
+        origin = str(raw_pair.get("from_name") or "").strip()
+        destination = str(raw_pair.get("to_name") or "").strip()
+        if not origin or not destination:
+            return None
+        if origin == destination:
+            return None
+        if origin not in candidate_map or destination not in candidate_map:
+            return None
+
+        raw_mode = str(raw_pair.get("transport_mode") or "WALK").upper()
+        mode = raw_mode if raw_mode in {"WALK", "TRAIN", "BUS", "CAR"} else "WALK"
+        if mode not in allowed_modes:
+            return None
+
+        travel_minutes = self._to_optional_int(raw_pair.get("travel_minutes"))
+        if travel_minutes is None or travel_minutes <= 0:
+            return None
+        if mode == "WALK" and travel_minutes > 60:
+            return None
+
+        origin_candidate = candidate_map[origin]
+        destination_candidate = candidate_map[destination]
+        raw_distance = self._estimate_distance_meters(origin_candidate, destination_candidate)
+        if raw_distance == float("inf") or raw_distance <= 0:
+            estimated_distance = 1200
+        else:
+            estimated_distance = int(raw_distance)
+        distance_meters = self._to_optional_int(raw_pair.get("distance_meters")) or estimated_distance
+        if distance_meters <= 0:
+            distance_meters = estimated_distance
+        notes = str(raw_pair.get("notes") or "").strip() or "移動"
+
+        return RouteOption(
+            from_name=origin,
+            to_name=destination,
+            travel_mode=mode,
+            transit_subtype=self._route_mode_to_subtype(mode),
+            duration_minutes=travel_minutes,
+            distance_meters=distance_meters,
+            summary=notes,
+            vehicle_type=mode,
+        )
+
+    def _fallback_route_option_from_pair(
+        self,
+        *,
+        origin_name: str,
+        destination_name: str,
+        candidate_map: dict[str, PlaceCandidate],
+    ) -> RouteOption:
+        origin_candidate = candidate_map.get(origin_name)
+        destination_candidate = candidate_map.get(destination_name)
+        raw_distance = (
+            self._estimate_distance_meters(origin_candidate, destination_candidate)
+            if origin_candidate is not None and destination_candidate is not None
+            else float("inf")
+        )
+        if raw_distance == float("inf") or raw_distance <= 0:
+            estimated_distance = 1200
+        else:
+            estimated_distance = int(raw_distance)
+        fallback_minutes = max(15, min(30, estimated_distance // 70))
+        return RouteOption(
+            from_name=origin_name,
+            to_name=destination_name,
+            travel_mode="WALK",
+            transit_subtype=None,
+            duration_minutes=fallback_minutes,
+            distance_meters=estimated_distance,
+            summary="保守的fallback移動（Gemini補完）",
+            vehicle_type="WALK",
+        )
+
+    def _resolve_allowed_transport_modes(self, selected_transport_types: list[str]) -> set[str]:
+        if not selected_transport_types:
+            return {"WALK", "TRAIN", "BUS", "CAR"}
+        allowed = {"WALK"}
+        if "train" in selected_transport_types:
+            allowed.add("TRAIN")
+        if "bus" in selected_transport_types:
+            allowed.add("BUS")
+        return allowed
+
+    @staticmethod
+    def _route_mode_to_subtype(mode: str) -> Optional[str]:
+        if mode in {"TRAIN", "BUS"}:
+            return mode
+        return None
 
     def _normalize_plan_payload(
         self,
@@ -1683,9 +1954,7 @@ class TripService:
 
         normalized_item_name = self._normalize_place_name(name)
         exact_matches = [
-            candidate
-            for candidate in candidates
-            if self._normalize_place_name(candidate.name) == normalized_item_name
+            candidate for candidate in candidates if self._normalize_place_name(candidate.name) == normalized_item_name
         ]
         if exact_matches:
             return self._pick_best_place_candidate_from_payload(item=item, candidates=exact_matches)
@@ -1734,11 +2003,15 @@ class TripService:
             allowed_prefectures=self._extract_destination_prefecture_tokens(destination),
         ):
             return False
-        if candidate.latitude is not None and candidate.longitude is not None and self._is_far_from_destination(
-            latitude=candidate.latitude,
-            longitude=candidate.longitude,
-            destination=destination,
-            destination_location=destination_location,
+        if (
+            candidate.latitude is not None
+            and candidate.longitude is not None
+            and self._is_far_from_destination(
+                latitude=candidate.latitude,
+                longitude=candidate.longitude,
+                destination=destination,
+                destination_location=destination_location,
+            )
         ):
             return False
         return True
@@ -2236,197 +2509,28 @@ class TripService:
         origin_location: Optional[dict] = None,
         destination_location: Optional[dict] = None,
     ) -> tuple[dict[int, list[dict]], dict[str, int]]:
-        candidate_map = {candidate.name: candidate for candidate in place_candidates}
-        rebuilt: dict[int, list[dict]] = {}
-        route_diagnostics = {
-            "transit_attempted_pairs": 0,
-            "transit_succeeded_pairs": 0,
-            "transit_empty_pairs": 0,
-            "transit_timeout_pairs": 0,
-            "transit_exception_pairs": 0,
-            "transit_fallback_info_pairs": 0,
-            "walk_fallback_pairs": 0,
-            "drive_fallback_pairs": 0,
+        # Legacy path intentionally disabled.
+        # Routing is now estimated by Gemini in _collect_route_options.
+        del trip, days, place_candidates, origin_location, destination_location
+        return normalized_plan, {
+            "route_estimated_pairs": 0,
+            "route_fallback_pairs": 0,
+            "route_invalid_pairs": 0,
         }
-        route_client = RoutesClient()
-        sorted_days = sorted(days, key=lambda day: day.day_number)
-        first_day_number = sorted_days[0].day_number if sorted_days else None
-        last_day_number = sorted_days[-1].day_number if sorted_days else None
 
-        for day in days:
-            items = normalized_plan.get(day.day_number, [])
-            place_items = [item for item in items if not self._is_transport_item_payload(item)]
-            if len(place_items) < 2:
-                rebuilt[day.day_number] = place_items
-                continue
-
-            expanded: list[dict] = []
-            if (
-                day.day_number == first_day_number
-                and origin_location
-                and place_items
-            ):
-                first_item = place_items[0]
-                destination_name = first_item.get("name")
-                if isinstance(destination_name, str) and destination_name.strip():
-                    origin_candidate = self._place_candidate_from_lat_lng(name=trip.origin, coordinates=origin_location)
-                    destination_candidate = self._place_candidate_from_item(first_item, candidate_map)
-                    origin_for_routing = self._build_routing_location_input(origin_candidate) or trip.origin
-                    destination_for_routing = self._build_routing_location_input(destination_candidate) or destination_name
-
-                    departure_time = self._resolve_route_departure_datetime(
-                        trip_date=day.date or trip.start_date,
-                        previous_end_time=None,
-                    )
-                    route_steps, diagnostics = await route_client.compute_route_steps_with_diagnostics(
-                        origin=origin_for_routing,
-                        destination=destination_for_routing,
-                        departure_time=departure_time,
-                    )
-                    for key in route_diagnostics:
-                        route_diagnostics[key] += diagnostics.get(key, 0)
-                    if route_steps:
-                        expanded.extend(
-                            self._route_steps_to_item_payloads(
-                                route_steps,
-                                previous_end_time=None,
-                                next_start_time=first_item.get("start_time"),
-                                origin_name=trip.origin,
-                                destination_name=destination_name,
-                            )
-                        )
-                    else:
-                        expanded.append(
-                            self._build_fallback_transport_item_payload(
-                                from_name=trip.origin,
-                                to_name=destination_name,
-                                previous_end_time=None,
-                                next_start_time=first_item.get("start_time"),
-                                diagnostics=diagnostics,
-                            )
-                        )
-
-            for index, item in enumerate(place_items):
-                expanded.append(item)
-                if index == len(place_items) - 1:
-                    continue
-
-                next_item = place_items[index + 1]
-                origin_name = item.get("name")
-                destination_name = next_item.get("name")
-                if (
-                    not isinstance(origin_name, str)
-                    or not origin_name.strip()
-                    or not isinstance(destination_name, str)
-                    or not destination_name.strip()
-                ):
-                    expanded.append(
-                        self._build_fallback_transport_item_payload(
-                            from_name=str(item.get("name")),
-                            to_name=str(next_item.get("name")),
-                            previous_end_time=item.get("end_time"),
-                            next_start_time=next_item.get("start_time"),
-                            diagnostics=None,
-                        )
-                    )
-                    continue
-
-                origin_candidate = self._place_candidate_from_item(item, candidate_map)
-                destination_candidate = self._place_candidate_from_item(next_item, candidate_map)
-                origin_for_routing = self._build_routing_location_input(origin_candidate) or origin_name
-                destination_for_routing = self._build_routing_location_input(destination_candidate) or destination_name
-                departure_time = self._resolve_route_departure_datetime(
-                    trip_date=day.date or trip.start_date,
-                    previous_end_time=item.get("end_time"),
-                )
-                route_steps, diagnostics = await route_client.compute_route_steps_with_diagnostics(
-                    origin=origin_for_routing,
-                    destination=destination_for_routing,
-                    departure_time=departure_time,
-                )
-                for key in route_diagnostics:
-                    route_diagnostics[key] += diagnostics.get(key, 0)
-                if route_steps:
-                    logger.info(
-                        "TripService route steps found: trip_id=%s day=%s from=%s to=%s steps=%s lines=%s",
-                        trip.id,
-                        day.day_number,
-                        item.get("name"),
-                        next_item.get("name"),
-                        len(route_steps),
-                        [step.line_name for step in route_steps if step.line_name],
-                    )
-                    expanded.extend(
-                        self._route_steps_to_item_payloads(
-                            route_steps,
-                            previous_end_time=item.get("end_time"),
-                            next_start_time=next_item.get("start_time"),
-                            origin_name=origin_name,
-                            destination_name=destination_name,
-                        )
-                    )
-                else:
-                    logger.warning(
-                        "TripService route steps missing, using fallback transport: trip_id=%s day=%s from=%s to=%s",
-                        trip.id,
-                        day.day_number,
-                        item.get("name"),
-                        next_item.get("name"),
-                    )
-                    expanded.append(
-                        self._build_fallback_transport_item_payload(
-                            from_name=str(item.get("name")),
-                            to_name=str(next_item.get("name")),
-                            previous_end_time=item.get("end_time"),
-                            next_start_time=next_item.get("start_time"),
-                            diagnostics=diagnostics,
-                        )
-                    )
-            if (
-                day.day_number == last_day_number
-                and origin_location
-                and place_items
-            ):
-                last_item = place_items[-1]
-                origin_name = last_item.get("name")
-                if isinstance(origin_name, str) and origin_name.strip():
-                    origin_candidate = self._place_candidate_from_item(last_item, candidate_map)
-                    destination_candidate = self._place_candidate_from_lat_lng(name=trip.origin, coordinates=origin_location)
-                    origin_for_routing = self._build_routing_location_input(origin_candidate) or origin_name
-                    destination_for_routing = self._build_routing_location_input(destination_candidate) or trip.origin
-                    departure_time = self._resolve_route_departure_datetime(
-                        trip_date=day.date or trip.start_date,
-                        previous_end_time=last_item.get("end_time"),
-                    )
-                    route_steps, diagnostics = await route_client.compute_route_steps_with_diagnostics(
-                        origin=origin_for_routing,
-                        destination=destination_for_routing,
-                        departure_time=departure_time,
-                    )
-                    for key in route_diagnostics:
-                        route_diagnostics[key] += diagnostics.get(key, 0)
-                    if route_steps:
-                        expanded.extend(
-                            self._route_steps_to_item_payloads(
-                                route_steps,
-                                previous_end_time=last_item.get("end_time"),
-                                next_start_time=None,
-                                origin_name=origin_name,
-                                destination_name=trip.origin,
-                            )
-                        )
-                    else:
-                        expanded.append(
-                            self._build_fallback_transport_item_payload(
-                                from_name=origin_name,
-                                to_name=trip.origin,
-                                previous_end_time=last_item.get("end_time"),
-                                next_start_time=None,
-                                diagnostics=diagnostics,
-                            )
-                        )
-            rebuilt[day.day_number] = expanded
-        return rebuilt, route_diagnostics
+    def _build_routing_location_input(
+        self,
+        candidate: Optional[PlaceCandidate],
+    ) -> Optional[str]:
+        if candidate is None:
+            return None
+        if isinstance(candidate.latitude, (int, float)) and isinstance(candidate.longitude, (int, float)):
+            return f"{float(candidate.latitude)},{float(candidate.longitude)}"
+        if isinstance(candidate.address, str) and candidate.address.strip():
+            return candidate.address.strip()
+        if isinstance(candidate.name, str) and candidate.name.strip():
+            return candidate.name.strip()
+        return None
 
     def _build_routing_location_input(
         self,
@@ -2673,17 +2777,16 @@ class TripService:
         first_items = constrained.get(first_day.day_number, [])
         first_place = next((item for item in first_items if not self._is_transport_item_payload(item)), None)
         if first_place is not None:
-            must_add_head = not first_items or not self._is_transport_item_payload(first_items[0])
-            if must_add_head:
-                first_items.insert(
-                    0,
-                    self._build_fallback_transport_item_payload(
-                        from_name=trip.origin,
-                        to_name=str(first_place.get("name") or trip.destination),
-                        previous_end_time=None,
-                        next_start_time=first_place.get("start_time"),
-                    ),
-                )
+            first_items = self._drop_leading_transport_only(first_items)
+            first_items.insert(
+                0,
+                self._build_fallback_transport_item_payload(
+                    from_name=trip.origin,
+                    to_name=str(first_place.get("name") or trip.destination),
+                    previous_end_time=None,
+                    next_start_time=first_place.get("start_time"),
+                ),
+            )
             constrained[first_day.day_number] = first_items
 
         for index, day in enumerate(sorted_days):
@@ -2695,27 +2798,25 @@ class TripService:
             last_place = next((item for item in reversed(items) if not self._is_transport_item_payload(item)), None)
             if is_last_day:
                 if last_place is not None:
-                    needs_return = not items or not self._is_transport_item_payload(items[-1])
-                    if needs_return:
-                        items.append(
-                            self._build_fallback_transport_item_payload(
-                                from_name=str(last_place.get("name") or trip.destination),
-                                to_name=trip.origin,
-                                previous_end_time=last_place.get("end_time"),
-                                next_start_time=None,
-                            )
-                        )
-            elif day_lodging and last_place is not None:
-                needs_lodging_return = not items or not self._is_transport_item_payload(items[-1])
-                if needs_lodging_return:
+                    items = self._drop_trailing_transport_only(items)
                     items.append(
                         self._build_fallback_transport_item_payload(
                             from_name=str(last_place.get("name") or trip.destination),
-                            to_name=day_lodging,
+                            to_name=trip.origin,
                             previous_end_time=last_place.get("end_time"),
                             next_start_time=None,
                         )
                     )
+            elif day_lodging and last_place is not None:
+                items = self._drop_trailing_transport_only(items)
+                items.append(
+                    self._build_fallback_transport_item_payload(
+                        from_name=str(last_place.get("name") or trip.destination),
+                        to_name=day_lodging,
+                        previous_end_time=last_place.get("end_time"),
+                        next_start_time=None,
+                    )
+                )
             constrained[day.day_number] = items
 
         for index in range(1, len(sorted_days)):
@@ -2728,16 +2829,16 @@ class TripService:
             first_place = next((item for item in items if not self._is_transport_item_payload(item)), None)
             if first_place is None:
                 continue
-            if not items or not self._is_transport_item_payload(items[0]):
-                items.insert(
-                    0,
-                    self._build_fallback_transport_item_payload(
-                        from_name=start_from,
-                        to_name=str(first_place.get("name") or trip.destination),
-                        previous_end_time=None,
-                        next_start_time=first_place.get("start_time"),
-                    )
-                )
+            items = self._drop_leading_transport_only(items)
+            items.insert(
+                0,
+                self._build_fallback_transport_item_payload(
+                    from_name=start_from,
+                    to_name=str(first_place.get("name") or trip.destination),
+                    previous_end_time=None,
+                    next_start_time=first_place.get("start_time"),
+                ),
+            )
             constrained[current_day.day_number] = items
 
         return constrained
@@ -2779,6 +2880,22 @@ class TripService:
         while end > start and self._is_transport_item_payload(items[end - 1]):
             end -= 1
         return items[start:end]
+
+    def _drop_leading_transport_only(self, items: list[dict]) -> list[dict]:
+        if not items:
+            return items
+        start = 0
+        while start < len(items) and self._is_transport_item_payload(items[start]):
+            start += 1
+        return items[start:]
+
+    def _drop_trailing_transport_only(self, items: list[dict]) -> list[dict]:
+        if not items:
+            return items
+        end = len(items)
+        while end > 0 and self._is_transport_item_payload(items[end - 1]):
+            end -= 1
+        return items[:end]
 
     def _reduce_overpacked_after_long_transport(self, items: list[dict]) -> list[dict]:
         reduced: list[dict] = []

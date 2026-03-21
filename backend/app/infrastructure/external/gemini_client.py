@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import socket
 import time
 from typing import Any, Optional
 from urllib import error, parse, request
@@ -23,6 +24,8 @@ class GeminiClient:
         self.api_key = api_key or settings.gemini_api_key
         self.model = model or settings.gemini_model
         self.base_url = (base_url or settings.gemini_api_base_url).rstrip("/")
+        self.connect_timeout_seconds = settings.gemini_connect_timeout_seconds
+        self.read_timeout_seconds = settings.gemini_read_timeout_seconds
 
     async def generate_json(
         self,
@@ -78,13 +81,24 @@ class GeminiClient:
         body = json.dumps(payload).encode("utf-8")
         headers = {"Content-Type": "application/json"}
         req = request.Request(url, data=body, headers=headers, method="POST")
+        effective_timeout = max(self.connect_timeout_seconds, self.read_timeout_seconds)
         try:
-            with request.urlopen(req, timeout=45) as resp:
+            with request.urlopen(req, timeout=effective_timeout) as resp:
                 raw = resp.read().decode("utf-8")
+        except TimeoutError as exc:
+            raise RuntimeError(
+                "Gemini timeout error: "
+                f"connect={self.connect_timeout_seconds}s read={self.read_timeout_seconds}s"
+            ) from exc
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")
             raise RuntimeError(f"Gemini API error: {exc.code} {detail}") from exc
         except error.URLError as exc:
+            if isinstance(exc.reason, socket.timeout) or "timed out" in str(exc.reason).lower():
+                raise RuntimeError(
+                    "Gemini timeout error: "
+                    f"connect={self.connect_timeout_seconds}s read={self.read_timeout_seconds}s"
+                ) from exc
             raise RuntimeError(f"Gemini connection error: {exc.reason}") from exc
 
         response = json.loads(raw)

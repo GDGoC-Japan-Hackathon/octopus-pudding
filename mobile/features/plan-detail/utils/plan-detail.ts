@@ -238,17 +238,14 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
     end: toTimeLabel(item.end_time),
     title:
       item.item_type === 'transport'
-        ? item.name || transportModeLabel(item.transport_mode)
+        ? transportModeLabel(item.transport_mode)
         : item.name,
     body:
       item.item_type === 'transport'
         ? buildTransportBody(item)
         : item.notes || item.category || '詳細メモは未設定です。',
     itemType: item.item_type === 'transport' ? 'transport' : 'place',
-    metaLabel:
-      item.item_type === 'transport'
-        ? buildTransportMetaLabel(item.transport_mode, item.line_name, item.travel_minutes, item.distance_meters)
-        : undefined,
+    metaLabel: undefined,
     durationLabel:
       item.item_type === 'transport'
         ? toTransportDurationLabel(item.travel_minutes, item.start_time, item.end_time)
@@ -305,15 +302,17 @@ function normalizeTransportNotes(notes?: string | null) {
   return compact || null;
 }
 
-function transportModeLabel(mode?: string | null) {
+function transportModeLabel(mode?: string | null, vehicleType?: string | null) {
   const normalized = normalizeTransportMode(mode);
   if (!normalized) return '移動';
   if (normalized === 'WALK') return '徒歩で移動';
   if (normalized === 'BUS') return 'バスで移動';
-  if (normalized === 'CAR' || normalized === 'TAXI') return '車で移動';
+  if (normalized === 'CAR') return '車で移動';
+  if (normalized === 'TAXI') return 'タクシーで移動';
   if (normalized === 'SHIP') return '船で移動';
   if (normalized === 'BICYCLE') return '自転車で移動';
   if (normalized === 'PLANE') return '飛行機で移動';
+  if (normalized === 'OTHER' && vehicleType) return `${vehicleType}で移動`;
   return '電車で移動';
 }
 

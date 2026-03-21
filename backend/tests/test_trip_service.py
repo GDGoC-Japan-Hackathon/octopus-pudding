@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import json
 import os
 from pathlib import Path
 import sys
@@ -12,6 +13,7 @@ os.environ["FIREBASE_PROJECT_ID"] = "test-project"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.application.services.trip_service import TripService
+from app.application.services import trip_service as trip_service_module
 from app.domain.entities.trip import ItineraryItem, Trip, TripAggregate, TripDay
 from app.infrastructure.external.google_places_client import PlaceCandidate
 from app.shared.exceptions import TripNotFoundError
@@ -318,6 +320,150 @@ def test_place_candidate_filter_rejects_tokyo_shop_for_hokkaido_destination():
     )
 
     assert allowed is False
+
+
+@pytest.mark.asyncio
+async def test_collect_route_options_uses_gemini_estimates(monkeypatch):
+    service = TripService(FakeTripRepository([]))
+    trip = make_trip(1, destination="札幌")
+    days = [TripDay(id=1, trip_id=1, day_number=1, date=date(2026, 4, 1))]
+    candidates = [
+        PlaceCandidate(name="札幌駅", address="北海道札幌市", latitude=43.0687, longitude=141.3507),
+        PlaceCandidate(name="大通公園", address="北海道札幌市", latitude=43.0605, longitude=141.3476),
+    ]
+
+    class StubGeminiClient:
+        async def generate_json(self, prompt: str, temperature: float = 0.1):
+            return {
+                "pairs": [
+                    {
+                        "from_name": "札幌駅",
+                        "to_name": "大通公園",
+                        "transport_mode": "TRAIN",
+                        "travel_minutes": 5,
+                        "distance_meters": 1100,
+                        "notes": "地下鉄推定",
+                        "confidence": 0.9,
+                    },
+                    {
+                        "from_name": "大通公園",
+                        "to_name": "札幌駅",
+                        "transport_mode": "WALK",
+                        "travel_minutes": 18,
+                        "distance_meters": 1200,
+                        "notes": "徒歩推定",
+                        "confidence": 0.8,
+                    },
+                ]
+            }
+
+    monkeypatch.setattr(trip_service_module, "GeminiClient", lambda: StubGeminiClient())
+
+    route_options, diagnostics = await service._collect_route_options(
+        trip=trip,
+        days=days,
+        place_candidates=candidates,
+        selected_transport_types=["train", "bus"],
+    )
+
+    assert len(route_options) == 2
+    assert {(option.from_name, option.to_name) for option in route_options} == {
+        ("札幌駅", "大通公園"),
+        ("大通公園", "札幌駅"),
+    }
+    assert diagnostics["route_estimated_pairs"] == 2
+    assert diagnostics["route_fallback_pairs"] == 0
+    assert diagnostics["route_invalid_pairs"] == 0
+    assert diagnostics["route_batches_total"] == 1
+    assert diagnostics["route_batches_failed"] == 0
+
+
+@pytest.mark.asyncio
+async def test_collect_route_options_falls_back_when_gemini_payload_invalid(monkeypatch):
+    service = TripService(FakeTripRepository([]))
+    trip = make_trip(1, destination="札幌")
+    days = [TripDay(id=1, trip_id=1, day_number=1, date=date(2026, 4, 1))]
+    candidates = [
+        PlaceCandidate(name="札幌駅", address="北海道札幌市", latitude=43.0687, longitude=141.3507),
+        PlaceCandidate(name="大通公園", address="北海道札幌市", latitude=43.0605, longitude=141.3476),
+    ]
+
+    class InvalidGeminiClient:
+        async def generate_json(self, prompt: str, temperature: float = 0.1):
+            return {"pairs": [{"from_name": "札幌駅", "to_name": "大通公園", "transport_mode": "TRAIN"}]}
+
+    monkeypatch.setattr(trip_service_module, "GeminiClient", lambda: InvalidGeminiClient())
+
+    route_options, diagnostics = await service._collect_route_options(
+        trip=trip,
+        days=days,
+        place_candidates=candidates,
+        selected_transport_types=["bus"],
+    )
+
+    assert len(route_options) == 2
+    assert all(option.travel_mode == "WALK" for option in route_options)
+    assert diagnostics["route_estimated_pairs"] == 0
+    assert diagnostics["route_fallback_pairs"] == 2
+    assert diagnostics["route_invalid_pairs"] >= 2
+    assert diagnostics["route_batches_total"] == 1
+    assert diagnostics["route_batches_failed"] == 0
+
+
+@pytest.mark.asyncio
+async def test_collect_route_options_handles_partial_batch_failure(monkeypatch):
+    service = TripService(FakeTripRepository([]))
+    trip = make_trip(1, destination="札幌")
+    days = [TripDay(id=1, trip_id=1, day_number=1, date=date(2026, 4, 1))]
+    candidates = [
+        PlaceCandidate(name="札幌駅", address="北海道札幌市", latitude=43.0687, longitude=141.3507),
+        PlaceCandidate(name="大通公園", address="北海道札幌市", latitude=43.0605, longitude=141.3476),
+        PlaceCandidate(name="円山公園", address="北海道札幌市", latitude=43.0552, longitude=141.3142),
+        PlaceCandidate(name="白い恋人パーク", address="北海道札幌市", latitude=43.0888, longitude=141.2756),
+    ]
+    calls = {"count": 0}
+
+    class PartialFailureGeminiClient:
+        async def generate_json(self, prompt: str, temperature: float = 0.1):
+            calls["count"] += 1
+            if calls["count"] == 2:
+                raise TimeoutError("read timed out")
+            pairs_payload = None
+            for line in prompt.splitlines():
+                if line.startswith("pairs="):
+                    pairs_payload = json.loads(line[len("pairs="):])
+                    break
+            assert isinstance(pairs_payload, list)
+            return {
+                "pairs": [
+                    {
+                        "from_name": pair["from_name"],
+                        "to_name": pair["to_name"],
+                        "transport_mode": "WALK",
+                        "travel_minutes": 20,
+                        "distance_meters": 1400,
+                        "notes": "徒歩推定",
+                        "confidence": 0.7,
+                    }
+                    for pair in pairs_payload
+                ]
+            }
+
+    monkeypatch.setattr(trip_service_module, "GeminiClient", lambda: PartialFailureGeminiClient())
+
+    route_options, diagnostics = await service._collect_route_options(
+        trip=trip,
+        days=days,
+        place_candidates=candidates,
+        selected_transport_types=["train", "bus"],
+    )
+
+    assert len(route_options) == 12
+    assert diagnostics["route_batches_total"] == 2
+    assert diagnostics["route_batches_failed"] == 1
+    assert diagnostics["route_estimated_pairs"] == 6
+    assert diagnostics["route_fallback_pairs"] == 6
+    assert diagnostics["route_invalid_pairs"] >= 6
 
 
 def test_place_candidate_filter_keeps_hokkaido_spot_for_hokkaido_destination():

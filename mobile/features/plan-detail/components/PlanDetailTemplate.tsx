@@ -147,15 +147,12 @@ export function PlanDetailTemplate({
                     <View style={styles.transportBubbleWrap}>
                       <Pressable style={styles.transportBubble} onPress={() => setSelectedTransportItem(item)}>
                         <MaterialIcons name={item.icon ?? 'directions-bus'} size={18} color="#2563EB" />
-                        <View style={styles.transportContent}>
-                          <View style={styles.transportTitleRow}>
-                            <Text style={styles.transportTitle}>{item.title}</Text>
-                            {item.metaLabel ? <View style={styles.transportDot} /> : null}
-                            {item.durationLabel ? <Text style={styles.transportDuration}>{item.durationLabel}</Text> : null}
-                            {item.metaLabel ? <Text style={styles.transportMeta}>{item.metaLabel}</Text> : null}
+                          <View style={styles.transportContent}>
+                            <View style={styles.transportTitleRow}>
+                              <Text style={styles.transportTitle}>{item.title}</Text>
+                              {item.durationLabel ? <Text style={styles.transportDuration}>{item.durationLabel}</Text> : null}
+                            </View>
                           </View>
-                          {item.body ? <Text style={styles.transportBody}>{item.body}</Text> : null}
-                        </View>
                         <MaterialIcons name="chevron-right" size={16} color="#94A3B8" />
                       </Pressable>
                     </View>
