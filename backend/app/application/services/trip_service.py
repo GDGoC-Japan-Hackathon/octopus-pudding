@@ -771,6 +771,10 @@ class TripService:
                 normalized_plan=normalized,
                 generation_input=generation_input,
             )
+            normalized = self._apply_incident_plan_adjustments(
+                normalized_plan=normalized,
+                generation_input=generation_input,
+            )
             normalized = self._enforce_plan_constraints(
                 trip=aggregate.trip,
                 days=days,
@@ -2513,6 +2517,20 @@ class TripService:
             "route_fallback_pairs": 0,
             "route_invalid_pairs": 0,
         }
+
+    def _build_routing_location_input(
+        self,
+        candidate: Optional[PlaceCandidate],
+    ) -> Optional[str]:
+        if candidate is None:
+            return None
+        if isinstance(candidate.latitude, (int, float)) and isinstance(candidate.longitude, (int, float)):
+            return f"{float(candidate.latitude)},{float(candidate.longitude)}"
+        if isinstance(candidate.address, str) and candidate.address.strip():
+            return candidate.address.strip()
+        if isinstance(candidate.name, str) and candidate.name.strip():
+            return candidate.name.strip()
+        return None
 
     def _build_routing_location_input(
         self,
