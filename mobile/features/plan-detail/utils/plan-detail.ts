@@ -238,17 +238,14 @@ export function toTimelineItems(items: TripDetailItineraryItemResponse[]): PlanD
     end: toTimeLabel(item.end_time),
     title:
       item.item_type === 'transport'
-        ? item.name || transportModeLabel(item.transport_mode)
+        ? transportModeLabel(item.transport_mode)
         : item.name,
     body:
       item.item_type === 'transport'
         ? buildTransportBody(item)
         : item.notes || item.category || '詳細メモは未設定です。',
     itemType: item.item_type === 'transport' ? 'transport' : 'place',
-    metaLabel:
-      item.item_type === 'transport'
-        ? buildTransportMetaLabel(item.transport_mode, item.line_name, item.travel_minutes, item.distance_meters)
-        : undefined,
+    metaLabel: undefined,
     durationLabel:
       item.item_type === 'transport'
         ? toTransportDurationLabel(item.travel_minutes, item.start_time, item.end_time)

@@ -2759,17 +2759,16 @@ class TripService:
         first_items = constrained.get(first_day.day_number, [])
         first_place = next((item for item in first_items if not self._is_transport_item_payload(item)), None)
         if first_place is not None:
-            must_add_head = not first_items or not self._is_transport_item_payload(first_items[0])
-            if must_add_head:
-                first_items.insert(
-                    0,
-                    self._build_fallback_transport_item_payload(
-                        from_name=trip.origin,
-                        to_name=str(first_place.get("name") or trip.destination),
-                        previous_end_time=None,
-                        next_start_time=first_place.get("start_time"),
-                    ),
-                )
+            first_items = self._drop_leading_transport_only(first_items)
+            first_items.insert(
+                0,
+                self._build_fallback_transport_item_payload(
+                    from_name=trip.origin,
+                    to_name=str(first_place.get("name") or trip.destination),
+                    previous_end_time=None,
+                    next_start_time=first_place.get("start_time"),
+                ),
+            )
             constrained[first_day.day_number] = first_items
 
         for index, day in enumerate(sorted_days):
@@ -2781,27 +2780,25 @@ class TripService:
             last_place = next((item for item in reversed(items) if not self._is_transport_item_payload(item)), None)
             if is_last_day:
                 if last_place is not None:
-                    needs_return = not items or not self._is_transport_item_payload(items[-1])
-                    if needs_return:
-                        items.append(
-                            self._build_fallback_transport_item_payload(
-                                from_name=str(last_place.get("name") or trip.destination),
-                                to_name=trip.origin,
-                                previous_end_time=last_place.get("end_time"),
-                                next_start_time=None,
-                            )
-                        )
-            elif day_lodging and last_place is not None:
-                needs_lodging_return = not items or not self._is_transport_item_payload(items[-1])
-                if needs_lodging_return:
+                    items = self._drop_trailing_transport_only(items)
                     items.append(
                         self._build_fallback_transport_item_payload(
                             from_name=str(last_place.get("name") or trip.destination),
-                            to_name=day_lodging,
+                            to_name=trip.origin,
                             previous_end_time=last_place.get("end_time"),
                             next_start_time=None,
                         )
                     )
+            elif day_lodging and last_place is not None:
+                items = self._drop_trailing_transport_only(items)
+                items.append(
+                    self._build_fallback_transport_item_payload(
+                        from_name=str(last_place.get("name") or trip.destination),
+                        to_name=day_lodging,
+                        previous_end_time=last_place.get("end_time"),
+                        next_start_time=None,
+                    )
+                )
             constrained[day.day_number] = items
 
         for index in range(1, len(sorted_days)):
@@ -2814,16 +2811,16 @@ class TripService:
             first_place = next((item for item in items if not self._is_transport_item_payload(item)), None)
             if first_place is None:
                 continue
-            if not items or not self._is_transport_item_payload(items[0]):
-                items.insert(
-                    0,
-                    self._build_fallback_transport_item_payload(
-                        from_name=start_from,
-                        to_name=str(first_place.get("name") or trip.destination),
-                        previous_end_time=None,
-                        next_start_time=first_place.get("start_time"),
-                    ),
-                )
+            items = self._drop_leading_transport_only(items)
+            items.insert(
+                0,
+                self._build_fallback_transport_item_payload(
+                    from_name=start_from,
+                    to_name=str(first_place.get("name") or trip.destination),
+                    previous_end_time=None,
+                    next_start_time=first_place.get("start_time"),
+                ),
+            )
             constrained[current_day.day_number] = items
 
         return constrained
@@ -2865,6 +2862,22 @@ class TripService:
         while end > start and self._is_transport_item_payload(items[end - 1]):
             end -= 1
         return items[start:end]
+
+    def _drop_leading_transport_only(self, items: list[dict]) -> list[dict]:
+        if not items:
+            return items
+        start = 0
+        while start < len(items) and self._is_transport_item_payload(items[start]):
+            start += 1
+        return items[start:]
+
+    def _drop_trailing_transport_only(self, items: list[dict]) -> list[dict]:
+        if not items:
+            return items
+        end = len(items)
+        while end > 0 and self._is_transport_item_payload(items[end - 1]):
+            end -= 1
+        return items[:end]
 
     def _reduce_overpacked_after_long_transport(self, items: list[dict]) -> list[dict]:
         reduced: list[dict] = []
